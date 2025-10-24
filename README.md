@@ -1,73 +1,48 @@
-# React + TypeScript + Vite
+# Trackway Web
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+## Development Rules
 
-Currently, two official plugins are available:
+Developers **must follow** the structure and conventions below:
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+1. **Feature-based Architecture**
+   - All features or application parts **must be placed inside the `src/features` folder**.
+   - Anything that needs to be used outside a feature **must be exported through that feature’s `index.ts` file**.
 
-## React Compiler
+2. **Separation of Responsibility**
+   - **UI components** must remain separate from **business logic**.
+   - All **state** must be held in **React Contexts**.
+   - All **operations on state** must happen through **Service Classes** (not directly inside components).
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+3. **Component Structure**
+   - Break down large UI components into **smaller, reusable components**.
+   - Only **main/full pages** are allowed inside the `src/pages` folder.
+   - Each page should have its own folder with an `index.tsx` file exporting the final page component.
 
-## Expanding the ESLint configuration
+4. **Constants & Types**
+   - Constants should be placed in `constants.ts` either inside a feature folder or globally in `src/`, depending on usage.
+   - The `types/` folder can hold shared or non-component prop types. These can exist globally under `src/` or within feature folders.
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+5. **Electron Compatibility**
+   - All code must remain **Electron-friendly** — avoid browser-only APIs unless wrapped with proper environment checks.
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+---
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+## Development Commands
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+### Start Development Server
+```bash
+npm run dev
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
-
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+### Build for Production
+```bash
+npm run build
 ```
+
+### Preview Production Build
+```bash
+npm run preview
+```
+
+---
+
