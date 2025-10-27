@@ -5,13 +5,21 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 interface CreateProjectModalProps {
 	open: boolean;
-	onCreate?: (name: string) => void;
+	onCreate?: (name: string) => void | Promise<void>;
 	onCancel?: () => void;
+	isSubmitting?: boolean;
+	submitError?: string;
 }
 
 const MAX_NAME_LENGTH = 40;
 
-const CreateProjectModal = ({ open, onCreate, onCancel }: CreateProjectModalProps) => {
+const CreateProjectModal = ({
+	open,
+	onCreate,
+	onCancel,
+	isSubmitting = false,
+	submitError,
+}: CreateProjectModalProps) => {
 	const inputRef = useRef<HTMLInputElement>(null);
 	const [name, setName] = useState('');
 	const [touched, setTouched] = useState(false);
@@ -104,20 +112,24 @@ const CreateProjectModal = ({ open, onCreate, onCancel }: CreateProjectModalProp
 						/>
 					</label>
 					{error ? <p className="text-sm text-red-500">{error}</p> : null}
+					{!error && submitError ? (
+						<p className="text-sm text-red-500">{submitError}</p>
+					) : null}
 					<div className="flex justify-end gap-3">
 						<button
 							type="button"
 							onClick={handleCancel}
-							className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-600 shadow-sm hover:border-slate-400 hover:text-slate-700"
+							disabled={isSubmitting}
+							className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-600 shadow-sm transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-70 hover:border-slate-400 hover:text-slate-700"
 						>
 							Cancel
 						</button>
 						<button
 							type="submit"
-							disabled={Boolean(error) || !name.trim()}
+							disabled={isSubmitting || Boolean(error) || !name.trim()}
 							className="rounded-md bg-sky-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors duration-150 disabled:cursor-not-allowed disabled:bg-sky-300 hover:bg-sky-500"
 						>
-							Create
+							{isSubmitting ? 'Creating…' : 'Create'}
 						</button>
 					</div>
 				</form>

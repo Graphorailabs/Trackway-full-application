@@ -1,9 +1,12 @@
 import { Outlet } from "react-router-dom";
+import { ProjectProvider } from "./contexts/ProjectContext";
 function App() {
 
   return (
     <>
-      <Outlet />
+      <ProjectProvider>
+        <Outlet />
+      </ProjectProvider>
     </>
   );
 }
