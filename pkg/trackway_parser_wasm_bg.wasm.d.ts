@@ -1,0 +1,28 @@
+/* tslint:disable */
+/* eslint-disable */
+export const memory: WebAssembly.Memory;
+export const exportTypes: () => [number, number];
+export const schematicSexprToJson: (a: number, b: number, c: number) => [number, number, number, number];
+export const schematicJsonToSexpr: (a: number, b: number, c: number) => [number, number, number, number];
+export const schematicJsonToValue: (a: number, b: number) => [number, number, number];
+export const schematicSexprToValue: (a: number, b: number) => [number, number, number];
+export const schematicValueToJson: (a: any, b: number) => [number, number, number, number];
+export const schematicValueToSexpr: (a: any, b: number) => [number, number, number, number];
+export const createMinimalSchematic: () => [number, number, number];
+export const createMinimalSchematicJson: (a: number) => [number, number, number, number];
+export const symbolLibSexprToJson: (a: number, b: number, c: number) => [number, number, number, number];
+export const symbolLibJsonToSexpr: (a: number, b: number, c: number) => [number, number, number, number];
+export const symbolLibJsonToValue: (a: number, b: number) => [number, number, number];
+export const symbolLibSexprToValue: (a: number, b: number) => [number, number, number];
+export const symbolLibValueToJson: (a: any, b: number) => [number, number, number, number];
+export const symbolLibValueToSexpr: (a: any, b: number) => [number, number, number, number];
+export const createMinimalSymbolLib: () => [number, number, number];
+export const createMinimalSymbolLibJson: (a: number) => [number, number, number, number];
+export const __wbindgen_malloc: (a: number, b: number) => number;
+export const __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
+export const __wbindgen_exn_store: (a: number) => void;
+export const __externref_table_alloc: () => number;
+export const __wbindgen_externrefs: WebAssembly.Table;
+export const __wbindgen_free: (a: number, b: number, c: number) => void;
+export const __externref_table_dealloc: (a: number) => void;
+export const __wbindgen_start: () => void;
