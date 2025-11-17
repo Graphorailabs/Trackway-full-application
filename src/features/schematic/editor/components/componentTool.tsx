@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { useComponents } from "../context/ComponentContext";
 import { SvgSymbol } from "./SvgSymbol";
 import { useWires } from "../context/WireContext";
-import { useGrid } from "../context/globalGrid";
+import { useGrid } from "../context/GlobalGrid";
 // import { useGrid } from "../context/GridContext";
 
 export default function ComponentTool() {
@@ -136,9 +136,6 @@ const handleDragMove = (comp: any, e: any) => {
 
 
 
-
-
-  console.log(components)
   const symbolPath: any = {
     resistor: "/symbols/resistor.svg",
     capacitor: "/symbols/capacitor.svg",

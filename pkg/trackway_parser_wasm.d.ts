@@ -259,7 +259,7 @@ export interface Arc {
 export type GraphicItem = { kind: "Arc"; data: Arc } | { kind: "Circle"; data: Circle } | { kind: "Bezier"; data: Bezier } | { kind: "Polyline"; data: PolylineGraphic } | { kind: "Rectangle"; data: Rectangle } | { kind: "Text"; data: SymbolText };
 
 /**
- * Unit symbol embedded inside a parent symbol.
+ * Unit/body encoded as a nested `(symbol ...)` inside a parent library symbol.
  */
 export interface SymbolUnit {
     /**
@@ -324,7 +324,7 @@ export interface Symbol {
      */
     pin?: Pin[];
     /**
-     * Child units embedded in a parent symbol (optional)
+     * Child units embedded in a parent symbol (KiCad encodes these as nested `symbol` tokens)
      */
     unit?: SymbolUnit[];
     /**
@@ -468,28 +468,6 @@ export type Xyr = [number, number, number];
  */
 export type Xy = [number, number];
 
-export interface KicadSch {
-    version: number;
-    generator: string;
-    generator_version?: string;
-    uuid: Uuid;
-    paper?: Paper;
-    title_block?: TitleBlock;
-    lib_symbols?: LibSymbols;
-    sheet?: Sheet[];
-    junction?: Junction[];
-    no_connect?: NoConnect[];
-    bus_entry?: BusEntry[];
-    wire?: Wire[];
-    bus?: Bus[];
-    polyline?: Polyline[];
-    text?: GraphText[];
-    label?: LocalLabel[];
-    global_label?: GlobalLabel[];
-    symbol?: SchematicSymbol[];
-    path?: RootPath;
-}
-
 /**
  * (bus_entry (at x y) (size dx dy) (stroke ...) (uuid \"...\"))
  */
@@ -528,6 +506,44 @@ export interface Polyline {
 }
 
 /**
+ * Description of a single stackup layer entry.
+ */
+export interface StackupLayer {
+    name: StackupLayerName;
+    number: number;
+    type: string;
+    color?: string;
+    thickness?: number;
+    material?: string;
+    epsilon_r?: number;
+    loss_tangent?: number;
+    extra?: string[];
+}
+
+/**
+ * Stackup layer identifier.
+ */
+export type StackupLayerName = string;
+
+/**
+ * Possible edge connector configuration values.
+ */
+export type EdgeConnector = string;
+
+/**
+ * KiCad stackup section describing the board fabrication stack.
+ */
+export interface Stackup {
+    layers?: StackupLayer[];
+    copper_finish?: string;
+    dielectric_constraints?: boolean;
+    edge_connector?: EdgeConnector;
+    castellated_pads?: boolean;
+    edge_plating?: boolean;
+    extra?: string[];
+}
+
+/**
  * Represents a KiCad symbol library file (.kicad_sym)
  * (kicad_symbol_lib (version YYYYMMDD) (generator \"name\") SYMBOL_DEFINITION... )
  */
@@ -544,5 +560,136 @@ export interface KicadSymbolLib {
      * the symbols defined in this library (0..n)
      */
     symbol?: Symbol[];
+}
+
+/**
+ * Root of a KiCad PCB file. Currently models the header, page, layers, and general
+ * sections per the KiCad board file format
+ * <https://dev-docs.kicad.org/en/file-formats/sexpr-pcb/index.html>.
+ */
+export interface Pcb {
+    version: number;
+    generator: string;
+    generator_version?: string;
+    page: Page;
+    layers: Layers;
+    setup: Setup;
+    general?: General;
+}
+
+export interface KicadSch {
+    version: number;
+    generator: string;
+    generator_version?: string;
+    uuid: Uuid;
+    paper?: Paper;
+    title_block?: TitleBlock;
+    lib_symbols?: LibSymbols;
+    sheet?: Sheet[];
+    junction?: Junction[];
+    no_connect?: NoConnect[];
+    bus_entry?: BusEntry[];
+    wire?: Wire[];
+    bus?: Bus[];
+    polyline?: Polyline[];
+    text?: GraphText[];
+    label?: LocalLabel[];
+    global_label?: GlobalLabel[];
+    symbol?: SchematicSymbol[];
+    path?: RootPath;
+}
+
+/**
+ * Representation of the `(pcbplotparams ...)` block within a setup section.
+ */
+export interface PcbPlotParams {
+    layerselection: string;
+    disableapertmacros: boolean;
+    usegerberextensions: boolean;
+    usegerberattributes: boolean;
+    usegerberadvancedattributes: boolean;
+    creategerberjobfile: boolean;
+    svguseinch: boolean;
+    svgprecision: number;
+    excludeedgelayer: boolean;
+    plotframeref: boolean;
+    viasonmask: boolean;
+    mode: number;
+    useauxorigin: boolean;
+    hpglpennumber: number;
+    hpglpenspeed: number;
+    hpglpendiameter: number;
+    dxfpolygonmode: boolean;
+    dxfimperialunits: boolean;
+    dxfusepcbnewfont: boolean;
+    psnegative: boolean;
+    psa4output: boolean;
+    plotreference: boolean;
+    plotvalue: boolean;
+    plotinvisibletext: boolean;
+    sketchpadsonfab: boolean;
+    subtractmaskfromsilk: boolean;
+    outputformat: number;
+    mirror: boolean;
+    drillshape: number;
+    scaleselection: number;
+    outputdirectory: string;
+    extra?: string[];
+}
+
+/**
+ * Simple coordinate pair used by setup origin tokens.
+ */
+export interface Coordinate {
+    x: number;
+    y: number;
+}
+
+export interface Page {
+    size: PaperSize;
+    portrait?: boolean;
+}
+
+/**
+ * Container for all layer definitions defined by the board.
+ */
+export type Layers = Layer[];
+
+/**
+ * Definition of a single PCB layer entry inside the `(layers ...)` section.
+ */
+export interface Layer {
+    ordinal: number;
+    canonical_name: CanonicalLayer;
+    layer_type: LayerType;
+    user_name?: string;
+}
+
+export type LayerType = string;
+
+export type CanonicalLayer = string;
+
+/**
+ * KiCad PCB `setup` section capturing manufacturing and plotting settings.
+ */
+export interface Setup {
+    stackup?: Stackup;
+    pad_to_mask_clearance: number;
+    solder_mask_min_width?: number;
+    pad_to_paste_clearance?: number;
+    pad_to_paste_clearance_ratio?: number;
+    aux_axis_origin?: Coordinate;
+    grid_origin?: Coordinate;
+    pcbplotparams: PcbPlotParams;
+    extra?: string[];
+}
+
+/**
+ * KiCad PCB `general` section. Currently only models the thickness token and
+ * preserves any additional, as-yet unsupported forms.
+ */
+export interface General {
+    thickness?: number;
+    extra?: string[];
 }
 

@@ -3,6 +3,7 @@ import { useTool, type ComponentKey } from "../context/ToolContext";
 import { LuMousePointer2, LuSpline } from "react-icons/lu";
 import { TbCircuitResistor, TbCircuitCapacitor, TbCircuitInductor, TbCircuitGround } from "react-icons/tb";
 import { IoIosArrowDown } from "react-icons/io";
+import { LoadSymbol } from "./LoadSymbol";
 
 export default function Toolbar() {
   const { tool, setTool, selectedComponent, setSelectedComponent } = useTool();
@@ -46,6 +47,10 @@ export default function Toolbar() {
         <LuSpline />
       </button>
 
+      <button >
+        <LoadSymbol />
+      </button>
+
       {/* COMPONENT DROPDOWN */}
       <div className="relative">
         <button
@@ -57,6 +62,8 @@ export default function Toolbar() {
           {currentComponent}
           <IoIosArrowDown size={14} />
         </button>
+
+        
 
         {/* DROPDOWN LIST */}
         {dropdownOpen && (
