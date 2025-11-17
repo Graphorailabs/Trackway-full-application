@@ -547,6 +547,346 @@ export function createMinimalSymbolLibJson(pretty) {
     }
 }
 
+/**
+ * Convert a footprint library S-expression string to JSON.
+ * @param {string} input
+ * @param {boolean} pretty
+ * @returns {string}
+ */
+export function footprintLibSexprToJson(input, pretty) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(input, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.footprintLibSexprToJson(ptr0, len0, pretty);
+        var ptr2 = ret[0];
+        var len2 = ret[1];
+        if (ret[3]) {
+            ptr2 = 0; len2 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred3_0 = ptr2;
+        deferred3_1 = len2;
+        return getStringFromWasm0(ptr2, len2);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+}
+
+/**
+ * Convert a footprint library JSON string to KiCad S-expression text.
+ * @param {string} input
+ * @param {boolean} pretty
+ * @returns {string}
+ */
+export function footprintLibJsonToSexpr(input, pretty) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(input, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.footprintLibJsonToSexpr(ptr0, len0, pretty);
+        var ptr2 = ret[0];
+        var len2 = ret[1];
+        if (ret[3]) {
+            ptr2 = 0; len2 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred3_0 = ptr2;
+        deferred3_1 = len2;
+        return getStringFromWasm0(ptr2, len2);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+}
+
+/**
+ * Convert a footprint library JSON string into a JavaScript object shaped like `FootprintLibrary`.
+ * @param {string} input
+ * @returns {any}
+ */
+export function footprintLibJsonToValue(input) {
+    const ptr0 = passStringToWasm0(input, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.footprintLibJsonToValue(ptr0, len0);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
+}
+
+/**
+ * Convert a footprint library S-expression into a JavaScript object shaped like `FootprintLibrary`.
+ * @param {string} input
+ * @returns {any}
+ */
+export function footprintLibSexprToValue(input) {
+    const ptr0 = passStringToWasm0(input, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.footprintLibSexprToValue(ptr0, len0);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
+}
+
+/**
+ * Render a footprint library JavaScript object to JSON text.
+ * @param {any} value
+ * @param {boolean} pretty
+ * @returns {string}
+ */
+export function footprintLibValueToJson(value, pretty) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ret = wasm.footprintLibValueToJson(value, pretty);
+        var ptr1 = ret[0];
+        var len1 = ret[1];
+        if (ret[3]) {
+            ptr1 = 0; len1 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred2_0 = ptr1;
+        deferred2_1 = len1;
+        return getStringFromWasm0(ptr1, len1);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
+}
+
+/**
+ * Render a footprint library JavaScript object to KiCad S-expression text.
+ * @param {any} value
+ * @param {boolean} pretty
+ * @returns {string}
+ */
+export function footprintLibValueToSexpr(value, pretty) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ret = wasm.footprintLibValueToSexpr(value, pretty);
+        var ptr1 = ret[0];
+        var len1 = ret[1];
+        if (ret[3]) {
+            ptr1 = 0; len1 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred2_0 = ptr1;
+        deferred2_1 = len1;
+        return getStringFromWasm0(ptr1, len1);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
+}
+
+/**
+ * Return a new minimal footprint library as a JavaScript object.
+ * @returns {any}
+ */
+export function createMinimalFootprintLib() {
+    const ret = wasm.createMinimalFootprintLib();
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
+}
+
+/**
+ * Return a new minimal footprint library as JSON text.
+ * @param {boolean} pretty
+ * @returns {string}
+ */
+export function createMinimalFootprintLibJson(pretty) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ret = wasm.createMinimalFootprintLibJson(pretty);
+        var ptr1 = ret[0];
+        var len1 = ret[1];
+        if (ret[3]) {
+            ptr1 = 0; len1 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred2_0 = ptr1;
+        deferred2_1 = len1;
+        return getStringFromWasm0(ptr1, len1);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
+}
+
+/**
+ * Convert a PCB S-expression string to JSON.
+ * @param {string} input
+ * @param {boolean} pretty
+ * @returns {string}
+ */
+export function pcbSexprToJson(input, pretty) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(input, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.pcbSexprToJson(ptr0, len0, pretty);
+        var ptr2 = ret[0];
+        var len2 = ret[1];
+        if (ret[3]) {
+            ptr2 = 0; len2 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred3_0 = ptr2;
+        deferred3_1 = len2;
+        return getStringFromWasm0(ptr2, len2);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+}
+
+/**
+ * Convert a PCB JSON string to KiCad S-expression text.
+ * @param {string} input
+ * @param {boolean} pretty
+ * @returns {string}
+ */
+export function pcbJsonToSexpr(input, pretty) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(input, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.pcbJsonToSexpr(ptr0, len0, pretty);
+        var ptr2 = ret[0];
+        var len2 = ret[1];
+        if (ret[3]) {
+            ptr2 = 0; len2 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred3_0 = ptr2;
+        deferred3_1 = len2;
+        return getStringFromWasm0(ptr2, len2);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+}
+
+/**
+ * Convert a PCB JSON string into a JavaScript object shaped like `Pcb`.
+ * @param {string} input
+ * @returns {any}
+ */
+export function pcbJsonToValue(input) {
+    const ptr0 = passStringToWasm0(input, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.pcbJsonToValue(ptr0, len0);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
+}
+
+/**
+ * Convert a PCB S-expression into a JavaScript object shaped like `Pcb`.
+ * @param {string} input
+ * @returns {any}
+ */
+export function pcbSexprToValue(input) {
+    const ptr0 = passStringToWasm0(input, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.pcbSexprToValue(ptr0, len0);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
+}
+
+/**
+ * Render a PCB JavaScript object (matching `Pcb`) to JSON text.
+ * @param {any} value
+ * @param {boolean} pretty
+ * @returns {string}
+ */
+export function pcbValueToJson(value, pretty) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ret = wasm.pcbValueToJson(value, pretty);
+        var ptr1 = ret[0];
+        var len1 = ret[1];
+        if (ret[3]) {
+            ptr1 = 0; len1 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred2_0 = ptr1;
+        deferred2_1 = len1;
+        return getStringFromWasm0(ptr1, len1);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
+}
+
+/**
+ * Render a PCB JavaScript object (matching `Pcb`) to KiCad S-expression text.
+ * @param {any} value
+ * @param {boolean} pretty
+ * @returns {string}
+ */
+export function pcbValueToSexpr(value, pretty) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ret = wasm.pcbValueToSexpr(value, pretty);
+        var ptr1 = ret[0];
+        var len1 = ret[1];
+        if (ret[3]) {
+            ptr1 = 0; len1 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred2_0 = ptr1;
+        deferred2_1 = len1;
+        return getStringFromWasm0(ptr1, len1);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
+}
+
+/**
+ * Return a new minimal PCB as a JavaScript object.
+ * @returns {any}
+ */
+export function createMinimalPcb() {
+    const ret = wasm.createMinimalPcb();
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
+}
+
+/**
+ * Return a new minimal PCB as JSON text.
+ * @param {boolean} pretty
+ * @returns {string}
+ */
+export function createMinimalPcbJson(pretty) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ret = wasm.createMinimalPcbJson(pretty);
+        var ptr1 = ret[0];
+        var len1 = ret[1];
+        if (ret[3]) {
+            ptr1 = 0; len1 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred2_0 = ptr1;
+        deferred2_1 = len1;
+        return getStringFromWasm0(ptr1, len1);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
+}
+
 export function __wbg_Error_e83987f665cf5504(arg0, arg1) {
     const ret = Error(getStringFromWasm0(arg0, arg1));
     return ret;
