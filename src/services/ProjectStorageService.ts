@@ -43,6 +43,7 @@ function guessIsZip(file: File | Blob, hint?: string): boolean {
 
 export class ProjectStorageService {
   private ready: Promise<void>;
+  private static ACTIVE_PROJECT_KEY = "trackway.activeProjectId";
   constructor() {
     this.ready = getMediaStorage().then(() => undefined);
   }
@@ -134,12 +135,10 @@ export class ProjectStorageService {
     const s = await this.storage();
 
     // 1) Prefer backend-native import if available (lets other backends handle it)
-    if ("importProjectFromFile" in s && typeof (s as any).importProjectFromFile === "function") {
-      try {
-        return await (s as any).importProjectFromFile(file, { nameOverride });
-      } catch {
-        // fall through to service-side parsing
-      }
+    try {
+      return await s.importProjectFromFile(file, { nameOverride });
+    } catch {
+      // fall through to service-side parsing
     }
 
     // 2) Service-side parsing fallback (works with your current IndexedDB backend)
@@ -171,22 +170,62 @@ export class ProjectStorageService {
 
   async getCapabilities(): Promise<MediaStorageCapabilities> {
     const s = await this.storage();
-    return "getCapabilities" in s
-      ? await (s as any).getCapabilities()
-      : {
-          backend: "unknown",
-          canEstimate: false,
-          canPersist: false,
-          supportsZipImport: false,
-          supportsJsonImport: false,
-        };
+    try {
+      return await s.getCapabilities();
+    } catch {
+      return {
+        backend: "unknown",
+        canEstimate: false,
+        canPersist: false,
+        supportsZipImport: false,
+        supportsJsonImport: false,
+      };
+    }
   }
 
   async requestPersistence(): Promise<boolean> {
     const s = await this.storage();
-    return typeof (s as any).requestPersistence === "function"
-      ? await (s as any).requestPersistence()
-      : false;
+    if (typeof s.requestPersistence === "function") {
+      return s.requestPersistence();
+    }
+    return false;
+  }
+
+  /* -------------------------- Active project helpers ------------------------- */
+
+  async getActiveProjectId(): Promise<ProjectID | null> {
+    return this.readActiveProjectId();
+  }
+
+  async setActiveProjectId(id: ProjectID | null): Promise<void> {
+    this.writeActiveProjectId(id);
+  }
+
+  private readActiveProjectId(): ProjectID | null {
+    if (typeof window === "undefined" || typeof window.localStorage === "undefined") {
+      return null;
+    }
+    try {
+      const raw = window.localStorage.getItem(ProjectStorageService.ACTIVE_PROJECT_KEY);
+      return raw ? (raw as ProjectID) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  private writeActiveProjectId(id: ProjectID | null): void {
+    if (typeof window === "undefined" || typeof window.localStorage === "undefined") {
+      return;
+    }
+    try {
+      if (id) {
+        window.localStorage.setItem(ProjectStorageService.ACTIVE_PROJECT_KEY, id);
+      } else {
+        window.localStorage.removeItem(ProjectStorageService.ACTIVE_PROJECT_KEY);
+      }
+    } catch {
+      // ignore persistence failures (private browsing etc.)
+    }
   }
 }
 

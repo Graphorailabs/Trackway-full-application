@@ -2,7 +2,7 @@ import { useEffect, useMemo } from "react";
 
 import type { SheetMetadata } from "@/features/pcb_editor/types";
 import { PAPER_PRESETS_MM } from "@/features/pcb_editor/constants";
-import type { Paper } from "trackway-parser-wasm";
+import type { Page } from "trackway-parser-wasm";
 
 const MM_TO_PX = 3.5; // visually pleasing scale for the virtual sheet
 
@@ -16,37 +16,44 @@ const SHEET_COLORS = {
   glassAccent: "rgba(240, 224, 197, 0.1)",
 };
 
+const DEFAULT_PAGE: Page = { size: "A4", portrait: false };
+
 export type SheetLayerProps = {
-  paper: Paper;
+  page: Page | null;
   metadata: SheetMetadata;
   variant?: "centered" | "anchored";
 };
 
-function resolvePaperDimensions(paper: Paper) {
-  if (Array.isArray(paper.size)) {
-    const [width, height] = paper.size;
+function resolvePageDimensions(page: Page) {
+  if (Array.isArray(page.size)) {
+    const [width, height] = page.size;
     return { width, height };
   }
 
-  if (typeof paper.size === "string") {
-    const preset = PAPER_PRESETS_MM[paper.size.toLowerCase()] ?? null;
+  if (typeof page.size === "string") {
+    const preset = PAPER_PRESETS_MM[page.size.toLowerCase()] ?? null;
     if (preset) {
-      return paper.portrait ? { width: preset.height, height: preset.width } : preset;
+      return page.portrait ? { width: preset.height, height: preset.width } : preset;
     }
   }
 
   return { width: 420, height: 297 };
 }
 
-export function SheetLayer({ paper, metadata, variant = "centered" }: SheetLayerProps) {
+export function SheetLayer({ page, metadata, variant = "centered" }: SheetLayerProps) {
+  const activePage = page ?? DEFAULT_PAGE;
   useEffect(() => {
     if (process.env.NODE_ENV !== "production") {
-      console.log("[SheetLayer] paper props", paper);
+      console.log("[SheetLayer] paper props", {
+        provided: page ? { size: page.size, portrait: page.portrait } : null,
+        active: { size: activePage.size, portrait: activePage.portrait },
+        usedFallback: !page,
+      });
     }
-  }, [paper]);
+  }, [page, activePage]);
 
   const { widthPx, heightPx } = useMemo(() => {
-    const { width, height } = resolvePaperDimensions(paper);
+    const { width, height } = resolvePageDimensions(activePage);
     if (process.env.NODE_ENV !== "production") {
       console.log("[SheetLayer] resolved dimensions", { width, height, variant });
     }
@@ -54,21 +61,31 @@ export function SheetLayer({ paper, metadata, variant = "centered" }: SheetLayer
       widthPx: width * MM_TO_PX,
       heightPx: height * MM_TO_PX,
     };
-  }, [paper, variant]);
+  }, [activePage, variant]);
+
+  const paperLabel = useMemo(() => {
+    if (Array.isArray(activePage.size)) {
+      return `${activePage.size[0]}×${activePage.size[1]}mm`;
+    }
+    return typeof activePage.size === "string" ? activePage.size.toUpperCase() : "Custom";
+  }, [activePage.size]);
 
   const padding = 32;
   const innerPadding = padding * 1.6;
   const blockPadding = 12;
   const entryHeight = 20;
+  const resolvedPageLabel = metadata.page && metadata.totalPages
+    ? `${metadata.page}/${metadata.totalPages}`
+    : metadata.page ?? metadata.totalPages ?? "";
   const blockEntries = [
-    ["PROJECT", metadata.title ?? "Untitled PCB"],
-    ["TITLE", metadata.subtitle ?? "Assembly"],
-    ["COMPANY", metadata.company ?? "Trackway"],
-    ["DOC ID", metadata.documentId ?? "PCB-0001"],
-    ["REVISION", metadata.revision ?? "V1.0"],
-    ["DATE", metadata.date ?? "-"],
-    ["PAGE", `${metadata.page ?? "1"}/${metadata.totalPages ?? "1"}`],
-    ["CHECKED", metadata.checker ?? "Pending"],
+    ["PROJECT", metadata.title ?? ""],
+    ["TITLE", metadata.subtitle ?? ""],
+    ["COMPANY", metadata.company ?? ""],
+    ["DOC ID", metadata.documentId ?? ""],
+    ["REVISION", metadata.revision ?? ""],
+    ["DATE", metadata.date ?? ""],
+    ["PAGE", resolvedPageLabel],
+    ["CHECKED", metadata.checker ?? ""],
   ] as const;
   const titleBlockWidth = Math.min(420, widthPx * 0.32);
   const titleBlockHeight = blockPadding * 2 + entryHeight * blockEntries.length;
@@ -175,7 +192,7 @@ export function SheetLayer({ paper, metadata, variant = "centered" }: SheetLayer
             strokeWidth={0.3}
             paintOrder="stroke"
           >
-            Generator: Trackway PCB · Paper {Array.isArray(paper.size) ? `${paper.size[0]}×${paper.size[1]}mm` : paper.size?.toUpperCase?.()}
+            Generator: Trackway PCB · Paper {paperLabel}
           </text>
       </svg>
     </div>

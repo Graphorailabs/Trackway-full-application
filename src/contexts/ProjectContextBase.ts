@@ -10,6 +10,7 @@ export type ProjectContextState = {
   isLoading: boolean;
   isExporting: boolean;
   error: string | null;
+  selectionHydrated: boolean;
 
   // last computed storage estimate (null until fetched)
   storageEstimate: StorageEstimate | null;

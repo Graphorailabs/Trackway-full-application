@@ -3,8 +3,7 @@ import { Check, X } from "lucide-react";
 
 import { PAPER_SIZE_OPTIONS } from "@/features/pcb_editor/constants";
 import { usePcb } from "@/features/pcb_editor/contexts/PcbContext";
-import type { SheetMetadata } from "@/features/pcb_editor/types";
-import type { Paper, Property } from "trackway-parser-wasm";
+import type { Page } from "trackway-parser-wasm";
 
 type SettingsCategory = "sheet";
 
@@ -105,87 +104,36 @@ type SheetLayerSettingsPanelProps = {
 	onClose: () => void;
 };
 
-type SheetLayerFieldId =
-	| "title"
-	| "subtitle"
-	| "company"
-	| "documentId"
-	| "revision"
-	| "designer"
-	| "checker"
-	| "date"
-	| "page"
-	| "totalPages";
-
 type SheetLayerFormState = {
 	paperSize: string;
 	portrait: boolean;
-	metadata: Record<SheetLayerFieldId, string>;
 };
 
-const SHEET_FIELD_DEFS: Array<{
-	id: SheetLayerFieldId;
-	label: string;
-	propertyKey: string;
-	placeholder?: string;
-}> = [
-	{ id: "title", label: "Project title", propertyKey: "Title", placeholder: "Demo Control Board" },
-	{ id: "subtitle", label: "Subtitle", propertyKey: "Subtitle", placeholder: "Assembly" },
-	{ id: "company", label: "Company", propertyKey: "Company", placeholder: "Trackway Labs" },
-	{ id: "documentId", label: "Document ID", propertyKey: "Document", placeholder: "PCB-CTRL-01" },
-	{ id: "revision", label: "Revision", propertyKey: "Revision", placeholder: "V1.0" },
-	{ id: "designer", label: "Designer", propertyKey: "Designer", placeholder: "Trackway" },
-	{ id: "checker", label: "Checker", propertyKey: "Checker", placeholder: "Pending" },
-	{ id: "date", label: "Date", propertyKey: "Date", placeholder: "2025-11-17" },
-	{ id: "page", label: "Page number", propertyKey: "Page", placeholder: "1" },
-	{ id: "totalPages", label: "Total pages", propertyKey: "TotalPages", placeholder: "1" },
-];
+const FALLBACK_PAGE: Page = { size: "A4", portrait: false };
 
-function createInitialSheetState(paper: Paper, metadata: SheetMetadata): SheetLayerFormState {
-	const entries: Record<SheetLayerFieldId, string> = {
-		title: metadata.title ?? "",
-		subtitle: metadata.subtitle ?? "",
-		company: metadata.company ?? "",
-		documentId: metadata.documentId ?? "",
-		revision: metadata.revision ?? "",
-		designer: metadata.designer ?? "",
-		checker: metadata.checker ?? "",
-		date: metadata.date ?? "",
-		page: metadata.page ?? "1",
-		totalPages: metadata.totalPages ?? "1",
-	};
+function createInitialSheetState(page: Page | null): SheetLayerFormState {
+	const activePage = page ?? FALLBACK_PAGE;
 
-	const resolvedSize = typeof paper.size === "string" ? paper.size.toLowerCase() : "a4";
+	const resolvedSize = typeof activePage.size === "string" ? activePage.size.toLowerCase() : "a4";
 
 	return {
 		paperSize: resolvedSize,
-		portrait: Boolean(paper.portrait),
-		metadata: entries,
+		portrait: Boolean(activePage.portrait),
 	};
 }
 
 function SheetLayerSettingsPanel({ onClose }: SheetLayerSettingsPanelProps) {
-	const { paper, sheetMetadata, updatePcb, pcb } = usePcb();
-	const [formState, setFormState] = useState<SheetLayerFormState>(() => createInitialSheetState(paper, sheetMetadata));
+	const { page, updatePcb, pcb } = usePcb();
+	const [formState, setFormState] = useState<SheetLayerFormState>(() => createInitialSheetState(page));
 
 	useEffect(() => {
-		setFormState(createInitialSheetState(paper, sheetMetadata));
-	}, [paper, sheetMetadata, pcb.page?.size, pcb.page?.portrait]);
+		setFormState(createInitialSheetState(page));
+	}, [page, pcb.page?.size, pcb.page?.portrait]);
 
 	const handlePaperSizeChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
 		setFormState((state) => ({
 			...state,
 			paperSize: event.target.value,
-		}));
-	};
-
-	const handleMetadataChange = (field: SheetLayerFieldId, value: string) => {
-		setFormState((state) => ({
-			...state,
-			metadata: {
-				...state.metadata,
-				[field]: value,
-			},
 		}));
 	};
 
@@ -199,18 +147,15 @@ function SheetLayerSettingsPanel({ onClose }: SheetLayerSettingsPanelProps) {
 	const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
 		event.preventDefault();
 		updatePcb((current) => {
-			const nextPaper: Paper = {
+			const nextPage: Page = {
 				...(current.page ?? {}),
 				size: formState.paperSize.toUpperCase(),
 				portrait: formState.portrait,
 			};
 
-			const nextProperties = applySheetMetadataUpdates(current.properties, formState.metadata);
-
 			return {
 				...current,
-				page: nextPaper,
-				properties: nextProperties,
+				page: nextPage,
 			};
 		});
 		onClose();
@@ -275,26 +220,6 @@ function SheetLayerSettingsPanel({ onClose }: SheetLayerSettingsPanelProps) {
 						</div>
 					</div>
 				</section>
-				<section>
-					<div className="mb-4">
-						<p className="text-sm font-semibold text-white">Title block</p>
-						<p className="text-xs text-white/60">Update the metadata rendered along the sheet frame.</p>
-					</div>
-					<div className="grid gap-4 md:grid-cols-2">
-						{SHEET_FIELD_DEFS.map((field) => (
-							<label key={field.id} className="flex flex-col gap-2 text-sm">
-								<span className="text-white/80">{field.label}</span>
-								<input
-									type="text"
-									value={formState.metadata[field.id] ?? ""}
-									onChange={(event) => handleMetadataChange(field.id, event.target.value)}
-									placeholder={field.placeholder}
-									className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none transition placeholder:text-white/30 focus:border-emerald-300/60 focus:ring-2 focus:ring-emerald-400/30"
-								/>
-							</label>
-						))}
-					</div>
-				</section>
 			</div>
 			<div className="flex justify-end gap-3 border-t border-white/10 px-6 py-4">
 				<button
@@ -313,23 +238,6 @@ function SheetLayerSettingsPanel({ onClose }: SheetLayerSettingsPanelProps) {
 			</div>
 		</form>
 	);
-}
-
-function applySheetMetadataUpdates(existing: Property[] | undefined, metadata: Record<SheetLayerFieldId, string>): Property[] {
-	const map = new Map<string, Property>();
-	for (const prop of existing ?? []) {
-		map.set(prop[0].toLowerCase(), [prop[0], prop[1]]);
-	}
-
-	for (const field of SHEET_FIELD_DEFS) {
-		const normalized = field.propertyKey.toLowerCase();
-		const value = metadata[field.id]?.trim() ?? "";
-		const existingEntry = map.get(normalized);
-		const nextKey = existingEntry ? existingEntry[0] : field.propertyKey;
-		map.set(normalized, [nextKey, value]);
-	}
-
-	return Array.from(map.values());
 }
 
 export default EditorSettingsModal;

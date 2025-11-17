@@ -19,7 +19,7 @@ const GRID_EXTENT = 20000;
 export function CanvasViewport() {
   const { styles } = useGrid();
   const { zoom, camera, zoomAt, updateFocusPoint, step } = useZoom();
-  const { paper, sheetMetadata } = usePcb();
+  const { page, sheetMetadata } = usePcb();
   const surfaceRef = useRef<HTMLDivElement | null>(null);
   const [viewportSize, setViewportSize] = useState({ width: 1, height: 1 });
 
@@ -136,7 +136,7 @@ export function CanvasViewport() {
       </div>
       <div className="relative flex h-full w-full" aria-live="polite">
         <div className="absolute inset-0" style={worldTransform}>
-          <SheetLayer paper={paper} metadata={sheetMetadata} variant="anchored" />
+          <SheetLayer page={page} metadata={sheetMetadata} variant="anchored" />
         </div>
       </div>
     </main>

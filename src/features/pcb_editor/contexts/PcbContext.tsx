@@ -11,6 +11,7 @@ import {
 } from "react";
 
 import { useProject } from "@/hooks/useProject";
+import { projectStorage } from "@/services/ProjectStorageService";
 import type { SheetMetadata } from "@/features/pcb_editor/types";
 import type { ProjectRecord } from "@/types/project";
 import {
@@ -19,25 +20,12 @@ import {
   pcbSexprToValue,
   pcbValueToJson,
   pcbValueToSexpr,
-  type Paper,
+  type Page,
   type Pcb,
   type Property,
 } from "trackway-parser-wasm";
 
-const DEFAULT_PAPER: Paper = { size: "A4", portrait: false };
-
-const DEFAULT_PROPERTIES: Property[] = [
-  ["Title", "Demo Control Board"],
-  ["Subtitle", "Main Assembly"],
-  ["Company", "Trackway Labs"],
-  ["Document", "PCB-CTRL-01"],
-  ["Revision", "V0.1"],
-  ["Designer", "Trackway"],
-  ["Checker", "Pending"],
-  ["Date", "2025-11-17"],
-  ["Page", "1"],
-  ["TotalPages", "1"],
-];
+const DEFAULT_PROPERTIES: Property[] = [];
 
 type PcbSource = {
   projectId: string;
@@ -47,7 +35,7 @@ type PcbSource = {
 
 export type PcbContextValue = {
   pcb: Pcb;
-  paper: Paper;
+  page: Page | null;
   sheetMetadata: SheetMetadata;
   source: PcbSource | null;
   isLoading: boolean;
@@ -68,16 +56,31 @@ export function usePcb() {
   return ctx;
 }
 
+function normalizeProperty(entry?: Property): { key: string; entry: Property } | null {
+  if (!entry) return null;
+  const [rawKey, rawValue] = entry;
+  if (typeof rawKey !== "string") return null;
+  const key = rawKey.trim();
+  if (!key) return null;
+  const value = typeof rawValue === "string" ? rawValue : rawValue == null ? "" : String(rawValue);
+  return { key: key.toLowerCase(), entry: [rawKey, value] };
+}
+
 function mergeProperties(current: Property[] | undefined, defaults: Property[]): Property[] {
   const map = new Map<string, Property>();
+  const addEntry = (candidate?: Property) => {
+    const normalized = normalizeProperty(candidate);
+    if (!normalized) return;
+    map.set(normalized.key, normalized.entry);
+  };
+
   for (const entry of current ?? []) {
-    map.set(entry[0].toLowerCase(), entry);
+    addEntry(entry);
   }
   for (const entry of defaults) {
-    const key = entry[0].toLowerCase();
-    if (!map.has(key)) {
-      map.set(key, entry);
-    }
+    const normalized = normalizeProperty(entry);
+    if (!normalized || map.has(normalized.key)) continue;
+    map.set(normalized.key, normalized.entry);
   }
   return Array.from(map.values());
 }
@@ -112,27 +115,8 @@ function deriveMetadata(pcb: Pcb): SheetMetadata {
 function ensureDefaults(base: Pcb): Pcb {
   return {
     ...base,
-    page: base.page ?? { ...DEFAULT_PAPER },
+    page: base.page ?? null,
     properties: mergeProperties(base.properties, DEFAULT_PROPERTIES),
-  };
-}
-
-function normalizePaper(page?: Paper | string): Paper {
-  if (process.env.NODE_ENV !== "production") {
-    console.log("[PCBEditor] Normalizing paper", page);
-  }
-  if (!page) {
-    return { ...DEFAULT_PAPER };
-  }
-  if (typeof page === "string") {
-    return {
-      size: page.toUpperCase(),
-      portrait: DEFAULT_PAPER.portrait,
-    };
-  }
-  return {
-    size: page.size ?? DEFAULT_PAPER.size,
-    portrait: page.portrait ?? DEFAULT_PAPER.portrait,
   };
 }
 
@@ -190,14 +174,24 @@ function parsePcbCandidate(candidate: PcbFileCandidate): Pcb {
 }
 
 function createBlankPcb(): Pcb {
-  return ensureDefaults(createMinimalPcb() as Pcb);
+  const blank = ensureDefaults(createMinimalPcb() as Pcb);
+  return {
+    ...blank,
+    page: blank.page ?? { size: "A4", portrait: false },
+  };
 }
 
 export function PcbProvider({ children }: PropsWithChildren) {
-  const { currentProject, updateCurrentProjectFiles } = useProject();
+  const {
+    currentProject,
+    updateCurrentProjectFiles,
+    isLoading: isProjectLoading,
+    selectionHydrated,
+    loadProject,
+  } = useProject();
   const [pcb, setPcb] = useState<Pcb>(() => createBlankPcb());
-  const [paper, setPaper] = useState<Paper>(() => ({ ...DEFAULT_PAPER }));
   const pcbRef = useRef<Pcb>(pcb);
+  const lastLoggedSignatureRef = useRef<string | null>(null);
   const [source, setSource] = useState<PcbSource | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -211,23 +205,106 @@ export function PcbProvider({ children }: PropsWithChildren) {
     content: string;
     pcb: Pcb;
   } | null>(null);
+  const restoreAttemptRef = useRef<{ id: string | null; inFlight: boolean }>({ id: null, inFlight: false });
+  const lastLoadSignatureRef = useRef<string | null>(null);
 
   useEffect(() => {
+    if (isProjectLoading) return;
+
+    if (!currentProject) {
+      lastLoggedSignatureRef.current = null;
+      return;
+    }
+
+    const signature = `${currentProject.id}:${reloadToken}`;
+    if (lastLoggedSignatureRef.current === signature) return;
+
+    lastLoggedSignatureRef.current = signature;
+    console.log("[PCBEditor] Current project ready", {
+      id: currentProject.id,
+      name: currentProject.name,
+      fileCount: Object.keys(currentProject.files ?? {}).length,
+      reloadToken,
+    });
+  }, [currentProject, reloadToken, isProjectLoading]);
+
+  useEffect(() => {
+    if (!selectionHydrated) {
+      setIsLoading(true);
+      return () => {};
+    }
+
+    if (isProjectLoading) {
+      setIsLoading(true);
+      return () => {};
+    }
+
+    if (!currentProject) {
+      setIsLoading(true);
+      let aborted = false;
+
+      void (async () => {
+        const persistedId = await projectStorage.getActiveProjectId();
+        if (!persistedId || aborted) return;
+
+        const alreadyAttempted =
+          restoreAttemptRef.current.id === persistedId && restoreAttemptRef.current.inFlight;
+        if (alreadyAttempted) return;
+
+        restoreAttemptRef.current = { id: persistedId, inFlight: true };
+        console.log("[PCBEditor] Forcing project load", { persistedId });
+        try {
+          await loadProject(persistedId);
+        } catch (err) {
+          if (!aborted) {
+            console.error("[PCBEditor] Failed to force project load", err);
+          }
+        } finally {
+          if (!aborted) {
+            restoreAttemptRef.current = { id: persistedId, inFlight: false };
+          }
+        }
+      })();
+
+      return () => {
+        aborted = true;
+      };
+    }
+
     let cancelled = false;
     const candidate = pickProjectPcbFile(currentProject);
 
-    if (!currentProject || !candidate) {
-      if (!currentProject) {
-        setSource(null);
-        setLoadError(null);
-      } else {
-        setSource(null);
-        setLoadError("No PCB file found in selected project.");
-      }
+    const loadSignature = candidate ? `${currentProject.id}:${candidate.path}:${reloadToken}` : `${currentProject.id}:none:${reloadToken}`;
+    const isStrictReplay =
+      process.env.NODE_ENV !== "production" && lastLoadSignatureRef.current === loadSignature;
+    if (isStrictReplay) {
+      return () => {};
+    }
+    lastLoadSignatureRef.current = loadSignature;
+
+    console.log("[PCBEditor] Reload requested", {
+      hasProject: Boolean(currentProject),
+      projectId: currentProject?.id ?? null,
+      projectName: currentProject?.name ?? null,
+      reloadToken,
+    });
+
+    if (!currentProject) {
+      setSource(null);
+      setLoadError(null);
+      setIsLoading(true);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    if (!candidate) {
+      setSource(null);
+      setLoadError("No PCB file found in selected project.");
       const blank = createBlankPcb();
       setPcb(blank);
       pcbRef.current = blank;
-      setPaper(normalizePaper(blank.page));
+      console.log("[PCBEditor] Applied blank PCB page", blank.page);
       setIsLoading(false);
       return () => {
         cancelled = true;
@@ -251,9 +328,9 @@ export function PcbProvider({ children }: PropsWithChildren) {
       pendingPersist.content === candidate.content
     ) {
       setSource({ projectId: currentProject.id, filePath: candidate.path, format: candidate.format });
+      console.log("[PCBEditor] Applied pendingPersist PCB page", pendingPersist.pcb.page);
       setPcb(pendingPersist.pcb);
       pcbRef.current = pendingPersist.pcb;
-      setPaper(normalizePaper(pendingPersist.pcb.page));
       setLoadError(null);
       setIsLoading(false);
       lastPersistedRef.current = null;
@@ -277,8 +354,8 @@ export function PcbProvider({ children }: PropsWithChildren) {
           console.log("[PCBEditor] Ensured PCB page", ensured.page);
         }
         setPcb(ensured);
+        console.log("[PCBEditor] Applied parsed PCB page", ensured.page);
         pcbRef.current = ensured;
-        setPaper(normalizePaper(ensured.page));
         setSource({ projectId: currentProject.id, filePath: candidate.path, format: candidate.format });
         setIsLoading(false);
       }
@@ -287,10 +364,11 @@ export function PcbProvider({ children }: PropsWithChildren) {
         const message = err instanceof Error ? err.message : "Failed to parse PCB file.";
         setLoadError(message);
         setSource(null);
+        console.error("[PCBEditor] PCB load failed", err);
         const blank = createBlankPcb();
+        console.log("[PCBEditor] Applied blank PCB page after parse failure", blank.page);
         setPcb(blank);
         pcbRef.current = blank;
-        setPaper(normalizePaper(blank.page));
         setIsLoading(false);
       }
     }
@@ -298,9 +376,16 @@ export function PcbProvider({ children }: PropsWithChildren) {
     return () => {
       cancelled = true;
     };
-  }, [currentProject, reloadToken]);
+  }, [currentProject, reloadToken, isProjectLoading, selectionHydrated, loadProject]);
 
   const sheetMetadata = useMemo<SheetMetadata>(() => deriveMetadata(pcb), [pcb]);
+  const page = pcb.page ?? null;
+
+  useEffect(() => {
+    if (process.env.NODE_ENV !== "production") {
+      console.log("[PCBEditor] pcb.page updated", pcb.page ? { ...pcb.page } : null);
+    }
+  }, [pcb]);
 
   const updatePcb = useCallback((updater: (current: Pcb) => Pcb) => {
     setPcb((current) => {
@@ -309,20 +394,9 @@ export function PcbProvider({ children }: PropsWithChildren) {
         console.log("[PCBEditor] updatePcb next page", next.page);
       }
       pcbRef.current = next;
-        setPaper(normalizePaper(next.page));
       return next;
     });
   }, []);
-
-  useEffect(() => {
-    if (process.env.NODE_ENV !== "production") {
-      console.log("[PCBEditor] Derived paper", paper);
-    }
-  }, [paper]);
-
-  useEffect(() => {
-    setPaper(normalizePaper(pcb.page));
-  }, [pcb]);
 
   const reloadFromProject = useCallback(() => {
     setReloadToken((token) => token + 1);
@@ -370,9 +444,9 @@ export function PcbProvider({ children }: PropsWithChildren) {
         pcb: snapshot,
       };
       setSource({ projectId: currentProject.id, filePath, format: targetFormat });
+      console.log("[PCBEditor] Applied snapshot PCB page", snapshot.page);
       setPcb(snapshot);
       pcbRef.current = snapshot;
-        setPaper(normalizePaper(snapshot.page));
       setLastSavedAt(Date.now());
       return { filePath };
     } catch (err) {
@@ -387,7 +461,7 @@ export function PcbProvider({ children }: PropsWithChildren) {
   const value = useMemo<PcbContextValue>(
     () => ({
       pcb,
-      paper,
+      page,
       sheetMetadata,
       source,
       isLoading,
@@ -401,7 +475,7 @@ export function PcbProvider({ children }: PropsWithChildren) {
     }),
     [
       pcb,
-      paper,
+      page,
       sheetMetadata,
       source,
       isLoading,

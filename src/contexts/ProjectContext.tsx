@@ -22,6 +22,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   const [isExporting, setIsExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [storageEstimate, setStorageEstimate] = useState<StorageEstimate | null>(null); // NEW
+  const [selectionHydrated, setSelectionHydrated] = useState(false);
 
   const currentProjectRef = useRef<ProjectRecord | null>(null);
   const refreshTokenRef = useRef(0);
@@ -43,6 +44,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   const _setExporting = useMemo(() => safeSet(setIsExporting), [safeSet]);
   const _setError = useMemo(() => safeSet(setError), [safeSet]);
   const _setStorageEstimate = useMemo(() => safeSet(setStorageEstimate), [safeSet]); // NEW
+  const _setSelectionHydrated = useMemo(() => safeSet(setSelectionHydrated), [safeSet]);
 
   const refresh = useCallback(async () => {
     const token = ++refreshTokenRef.current;
@@ -71,17 +73,47 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
 
   // Persist current project id across reloads
   useEffect(() => {
-    if (currentProject?.id) localStorage.setItem("currentProjectId", currentProject.id);
-    else localStorage.removeItem("currentProjectId");
-  }, [currentProject?.id]);
+    if (!selectionHydrated) return;
+    void projectStorage.setActiveProjectId(currentProject?.id ?? null);
+  }, [currentProject?.id, selectionHydrated]);
 
   useEffect(() => {
-    const id = localStorage.getItem("currentProjectId");
-    if (id) {
-      projectStorage.get(id as ProjectID)
-        .then((p) => { if (p && mounted.current) _setCurrent(p); })
-        .catch(() => localStorage.removeItem("currentProjectId"));
-    }
+    let cancelled = false;
+    (async () => {
+      const id = await projectStorage.getActiveProjectId();
+      if (!id) {
+        if (!cancelled && mounted.current) {
+          _setSelectionHydrated(true);
+        }
+        return;
+      }
+
+      try {
+        const project = await projectStorage.get(id as ProjectID);
+        if (cancelled || !mounted.current) return;
+        if (project) {
+          console.log("[ProjectProvider] Restored project on reload", {
+            id: project.id,
+            name: project.name,
+          });
+          _setCurrent(project);
+        } else {
+          console.warn("[ProjectProvider] Stored project id missing", id);
+          await projectStorage.setActiveProjectId(null);
+        }
+      } catch {
+        if (cancelled || !mounted.current) return;
+        await projectStorage.setActiveProjectId(null);
+      } finally {
+        if (!cancelled && mounted.current) {
+          _setSelectionHydrated(true);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -227,6 +259,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     isExporting,
     error,
     storageEstimate,
+    selectionHydrated,
     refresh,
     createProject,
     loadProject,
@@ -244,6 +277,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     isExporting,
     error,
     storageEstimate,
+    selectionHydrated,
     refresh,
     createProject,
     loadProject,
