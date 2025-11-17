@@ -17,9 +17,27 @@ import {
   symbolLibValueToSexpr,
   createMinimalSymbolLib,
   createMinimalSymbolLibJson,
+  footprintLibJsonToSexpr,
+  footprintLibJsonToValue,
+  footprintLibSexprToJson,
+  footprintLibSexprToValue,
+  footprintLibValueToJson,
+  footprintLibValueToSexpr,
+  createMinimalFootprintLib,
+  createMinimalFootprintLibJson,
+  pcbSexprToJson,
+  pcbJsonToSexpr,
+  pcbJsonToValue,
+  pcbSexprToValue,
+  pcbValueToJson,
+  pcbValueToSexpr,
+  createMinimalPcb,
+  createMinimalPcbJson,
   exportTypes,
   type KicadSch,
   type KicadSymbolLib,
+  type FootprintLibrary,
+  type Pcb,
 } from "trackway-parser-wasm";
 
 function main(): void {
@@ -100,6 +118,80 @@ function main(): void {
 
   const minimalSymbolLibFromSexpr: KicadSymbolLib = symbolLibSexprToValue(minimalSymbolLibSexpr);
   console.log("Minimal symbol count:", minimalSymbolLibFromSexpr.symbol?.length ?? 0);
+
+  // --- Footprint libraries ------------------------------------------------
+
+  const footprintSexpr = `
+  (footprint "Demo:Pad"
+    (layer F.Cu)
+    (fp_text reference "REF**" (at 0 0 0) (layer F.SilkS)
+      (effects (font (size 1 1)))
+      (uuid "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"))
+    (fp_text value "Pad" (at 0 1 0) (layer F.Fab)
+      (effects (font (size 1 1)))
+      (uuid "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"))
+    (pad "1" smd rect (at 0 0 0) (size 1 1)
+      (layers F.Cu F.Paste F.Mask)
+      (uuid "cccccccc-cccc-cccc-cccc-cccccccccccc")))`;
+
+  const footprintJson = footprintLibSexprToJson(footprintSexpr, true);
+  console.log("Footprint library JSON:\n", footprintJson);
+
+  const footprintValueFromSexpr: FootprintLibrary = footprintLibSexprToValue(footprintSexpr);
+  console.log("Footprint:", footprintValueFromSexpr);
+
+  const footprintValue: FootprintLibrary = footprintLibJsonToValue(footprintJson);
+  const footprintPrettySexpr = footprintLibValueToSexpr(footprintValue, true);
+  console.log("Footprint library pretty expression:\n", footprintPrettySexpr);
+
+  const footprintJsonFromValue = footprintLibValueToJson(footprintValue, true);
+  console.log("Footprint JSON regenerated:\n", footprintJsonFromValue);
+
+  const minimalFootprintJson = createMinimalFootprintLibJson(true);
+  const minimalFootprintValue: FootprintLibrary = createMinimalFootprintLib();
+  console.log("Minimal footprint generator:", minimalFootprintValue.footprint.generator);
+
+  const minimalFootprintSexpr = footprintLibJsonToSexpr(minimalFootprintJson, true);
+  console.log("Minimal footprint as S-expression:\n", minimalFootprintSexpr);
+
+  const minimalFootprintFromSexpr: FootprintLibrary = footprintLibSexprToValue(minimalFootprintSexpr);
+  console.log("Minimal footprint layer:", minimalFootprintFromSexpr.footprint.layer);
+
+  // --- PCBs ---------------------------------------------------------------
+
+  const pcbSexpr = `
+  (kicad_pcb
+    (version 20250115)
+    (generator "pcbnew")
+    (general (thickness 1.6))
+    (page A4)
+    (layers
+      (0 F.Cu signal)
+      (31 B.Cu signal))
+    (setup (pad_to_mask_clearance 0)))`;
+
+  const pcbJson = pcbSexprToJson(pcbSexpr, true);
+  console.log("PCB JSON:\n", pcbJson);
+
+  const pcbValueFromSexpr: Pcb = pcbSexprToValue(pcbSexpr);
+  console.log("PCB version:", pcbValueFromSexpr.version);
+
+  const pcbValue: Pcb = pcbJsonToValue(pcbJson);
+  const pcbPrettySexpr = pcbValueToSexpr(pcbValue, true);
+  console.log("PCB pretty S-expression:\n", pcbPrettySexpr);
+
+  const pcbJsonFromValue = pcbValueToJson(pcbValue, true);
+  console.log("PCB JSON regenerated:\n", pcbJsonFromValue);
+
+  const minimalPcbJson = createMinimalPcbJson(true);
+  const minimalPcbValue: Pcb = createMinimalPcb();
+  console.log("Minimal:", minimalPcbValue);
+
+  const minimalPcbSexpr = pcbJsonToSexpr(minimalPcbJson, true);
+  console.log("Minimal PCB as S-expression:\n", minimalPcbSexpr);
+
+  const minimalPcbFromSexpr: Pcb = pcbSexprToValue(minimalPcbSexpr);
+  console.log("Minimal PCB generator:", minimalPcbFromSexpr.generator);
 
   // --- TypeScript declarations --------------------------------------------
 

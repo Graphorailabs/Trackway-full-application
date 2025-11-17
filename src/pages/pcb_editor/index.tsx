@@ -1,9 +1,6 @@
-import BoardSheet from "../../features/schematic/editor/layers/BoardSheet";
+import { PCBEditorLayout } from "@/features/pcb_editor";
 
 export default function PcbEditorPage() {
-    return <div>
-        
-        <BoardSheet />
-        </div>;
+    return <PCBEditorLayout />;
 }
 

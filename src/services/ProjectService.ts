@@ -2,6 +2,17 @@ import { API_BASE_URL, ENDPOINTS } from "@/constants";
 import { ApiService } from "./ApiService";
 import { useMutation, type UseMutationOptions } from "@tanstack/react-query";
 
+function normalizeProjectName(name: string): string {
+  const trimmed = (name ?? "").trim();
+  return trimmed.length ? trimmed : "Untitled Project";
+}
+
+function safeFileStem(name: string): string {
+  const normalized = normalizeProjectName(name);
+  const safe = normalized.replace(/[\\/:*?"<>|]+/g, "_").replace(/\s+/g, "_");
+  return safe.length ? safe : "project";
+}
+
 // ----- Types that match your FastAPI responses -----
 
 // /project/new -> JSON bundle of files
@@ -23,8 +34,33 @@ export async function createProjectJson(name: string) {
 }
 
 export async function createProjectZip(name: string) {
-  // Returns a Blob (ZIP)
-  return api.postJson<Blob>(ENDPOINTS.projectNewZip, { name });
+  const [parser, jszipModule] = await Promise.all([
+    import("trackway-parser-wasm"),
+    import("jszip"),
+  ]);
+
+  const JSZip = jszipModule.default;
+  if (!JSZip) throw new Error("Failed to load ZIP generator");
+
+  const pretty = true;
+  const schematicSexpr = parser.schematicJsonToSexpr(
+    parser.createMinimalSchematicJson(pretty),
+    pretty,
+  );
+  const pcbSexpr = parser.pcbJsonToSexpr(parser.createMinimalPcbJson(pretty), pretty);
+
+  const fileStem = safeFileStem(name);
+  const files: Record<string, string> = {
+    [`${fileStem}.kicad_sch`]: schematicSexpr,
+    [`${fileStem}.kicad_pcb`]: pcbSexpr,
+  };
+
+  const zip = new JSZip();
+  Object.entries(files).forEach(([path, content]) => {
+    zip.file(path, content.endsWith("\n") ? content : `${content}\n`);
+  });
+
+  return zip.generateAsync({ type: "blob" });
 }
 
 export async function parseSymbolFile(file: File) {
