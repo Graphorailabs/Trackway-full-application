@@ -201,3 +201,18 @@ const TECH_LAYERS: EditorLayer[] = [
 ];
 
 export const PCB_EDITOR_LAYERS: EditorLayer[] = [...COPPER_STACK, ...TECH_LAYERS];
+
+// --- PCB-editor specific defaults moved here from top-level `src/constants.ts`
+// Visual defaults for shapes (non-text)
+export const DEFAULT_SHAPE_STROKE = "#a688f2ff";
+export const DEFAULT_SHAPE_WIDTH = 0.9;
+
+// Grid defaults (measurements in millimeters)
+export const DEFAULT_GRID_PRECISION_MM = 0.001; // 0.001 mm at 100% zoom
+export const GRID_PIXEL_TARGET_MIN = 6;
+export const GRID_PIXEL_TARGET_MAX = 40;
+export const GRID_MAJOR_FACTOR = 10;
+
+// Feature flags for PCB editor
+export const ENABLE_GRID_DEBUG = false;
+export const ENABLE_SNAP_TO_VISIBLE_GRID = true;

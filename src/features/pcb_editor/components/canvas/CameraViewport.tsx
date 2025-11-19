@@ -8,15 +8,15 @@ import {
   useMemo,
   useRef,
   useState,
-  type CSSProperties,
   type MouseEvent,
   type PropsWithChildren,
 } from "react";
 
 import { useGrid } from "@/features/pcb_editor/contexts/GridContext";
 import { useZoom } from "@/features/pcb_editor/contexts/ZoomContext";
+import GridCanvas from "./GridCanvas";
 
-const GRID_EXTENT = 20000;
+// grid extent previously used for CSS background; no longer needed
 
 type CameraViewportContextValue = {
   camera: { x: number; y: number };
@@ -37,7 +37,7 @@ export function useCameraViewport(): CameraViewportContextValue {
 
 export function CameraViewport({ children }: PropsWithChildren) {
   const { styles } = useGrid();
-  const { zoom, camera, zoomAt, updateFocusPoint, step } = useZoom();
+  const { zoom, camera, zoomByFactor, updateFocusPoint } = useZoom();
   const surfaceRef = useRef<HTMLDivElement | null>(null);
   const [viewportSize, setViewportSize] = useState({ width: 1, height: 1 });
 
@@ -59,20 +59,8 @@ export function CameraViewport({ children }: PropsWithChildren) {
     [viewportSize],
   );
 
-  const worldTransform = useMemo(
-    () => ({
-      transform: `translate(${viewportCenter.x}px, ${viewportCenter.y}px) scale(${zoom}) translate(${-camera.x}px, ${-camera.y}px)`,
-      transformOrigin: "0 0",
-    }),
-    [viewportCenter, zoom, camera],
-  );
-
-  const gridPatternStyles = useMemo(() => {
-    if (!styles.backgroundImage) {
-      return { backgroundColor: "transparent" } as CSSProperties;
-    }
-    return { ...styles, backgroundColor: "transparent" } as CSSProperties;
-  }, [styles]);
+  // worldTransform and CSS background-style calculations are no longer
+  // necessary because the grid is drawn into a world-space canvas.
 
   const screenToWorld = useCallback(
     (point: { x: number; y: number }) => ({
@@ -108,12 +96,17 @@ export function CameraViewport({ children }: PropsWithChildren) {
         y: cursor.y - viewportCenter.y,
       };
       const world = screenToWorld(cursor);
-      const direction = event.deltaY > 0 ? -1 : 1;
+      // Use multiplicative zoom around the cursor so the world point under
+      // the pointer remains stationary in screen space. Map wheel delta to
+      // a smooth factor; magnitude is normalized to [0,1].
+      const direction = event.deltaY < 0 ? 1 : -1; // negative deltaY -> zoom in
       const magnitude = Math.min(Math.abs(event.deltaY) / 100, 1);
-      const delta = step * direction * magnitude;
-      zoomAt(delta, { world, screenOffset });
+      // base factor per full magnitude step (20% per full step)
+      const base = 1.2;
+      const factor = Math.pow(base, direction * magnitude);
+      zoomByFactor(factor, { world, screenOffset });
     },
-    [screenToWorld, viewportCenter, step, zoomAt],
+    [screenToWorld, viewportCenter, zoomByFactor],
   );
 
   useEffect(() => {
@@ -150,17 +143,8 @@ export function CameraViewport({ children }: PropsWithChildren) {
         }}
       >
         <div className="pointer-events-none absolute inset-0 select-none" aria-hidden>
-          <div className="absolute inset-0" style={worldTransform}>
-            <div
-              className="absolute"
-              style={{
-                width: GRID_EXTENT,
-                height: GRID_EXTENT,
-                left: -GRID_EXTENT / 2,
-                top: -GRID_EXTENT / 2,
-                ...gridPatternStyles,
-              }}
-            />
+          <div className="absolute inset-0" style={{ overflow: "hidden" }}>
+            <GridCanvas width={viewportSize.width} height={viewportSize.height} viewportCenter={viewportCenter} />
           </div>
         </div>
         <div className="relative flex h-full w-full" aria-live="polite">

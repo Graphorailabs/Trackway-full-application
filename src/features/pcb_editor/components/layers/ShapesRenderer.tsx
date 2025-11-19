@@ -16,7 +16,7 @@ import { Rect, Circle, Text, Line, Arc } from "react-konva";
 import type { PcbGraphicItem, Xy } from "trackway-parser-wasm";
 import type { Tool } from "@/features/pcb_editor/contexts/ToolContext";
 import { getArcParams } from "@/features/pcb_editor/utils/shapeUtils";
-import { DEFAULT_SHAPE_STROKE, DEFAULT_SHAPE_WIDTH } from "@/constants";
+import { DEFAULT_SHAPE_STROKE, DEFAULT_SHAPE_WIDTH } from "@/features/pcb_editor/constants";
 
 // Aliases used in this file
 const DEFAULT_STROKE = DEFAULT_SHAPE_STROKE;

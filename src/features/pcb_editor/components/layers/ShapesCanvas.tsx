@@ -41,12 +41,14 @@
  */
 import { Layer, Text, Arc } from "react-konva";
 import { useCameraViewport } from "@/features/pcb_editor/components/canvas/CameraViewport";
+import { useMeasurementSafe } from "@/features/pcb_editor/contexts/MeasurementContext";
 import { useLayoutEffect, useRef, useState, useEffect } from "react";
 import { useShapeContext } from "../../contexts/ShapeContext";
 import { useToolContext } from "../../contexts/ToolContext";
 import { usePcb } from "../../contexts/PcbContext";
 import { useLayers } from "../../contexts/LayerContext";
-import { DEFAULT_SHAPE_STROKE, DEFAULT_SHAPE_WIDTH } from "@/constants";
+import { DEFAULT_SHAPE_STROKE, DEFAULT_SHAPE_WIDTH, ENABLE_SNAP_TO_VISIBLE_GRID } from "@/features/pcb_editor/constants";
+import { useGrid } from "@/features/pcb_editor/contexts/GridContext";
 import type { KonvaEventObject } from "konva/lib/Node";
 import type { Xy, TextEffects } from "trackway-parser-wasm";
 import { renderShape, renderPreviewShape } from "./ShapesRenderer";
@@ -56,6 +58,7 @@ import SelectionHighlight from "./SelectionHighlight";
 import SelectionContextMenu from "./SelectionContextMenu";
 import TextOverlay from "./TextOverlay";
 import CanvasStage from "./CanvasStage";
+import GridDebugOverlay from "../canvas/GridDebugOverlay";
 import {
 	updateGraphicDataByKind,
 	computeArcPreviewProps,
@@ -64,6 +67,7 @@ import {
 
 export default function ShapesCanvas() {
 	const { camera, zoom, viewportCenter, screenToWorld } = useCameraViewport();
+	const measurement = useMeasurementSafe();
 	const {
 		isDrawing,
 		startPoint,
@@ -80,6 +84,7 @@ export default function ShapesCanvas() {
 		resetDrawing,
 	} = useShapeContext();
 	const { pcb, addGraphicItem, updatePcb } = usePcb();
+	const { minorSpacing, renderMinorPx } = useGrid();
 	const { selectedUuid, select, clear, openContextMenu } = useSelection();
 
 	// dragging state for selection tool
@@ -118,6 +123,16 @@ export default function ShapesCanvas() {
 		const pos = e.target.getStage()?.getPointerPosition();
 		if (!pos) return;
 		const worldPos = screenToWorld(pos);
+		// compute snapped world position (in mm) based on visible grid if enabled
+		const snappedPos = (() => {
+			if (!ENABLE_SNAP_TO_VISIBLE_GRID) return { x: worldPos.x, y: worldPos.y };
+			const baseMm = minorSpacing;
+			const displayPx = renderMinorPx ?? Math.max(1, baseMm * zoom);
+			const displayMult = Math.max(1, displayPx / (baseMm * zoom));
+			const visibleStep = baseMm * displayMult;
+			const snap = (v: number) => Math.round(v / visibleStep) * visibleStep;
+			return { x: snap(worldPos.x), y: snap(worldPos.y) };
+		})();
 
 		if (tool === "select") {
 			const target = e.target as unknown as { id?: () => string; attrs?: { id?: string } };
@@ -134,33 +149,33 @@ export default function ShapesCanvas() {
 
 		if (tool === "polygon") {
 			if (!isDrawing) {
-				startDrawing([worldPos.x, worldPos.y]);
+				startDrawing([snappedPos.x, snappedPos.y]);
 			} else {
 				const firstPoint = polygonPoints[0];
-				const dist = Math.sqrt(Math.pow(firstPoint[0] - worldPos.x, 2) + Math.pow(firstPoint[1] - worldPos.y, 2));
+				const dist = Math.sqrt(Math.pow(firstPoint[0] - snappedPos.x, 2) + Math.pow(firstPoint[1] - snappedPos.y, 2));
 				if (dist < 5 / zoom) {
 					const newShape = finishDrawing();
 					if (newShape) addGraphicItem(newShape);
 				} else {
-					addPolygonPoint([worldPos.x, worldPos.y]);
+					addPolygonPoint([snappedPos.x, snappedPos.y]);
 				}
 			}
 		} else if (tool === "arc") {
 			if (!isDrawing) {
-				startDrawing([worldPos.x, worldPos.y]);
+				startDrawing([snappedPos.x, snappedPos.y]);
 				cancelledDrawingRef.current = false;
 				return;
 			}
 			if (isDrawing && arcPhase === "sweep") {
-				const newShape = finishDrawing([worldPos.x, worldPos.y]);
+				const newShape = finishDrawing([snappedPos.x, snappedPos.y]);
 				if (newShape) addGraphicItem(newShape);
 			}
 			return;
 		} else if (tool === "text") {
-			setTextPos([worldPos.x, worldPos.y]);
+			setTextPos([snappedPos.x, snappedPos.y]);
 			setShowTextInput(true);
 		} else {
-			startDrawing([worldPos.x, worldPos.y]);
+			startDrawing([snappedPos.x, snappedPos.y]);
 			cancelledDrawingRef.current = false;
 		}
 	};
@@ -189,7 +204,18 @@ export default function ShapesCanvas() {
 		const pos = e.target.getStage()?.getPointerPosition();
 		if (!pos) return;
 		const worldPos = screenToWorld(pos);
-		updateDrawing([worldPos.x, worldPos.y]);
+		// update drawing with snapped coordinates for drawing tools; for select
+		// use the raw world coordinate for dragging calculations.
+		const snappedPos = (() => {
+			if (!ENABLE_SNAP_TO_VISIBLE_GRID) return { x: worldPos.x, y: worldPos.y };
+			const baseMm = minorSpacing;
+			const displayPx = renderMinorPx ?? Math.max(1, baseMm * zoom);
+			const displayMult = Math.max(1, displayPx / (baseMm * zoom));
+			const visibleStep = baseMm * displayMult;
+			const snap = (v: number) => Math.round(v / visibleStep) * visibleStep;
+			return { x: snap(worldPos.x), y: snap(worldPos.y) };
+		})();
+		updateDrawing(tool === "select" ? [worldPos.x, worldPos.y] : [snappedPos.x, snappedPos.y]);
 
 		if (tool === "select" && draggingRef.current && dragLastPosRef.current) {
 			const last = dragLastPosRef.current;
@@ -278,6 +304,7 @@ export default function ShapesCanvas() {
 
 	return (
 		<div className="absolute inset-0" ref={containerRef}>
+			<GridDebugOverlay />
 			<TextOverlay
 				showTextInput={showTextInput}
 				textPos={textPos}
@@ -337,37 +364,58 @@ export default function ShapesCanvas() {
 									: null}
 
 							{(startPoint && currentPoint)
-								? (() => {
-									let label = "";
-									if (tool === "arc") {
-										if (arcPhase === "circle") {
-											const dx = startPoint[0] - currentPoint[0];
-											const dy = startPoint[1] - currentPoint[1];
-											label = `R: ${Math.sqrt(dx * dx + dy * dy).toFixed(2)}`;
-										} else if (arcPhase === "sweep") {
-											if (typeof arcRadius === "number") {
-												label = `R: ${arcRadius.toFixed(2)}`;
-											} else if (arcStartPoint) {
-												const dx = startPoint[0] - arcStartPoint[0];
-												const dy = startPoint[1] - arcStartPoint[1];
-												label = `R: ${Math.sqrt(dx * dx + dy * dy).toFixed(2)}`;
-											}
-										}
-									} else {
-										label = getDimensionsText(tool, startPoint, currentPoint);
-									}
-									return label ? (
-										<Text
-											x={currentPoint[0]}
-											y={currentPoint[1]}
-											offsetX={-10}
-											offsetY={-10}
-											text={label}
-											fontSize={12 / zoom}
-											fill="white"
-										/>
-									) : null;
-								})()
+												? (() => {
+													let label = "";
+													if (tool === "arc") {
+														if (arcPhase === "circle") {
+															const dx = startPoint[0] - currentPoint[0];
+															const dy = startPoint[1] - currentPoint[1];
+															const mm = Math.sqrt(dx * dx + dy * dy);
+															label = `R: ${measurement.formatLength(mm)}`;
+														} else if (arcPhase === "sweep") {
+															if (typeof arcRadius === "number") {
+																label = `R: ${measurement.formatLength(arcRadius)}`;
+															} else if (arcStartPoint) {
+																const dx = startPoint[0] - arcStartPoint[0];
+																const dy = startPoint[1] - arcStartPoint[1];
+																const mm = Math.sqrt(dx * dx + dy * dy);
+																label = `R: ${measurement.formatLength(mm)}`;
+															}
+														}
+													} else {
+														// format other tools' dimension values with units
+														const dx = Math.abs(startPoint[0] - currentPoint[0]);
+														const dy = Math.abs(startPoint[1] - currentPoint[1]);
+														switch (tool) {
+															case "rect":
+																label = `W: ${measurement.formatLength(dx)} H: ${measurement.formatLength(dy)}`;
+																break;
+															case "circle": {
+																const r = Math.sqrt(dx * dx + dy * dy);
+																label = `R: ${measurement.formatLength(r)}`;
+																break;
+															}
+															case "line": {
+																const len = Math.sqrt(dx * dx + dy * dy);
+																label = `L: ${measurement.formatLength(len)}`;
+																break;
+															}
+															default:
+																label = getDimensionsText(tool, startPoint, currentPoint);
+														}
+													}
+													return label ? (
+														<Text
+															x={currentPoint[0]}
+															y={currentPoint[1]}
+															offsetX={-10}
+															offsetY={-10}
+															text={label}
+															fontSize={12 / zoom}
+															fill="white"
+														/>
+													) : null;
+												})()
 							: null}
 						</>
 					)}

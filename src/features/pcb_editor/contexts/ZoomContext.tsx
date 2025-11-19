@@ -26,6 +26,8 @@ export type ZoomContextValue = {
   zoomOut: () => void;
   setZoom: (value: number, target?: ZoomTarget) => void;
   zoomAt: (delta: number, target?: ZoomTarget) => void;
+  // Multiply current zoom by this factor (e.g. 1.2 to increase 20%)
+  zoomByFactor: (factor: number, target?: ZoomTarget) => void;
   updateFocusPoint: (world: Point, screenOffset?: Point) => void;
 };
 
@@ -107,6 +109,23 @@ export function ZoomProvider({
     [clampZoom],
   );
 
+  const zoomByFactor = useCallback(
+    (factor: number, target?: ZoomTarget) => {
+      setZoomState((currentZoom) => {
+        const nextZoom = clampZoom(currentZoom * factor);
+        if (nextZoom === currentZoom) return currentZoom;
+        const screenOffset = target?.screenOffset ?? focusPointRef.current.screenOffset;
+        const world = target?.world ?? focusPointRef.current.world;
+        setCamera({
+          x: world.x - screenOffset.x / nextZoom,
+          y: world.y - screenOffset.y / nextZoom,
+        });
+        return nextZoom;
+      });
+    },
+    [clampZoom],
+  );
+
   const zoomIn = useCallback(() => zoomAt(step), [step, zoomAt]);
   const zoomOut = useCallback(() => zoomAt(-step), [step, zoomAt]);
 
@@ -121,9 +140,10 @@ export function ZoomProvider({
       zoomOut,
       setZoom,
       zoomAt,
+      zoomByFactor,
       updateFocusPoint,
     }),
-    [zoom, camera, minZoom, maxZoom, step, zoomIn, zoomOut, setZoom, zoomAt, updateFocusPoint],
+    [zoom, camera, minZoom, maxZoom, step, zoomIn, zoomOut, setZoom, zoomAt, zoomByFactor, updateFocusPoint],
   );
 
   return <ZoomContext.Provider value={value}>{children}</ZoomContext.Provider>;

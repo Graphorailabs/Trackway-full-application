@@ -3,7 +3,7 @@ import { Rect, Circle, Line, Arc } from "react-konva";
 import { usePcb } from "@/features/pcb_editor/contexts/PcbContext";
 import { useSelection } from "@/features/pcb_editor/contexts/SelectionContext";
 import { useLayers } from "@/features/pcb_editor/contexts/LayerContext";
-import { DEFAULT_SHAPE_WIDTH } from "@/constants";
+import { DEFAULT_SHAPE_WIDTH } from "@/features/pcb_editor/constants";
 
 export function SelectionHighlight() {
 	const { pcb } = usePcb();
