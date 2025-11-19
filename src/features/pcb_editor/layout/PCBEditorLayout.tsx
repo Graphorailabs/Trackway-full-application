@@ -1,11 +1,16 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ChangeEvent } from "react";
 import { GitBranch, Layers, Loader2, PackagePlus, Save, Settings, Square, ZoomIn, ZoomOut } from "lucide-react";
 import { CanvasViewport } from "@/features/pcb_editor/components/CanvasViewport";
 import { EditorSettingsModal } from "@/features/pcb_editor/components/settings/EditorSettingsModal";
+import { LayerVisibilityModal } from "@/features/pcb_editor/components/layers/LayerVisibilityModal";
 import { Toolbar, ToolbarItem } from "@/features/pcb_editor/components/toolbar/Toolbar";
 import { GridProvider } from "@/features/pcb_editor/contexts/GridContext";
+import { LayerProvider, useLayers, type LayerId } from "@/features/pcb_editor/contexts/LayerContext";
 import { PcbProvider, usePcb } from "@/features/pcb_editor/contexts/PcbContext";
 import { ZoomProvider, useZoom } from "@/features/pcb_editor/contexts/ZoomContext";
+import { ToolProvider } from "@/features/pcb_editor/contexts/ToolContext";
+import { ShapeProvider } from "@/features/pcb_editor/contexts/ShapeContext";
+import { ShapeSelectionModal } from "../components/shapes/ShapeSelectionModal";
 
 type TopToolbarProps = {
   onOpenSettings: () => void;
@@ -16,6 +21,7 @@ type TopToolbarProps = {
 function TopToolbar({ onOpenSettings, onSaveSuccess, onSaveError }: TopToolbarProps) {
   const { zoomIn, zoomOut, zoom } = useZoom();
   const { savePcb, isSaving } = usePcb();
+  const { layers, selectedLayerId, selectLayer } = useLayers();
 
   const handleSave = async () => {
     try {
@@ -25,6 +31,10 @@ function TopToolbar({ onOpenSettings, onSaveSuccess, onSaveError }: TopToolbarPr
       const message = err instanceof Error ? err.message : "Failed to save PCB";
       onSaveError(message);
     }
+  };
+
+  const handleLayerChange = (event: ChangeEvent<HTMLSelectElement>) => {
+    selectLayer(event.target.value as LayerId);
   };
 
   return (
@@ -68,6 +78,25 @@ function TopToolbar({ onOpenSettings, onSaveSuccess, onSaveError }: TopToolbarPr
             <ZoomIn className="h-3 w-3" />
           </ToolbarItem>
         </div>
+        <div className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1">
+          <span className="text-[10px] font-semibold uppercase tracking-[0.3em] text-white/50">Layer</span>
+          <select
+            value={selectedLayerId}
+            onChange={handleLayerChange}
+            className="bg-transparent text-xs font-semibold text-white focus:outline-none"
+            aria-label="Select active layer"
+          >
+            {layers.map((layer) => (
+              <option
+                key={layer.canonical_name}
+                value={layer.canonical_name}
+                className="bg-slate-900 text-white"
+              >
+                {layer.user_name ?? layer.canonical_name}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
     </Toolbar>
   );
@@ -75,6 +104,8 @@ function TopToolbar({ onOpenSettings, onSaveSuccess, onSaveError }: TopToolbarPr
 
 export function PCBEditorLayout() {
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [layersModalOpen, setLayersModalOpen] = useState(false);
+  const [shapeModalOpen, setShapeModalOpen] = useState(false);
   const [toast, setToast] = useState<ToastState | null>(null);
 
   const handleSaveSuccess = useCallback(() => {
@@ -93,58 +124,69 @@ export function PCBEditorLayout() {
 
   return (
     <PcbProvider>
-      <ZoomProvider>
-        <GridProvider>
-          <div className="flex h-full min-h-screen w-full flex-col bg-slate-950 text-white">
-            <TopToolbar
-              onOpenSettings={() => setSettingsOpen(true)}
-              onSaveSuccess={handleSaveSuccess}
-              onSaveError={handleSaveError}
-            />
-            <div className="flex flex-1 overflow-hidden">
-              <CanvasViewport />
-              <Toolbar
-                placement="right"
-                className="relative z-10 flex w-16 shrink-0 flex-col items-center gap-3 text-white"
-              >
-                <div className="flex flex-col items-center gap-2">
-                  <ToolbarItem
-                    label="Place Footprint"
-                    labelSide="left"
-                    className="!flex !h-10 !w-10 !items-center !justify-center !rounded-lg !border-white/20 !bg-white/5 !p-0"
-                  >
-                    <PackagePlus className="h-4 w-4" />
-                  </ToolbarItem>
-                  <ToolbarItem
-                    label="Draw Board Outline"
-                    labelSide="left"
-                    className="!flex !h-10 !w-10 !items-center !justify-center !rounded-lg !border-white/20 !bg-white/5 !p-0"
-                  >
-                    <Square className="h-4 w-4" />
-                  </ToolbarItem>
-                  <ToolbarItem
-                    label="Route Trace"
-                    labelSide="left"
-                    className="!flex !h-10 !w-10 !items-center !justify-center !rounded-lg !border-white/20 !bg-white/5 !p-0"
-                  >
-                    <GitBranch className="h-4 w-4" />
-                  </ToolbarItem>
-                  <ToolbarItem
-                    label="Layer Stack"
-                    labelSide="left"
-                    className="!flex !h-10 !w-10 !items-center !justify-center !rounded-lg !border-white/20 !bg-white/10 !p-0"
-                    disabled
-                  >
-                    <Layers className="h-4 w-4 text-white/50" />
-                  </ToolbarItem>
+      <LayerProvider>
+        <ZoomProvider>
+          <GridProvider>
+            <ToolProvider>
+              <ShapeProvider>
+                <div className="flex h-full min-h-screen w-full flex-col bg-slate-950 text-white">
+                  <TopToolbar
+                    onOpenSettings={() => setSettingsOpen(true)}
+                    onSaveSuccess={handleSaveSuccess}
+                    onSaveError={handleSaveError}
+                  />
+                  <div className="flex flex-1 overflow-hidden">
+                    <CanvasViewport />
+                    <Toolbar
+                      placement="right"
+                      className="relative z-10 flex w-16 shrink-0 flex-col items-center gap-3 text-white"
+                    >
+                      <div className="flex flex-col items-center gap-2">
+                        <ToolbarItem
+                          label="Place Footprint"
+                          labelSide="left"
+                          className="!flex !h-10 !w-10 !items-center !justify-center !rounded-lg !border-white/20 !bg-white/5 !p-0"
+                        >
+                          <PackagePlus className="h-4 w-4" />
+                        </ToolbarItem>
+                        <ToolbarItem
+                          label="Draw Shape"
+                          labelSide="left"
+                          onClick={() => setShapeModalOpen(true)}
+                          active={shapeModalOpen}
+                          className="!flex !h-10 !w-10 !items-center !justify-center !rounded-lg !border-white/20 !bg-white/5 !p-0"
+                        >
+                          <Square className="h-4 w-4" />
+                        </ToolbarItem>
+                        <ToolbarItem
+                          label="Route Trace"
+                          labelSide="left"
+                          className="!flex !h-10 !w-10 !items-center !justify-center !rounded-lg !border-white/20 !bg-white/5 !p-0"
+                        >
+                          <GitBranch className="h-4 w-4" />
+                        </ToolbarItem>
+                        <ToolbarItem
+                          label="Layer Stack"
+                          labelSide="left"
+                          onClick={() => setLayersModalOpen(true)}
+                          active={layersModalOpen}
+                          className="!flex !h-10 !w-10 !items-center !justify-center !rounded-lg !border-white/20 !bg-white/5 !p-0"
+                        >
+                          <Layers className="h-4 w-4" />
+                        </ToolbarItem>
+                      </div>
+                    </Toolbar>
+                  </div>
+                  <EditorSettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+                  <LayerVisibilityModal open={layersModalOpen} onClose={() => setLayersModalOpen(false)} />
+                  <ShapeSelectionModal open={shapeModalOpen} onClose={() => setShapeModalOpen(false)} />
+                  <StatusToast toast={toast} />
                 </div>
-              </Toolbar>
-            </div>
-            <EditorSettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
-            <StatusToast toast={toast} />
-          </div>
-        </GridProvider>
-      </ZoomProvider>
+              </ShapeProvider>
+            </ToolProvider>
+          </GridProvider>
+        </ZoomProvider>
+      </LayerProvider>
     </PcbProvider>
   );
 }

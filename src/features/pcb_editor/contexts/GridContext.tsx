@@ -8,6 +8,8 @@ import {
   type PropsWithChildren,
 } from "react";
 
+import { useZoom } from "@/features/pcb_editor/contexts/ZoomContext";
+
 export type GridConfig = {
   backgroundColor?: string;
   majorLineColor?: string;
@@ -40,30 +42,66 @@ const defaultBackground = "#0f1d17"; // KiCad-inspired dark canvas
 const defaultMinor = "rgba(255, 255, 255, 0.05)";
 const defaultMajor = "rgba(255, 255, 255, 0.12)";
 
+const ADAPTIVE_GRID_LEVELS = [
+  { minZoom: 0, minor: 120, major: 600 },
+  { minZoom: 0.5, minor: 80, major: 400 },
+  { minZoom: 0.9, minor: 40, major: 200 },
+  { minZoom: 1.5, minor: 20, major: 100 },
+  { minZoom: 2.3, minor: 10, major: 50 },
+  { minZoom: 3.2, minor: 5, major: 25 },
+  { minZoom: 4.2, minor: 2, major: 10 },
+] as const;
+
+const resolveAdaptiveSpacing = (zoom: number) => {
+  let candidate = ADAPTIVE_GRID_LEVELS[0];
+  for (const level of ADAPTIVE_GRID_LEVELS) {
+    if (zoom >= level.minZoom) {
+      candidate = level;
+    } else {
+      break;
+    }
+  }
+  return candidate;
+};
+
 export function GridProvider({
   children,
   config,
 }: PropsWithChildren<{ config?: GridConfig }>) {
+  const { zoom } = useZoom();
   const [visible, setVisible] = useState(config?.visible ?? true);
 
   const backgroundColor = config?.backgroundColor ?? defaultBackground;
   const majorLineColor = config?.majorLineColor ?? defaultMajor;
   const minorLineColor = config?.minorLineColor ?? defaultMinor;
-  const majorSpacing = config?.majorSpacing ?? 200;
-  const minorSpacing = config?.minorSpacing ?? 40;
+  const userMajorSpacing = config?.majorSpacing;
+  const userMinorSpacing = config?.minorSpacing;
+  const spacing = useMemo(() => {
+    const adaptive = resolveAdaptiveSpacing(zoom);
+    return {
+      major: userMajorSpacing ?? adaptive.major,
+      minor: userMinorSpacing ?? adaptive.minor,
+    };
+  }, [userMajorSpacing, userMinorSpacing, zoom]);
+  const majorSpacing = spacing.major;
+  const minorSpacing = spacing.minor;
 
   const styles = useMemo<CSSProperties>(() => {
     if (!visible) {
       return { backgroundColor };
     }
 
+    const lineScale = 1 / zoom;
+    const minorLineWidth = 1 * lineScale;
+    const majorLineWidth = 2 * lineScale;
+
     return {
       backgroundColor,
       backgroundImage: `
-        linear-gradient(0deg, ${minorLineColor} 1px, transparent 1px),
-        linear-gradient(90deg, ${minorLineColor} 1px, transparent 1px),
-        linear-gradient(0deg, ${majorLineColor} 2px, transparent 2px),
-        linear-gradient(90deg, ${majorLineColor} 2px, transparent 2px)
+        linear-gradient(0deg, ${minorLineColor} ${minorLineWidth}px, transparent ${minorLineWidth}px),
+        linear-gradient(90deg, ${minorLineColor} ${minorLineWidth}px, transparent ${minorLineWidth}px),
+        linear-gradient(0deg, ${majorLineColor} ${majorLineWidth}px, transparent ${majorLineWidth}px),
+        linear-gradient(90deg, ${majorLineColor} ${majorLineWidth}px, transparent ${majorLineWidth}px)
       `,
       backgroundSize: `
         ${minorSpacing}px ${minorSpacing}px,
@@ -73,7 +111,7 @@ export function GridProvider({
       `,
       backgroundBlendMode: "soft-light",
     };
-  }, [backgroundColor, minorLineColor, majorLineColor, minorSpacing, majorSpacing, visible]);
+  }, [backgroundColor, minorLineColor, majorLineColor, minorSpacing, majorSpacing, visible, zoom]);
 
   const value = useMemo<GridContextValue>(
     () => ({
