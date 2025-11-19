@@ -9,14 +9,14 @@ type ShapeSelectionModalProps = {
 const tools: { name: Tool; icon: React.ReactNode }[] = [
 	{ name: "rect", icon: <Square size={24} /> },
 	{ name: "circle", icon: <Circle size={24} /> },
+	{ name: "arc", icon: <Circle size={20} /> },
 	{ name: "line", icon: <Minus size={24} /> },
 	{ name: "polygon", icon: <Share2 size={24} /> },
 	{ name: "text", icon: <Type size={24} /> },
 ];
 
 export function ShapeSelectionModal({ open, onClose }: ShapeSelectionModalProps) {
-	const { setTool } = useToolContext();
-	const { strokeColor, setStrokeColor, strokeWidth, setStrokeWidth } = useToolContext();
+	const { setTool, strokeWidth, setStrokeWidth } = useToolContext();
 
 	if (!open) {
 		return null;
@@ -50,16 +50,6 @@ export function ShapeSelectionModal({ open, onClose }: ShapeSelectionModalProps)
 				))}
 
 				<div className="col-span-3 mt-2 flex items-center gap-4">
-					<label className="flex items-center gap-2 text-sm text-slate-200">
-						<span className="text-xs">Color</span>
-						<input
-							type="color"
-							value={strokeColor}
-							onChange={(e) => setStrokeColor(e.target.value)}
-							className="w-8 h-8 rounded"
-						/>
-					</label>
-
 					<label className="flex items-center gap-2 text-sm text-slate-200">
 						<span className="text-xs">Thickness</span>
 						<input

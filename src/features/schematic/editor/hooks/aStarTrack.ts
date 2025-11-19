@@ -32,11 +32,11 @@ export function aStarRoute(
       (f.get(a) ?? 99999) < (f.get(b) ?? 99999) ? a : b
     );
 
-    let [cx, cy] = currentKey.split(",").map(Number);
+    const [cx, cy] = currentKey.split(",").map(Number);
     let current = { x: cx, y: cy };
 
     if (current.x === end.x && current.y === end.y) {
-      let path = [current];
+      const path = [current];
       while (came.has(currentKey)) {
         current = came.get(currentKey)!;
         currentKey = key(current);
@@ -47,7 +47,7 @@ export function aStarRoute(
 
     open.delete(currentKey);
 
-    for (let nxt of neighbors(current, step)) {
+    for (const nxt of neighbors(current, step)) {
       if (blocked.has(key(nxt))) continue;
 
       const nk = key(nxt);

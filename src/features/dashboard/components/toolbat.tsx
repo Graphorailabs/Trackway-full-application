@@ -1,6 +1,7 @@
 /**
  * Barrel export to keep existing imports working while exposing modular toolbar pieces.
  */
+/* eslint-disable react-refresh/only-export-components -- file exports helpers/constants alongside components */
 import ToolbarComponent from './toolbar/toolbar';
 import ToolItemComponent from './toolbar/toolbar-item';
 

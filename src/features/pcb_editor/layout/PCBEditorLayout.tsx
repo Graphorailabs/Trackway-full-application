@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type ChangeEvent } from "react";
 import { GitBranch, Layers, Loader2, PackagePlus, Save, Settings, Square, ZoomIn, ZoomOut } from "lucide-react";
+import { LuMousePointer2 } from "react-icons/lu";
 import { CanvasViewport } from "@/features/pcb_editor/components/CanvasViewport";
 import { EditorSettingsModal } from "@/features/pcb_editor/components/settings/EditorSettingsModal";
 import { LayerVisibilityModal } from "@/features/pcb_editor/components/layers/LayerVisibilityModal";
@@ -10,7 +11,9 @@ import { PcbProvider, usePcb } from "@/features/pcb_editor/contexts/PcbContext";
 import { ZoomProvider, useZoom } from "@/features/pcb_editor/contexts/ZoomContext";
 import { ToolProvider } from "@/features/pcb_editor/contexts/ToolContext";
 import { ShapeProvider } from "@/features/pcb_editor/contexts/ShapeContext";
+import { SelectionProvider } from "@/features/pcb_editor/contexts/SelectionContext";
 import { ShapeSelectionModal } from "../components/shapes/ShapeSelectionModal";
+import { useToolContext } from "@/features/pcb_editor/contexts/ToolContext";
 
 type TopToolbarProps = {
   onOpenSettings: () => void;
@@ -116,6 +119,22 @@ export function PCBEditorLayout() {
     setToast({ id: Date.now(), message, variant: "error" });
   }, []);
 
+  // Small child component rendered inside the provider tree so it may use hooks.
+  function SelectionToolButton() {
+    const { tool, setTool } = useToolContext();
+    return (
+      <ToolbarItem
+        label="Select"
+        labelSide="left"
+        onClick={() => setTool("select")}
+        active={tool === "select"}
+        className="!flex !h-10 !w-10 !items-center !justify-center !rounded-lg !border-white/20 !bg-white/5 !p-0"
+      >
+        <LuMousePointer2 className="h-4 w-4" />
+      </ToolbarItem>
+    );
+  }
+
   useEffect(() => {
     if (!toast) return undefined;
     const timer = window.setTimeout(() => setToast(null), 3000);
@@ -128,7 +147,8 @@ export function PCBEditorLayout() {
         <ZoomProvider>
           <GridProvider>
             <ToolProvider>
-              <ShapeProvider>
+              <SelectionProvider>
+                <ShapeProvider>
                 <div className="flex h-full min-h-screen w-full flex-col bg-slate-950 text-white">
                   <TopToolbar
                     onOpenSettings={() => setSettingsOpen(true)}
@@ -141,7 +161,9 @@ export function PCBEditorLayout() {
                       placement="right"
                       className="relative z-10 flex w-16 shrink-0 flex-col items-center gap-3 text-white"
                     >
-                      <div className="flex flex-col items-center gap-2">
+                        <div className="flex flex-col items-center gap-2">
+                          {/* Selection tool button */}
+                          <SelectionToolButton />
                         <ToolbarItem
                           label="Place Footprint"
                           labelSide="left"
@@ -182,7 +204,8 @@ export function PCBEditorLayout() {
                   <ShapeSelectionModal open={shapeModalOpen} onClose={() => setShapeModalOpen(false)} />
                   <StatusToast toast={toast} />
                 </div>
-              </ShapeProvider>
+                </ShapeProvider>
+              </SelectionProvider>
             </ToolProvider>
           </GridProvider>
         </ZoomProvider>

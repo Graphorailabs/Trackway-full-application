@@ -1,6 +1,7 @@
 import { createContext, useContext, useState } from "react";
 import type { PcbGraphicItem, TextEffects } from "trackway-parser-wasm";
 
+/* eslint-disable react-refresh/only-export-components -- context exports hooks/helpers */
 export type Tool = PcbGraphicItem["kind"] | "select";
 
 type ToolContextState = {
@@ -26,7 +27,8 @@ export function useToolContext() {
 
 export function ToolProvider({ children }: { children: React.ReactNode }) {
 	const [tool, setTool] = useState<Tool>("select");
-	const [strokeColor, setStrokeColor] = useState<string>("#ff0000");
+	// Default stroke color: light pinkish-red for better visibility on canvas
+	const [strokeColor, setStrokeColor] = useState<string>("#ffd6d6");
 	const [strokeWidth, setStrokeWidth] = useState<number>(0.5);
 	const [textEffects, setTextEffects] = useState<TextEffects>({
 		font: { size: [16, 0.0], bold: false, italic: false },

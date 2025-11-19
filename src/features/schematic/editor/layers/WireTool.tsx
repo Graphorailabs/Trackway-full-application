@@ -276,11 +276,11 @@ function insertHumpOnWireSegment(
 
 
 const processedWires = useMemo(() => {
-  let result: (Wire & { humps: Point[] })[] = [];
+  const result: (Wire & { humps: Point[] })[] = [];
 
   wires.forEach((w1, i) => {
-    let newPts = [...w1.points];
-    let humps: Point[] = [];
+    const newPts = [...w1.points];
+    const humps: Point[] = [];
 
     wires.forEach((w2, j) => {
       if (i === j) return;

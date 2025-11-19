@@ -23,9 +23,9 @@ useEffect(() => {
       console.log("SVG Raw:", svg.substring(0, 100), "...");
 
       // ✅ More robust parse
-      let parser = new DOMParser();
-      let doc = parser.parseFromString(svg, "image/svg+xml");
-      let paths = Array.from(doc.querySelectorAll("path"));
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(svg, "image/svg+xml");
+      const paths = Array.from(doc.querySelectorAll("path"));
 
       console.log("Found paths:", paths.length);
 

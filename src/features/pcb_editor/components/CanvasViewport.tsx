@@ -2,7 +2,7 @@ import { SheetLayer } from "@/features/pcb_editor/components/layers/SheetLayer";
 import { CameraViewport } from "@/features/pcb_editor/components/canvas/CameraViewport";
 import { CanvasSurface } from "@/features/pcb_editor/components/canvas/CanvasSurface";
 import { usePcb } from "@/features/pcb_editor/contexts/PcbContext";
-import { ShapesLayer } from "@/features/pcb_editor/components/layers/ShapesLayer";
+import ShapesCanvas from "@/features/pcb_editor/components/layers/ShapesCanvas";
 
 export function CanvasViewport() {
   const { page, sheetMetadata } = usePcb();
@@ -11,7 +11,7 @@ export function CanvasViewport() {
       <CanvasSurface>
         <SheetLayer page={page} metadata={sheetMetadata} variant="anchored" />
       </CanvasSurface>
-      <ShapesLayer />
+      <ShapesCanvas />
     </CameraViewport>
   );
 }

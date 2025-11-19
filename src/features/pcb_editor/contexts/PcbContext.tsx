@@ -19,11 +19,7 @@ import {
 
 import { useProject } from "@/hooks/useProject";
 import type { SheetMetadata } from "@/features/pcb_editor/types";
-import {
-  createBlankPcb,
-  deriveMetadata,
-  ensureDefaults,
-} from "@/features/pcb_editor/state/pcbDocumentUtils";
+import { createBlankPcb, deriveMetadata } from "@/features/pcb_editor/state/pcbDocumentUtils";
 import { usePcbSourceManager, type PcbSource } from "@/features/pcb_editor/state/usePcbSourceManager";
 import { type Paper, type Pcb, type PcbGraphicItem } from "trackway-parser-wasm";
 
@@ -83,7 +79,7 @@ export function PcbProvider({ children }: PropsWithChildren) {
     source,
     isLoading,
     loadError,
-    reloadFromProject: reload,
+    reloadFromProject: reloadFromSource,
     isSaving,
     saveError,
     lastSavedAt,
@@ -101,9 +97,9 @@ export function PcbProvider({ children }: PropsWithChildren) {
   const reloadFromProject = useCallback(() => {
     // TODO: this is a bit of a hack, but it works for now
     // we need to refactor the project context to better support this
-    // eslint-disable-next-line @typescript-eslint/no-floating-promises
-    reload();
-  }, [reload]);
+     
+    reloadFromSource();
+  }, [reloadFromSource]);
 
   const page = useMemo(() => pcb.page ?? null, [pcb.page]);
 
@@ -138,7 +134,7 @@ export function PcbProvider({ children }: PropsWithChildren) {
       lastSavedAt,
       updatePcb,
       addGraphicItem,
-      reloadFromProject: reload,
+      reloadFromProject: reloadFromProject,
       savePcb: persistPcb,
     }),
     [
@@ -153,7 +149,7 @@ export function PcbProvider({ children }: PropsWithChildren) {
       lastSavedAt,
       updatePcb,
       addGraphicItem,
-      reload,
+      reloadFromProject,
       persistPcb,
     ],
   );

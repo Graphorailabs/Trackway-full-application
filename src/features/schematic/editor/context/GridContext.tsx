@@ -1,4 +1,5 @@
 import { createContext, useContext, useMemo, useState, type PropsWithChildren } from "react";
+/* eslint-disable react-refresh/only-export-components -- context exports hooks/helpers */
 
 export type GridState = {
   visible: boolean;

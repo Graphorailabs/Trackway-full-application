@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState } from "react";
 import type { Point } from "../hooks/makeOrthogonalPath";
 
+/* eslint-disable react-refresh/only-export-components -- context exports hooks/helpers */
 export type Pin = {
   id: string;
   x: number;

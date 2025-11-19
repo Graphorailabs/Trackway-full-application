@@ -1,4 +1,5 @@
 import { createContext, useContext, useRef, useState, type PropsWithChildren } from "react";
+/* eslint-disable react-refresh/only-export-components -- context exports hooks/helpers */
 import type Konva from "konva";
 
 type Vec2 = { x: number; y: number };

@@ -2,6 +2,7 @@
  * Toolbar orchestrates layout and behavior for the dashboard tool controls.
  */
 import { memo, useMemo, useState } from 'react';
+/* eslint-disable react-refresh/only-export-components -- file exports constants/helpers alongside React components */
 import type { CSSProperties } from 'react';
 
 import ToolItem from './toolbar-item';
