@@ -214,5 +214,5 @@ export const GRID_PIXEL_TARGET_MAX = 40;
 export const GRID_MAJOR_FACTOR = 10;
 
 // Feature flags for PCB editor
-export const ENABLE_GRID_DEBUG = false;
+export const ENABLE_GRID_DEBUG = true;
 export const ENABLE_SNAP_TO_VISIBLE_GRID = true;

@@ -41,8 +41,13 @@ export function TextOverlay({
 					left: inputScreenPos.x,
 					top: inputScreenPos.y,
 					zIndex: 100,
-					fontSize: "16px",
+					fontSize: `${overlayEffects?.font?.size?.[0] ?? 16}px`,
 					padding: "2px 6px",
+					background: "transparent",
+					border: "none",
+					color: "transparent",
+					caretColor: overlayColor,
+					outline: "none",
 				}}
 				placeholder="Enter text..."
 			/>

@@ -72,7 +72,36 @@ export function SelectionHighlight() {
 			const at = data.at as unknown as { x?: number; y?: number };
 			const x = at?.x ?? 0;
 			const y = at?.y ?? 0;
-			return <Rect x={x - 2} y={y - 12} width={40} height={20} stroke={highlight} strokeWidth={1} listening={false} />;
+			const text = (data.text as unknown as string) ?? "";
+			const effects = data.effects as unknown as { font?: { size?: number[]; bold?: boolean; italic?: boolean } } | undefined;
+			const fontSize = (effects?.font?.size?.[0]) ?? 16;
+			const isBold = !!effects?.font?.bold;
+			const isItalic = !!effects?.font?.italic;
+			// Measure text width using an offscreen canvas so the selection box matches rendered text
+			let measuredWidth = 40;
+			try {
+				const canvas = document.createElement("canvas");
+				const ctx = canvas.getContext("2d");
+				if (ctx) {
+					ctx.font = `${isBold ? "bold " : ""}${isItalic ? "italic " : ""}${fontSize}px sans-serif`;
+					measuredWidth = Math.max(8, ctx.measureText(text || "M").width);
+				}
+			} catch (e) {
+				// ignore measurement failures in non-browser environments
+			}
+			const pad = Math.max(2, fontSize * 0.2);
+			const height = fontSize * 1.2;
+			return (
+				<Rect
+					x={x - pad}
+					y={y - pad}
+					width={measuredWidth + pad * 2}
+					height={height + pad * 2}
+					stroke={highlight}
+					strokeWidth={Math.max(0.6, DEFAULT_SHAPE_WIDTH + 0.2)}
+					listening={false}
+				/>
+			);
 		}
 		default:
 			return null;

@@ -336,6 +336,18 @@ export default function ShapesCanvas() {
 							})
 						.map(renderShape)}
 					<SelectionHighlight />
+					{/* Konva preview of the text currently being edited so the DOM input matches world rendering */}
+					{showTextInput && textPos && (
+						<Text
+							x={textPos[0]}
+							y={textPos[1]}
+							text={textInput || ""}
+							fontSize={(overlayEffects?.font?.size?.[0]) ?? (defaultTextEffects?.font?.size?.[0]) ?? 16}
+							fontStyle={`${(overlayEffects?.font?.bold ?? defaultTextEffects?.font?.bold) ? "bold" : "normal"} ${(overlayEffects?.font?.italic ?? defaultTextEffects?.font?.italic) ? "italic" : "normal"}`}
+							fill={overlayColor}
+							listening={false}
+						/>
+					)}
 					{isDrawing && currentPoint && (
 						<>
 							{(tool === "polygon" && polygonPoints && polygonPoints.length > 0)

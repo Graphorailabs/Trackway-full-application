@@ -184,6 +184,7 @@ export function renderShape(item: PcbGraphicItem) {
 			return (
 				<Text
 					key={item.data.uuid}
+					id={item.data.uuid}
 					x={at.x}
 					y={at.y}
 					text={text}
