@@ -59,6 +59,7 @@ import SelectionContextMenu from "./SelectionContextMenu";
 import TextOverlay from "./TextOverlay";
 import CanvasStage from "./CanvasStage";
 import GridDebugOverlay from "../canvas/GridDebugOverlay";
+import FootprintKonvaLayer from "@/features/pcb_editor/footprint/FootprintKonvaLayer";
 import {
 	updateGraphicDataByKind,
 	computeArcPreviewProps,
@@ -431,6 +432,10 @@ export default function ShapesCanvas() {
 							: null}
 						</>
 					)}
+				</Layer>
+				{/* Footprint layer rendered in Konva so it participates in the same Stage */}
+				<Layer>
+					<FootprintKonvaLayer />
 				</Layer>
 			</CanvasStage>
 			<SelectionContextMenu />

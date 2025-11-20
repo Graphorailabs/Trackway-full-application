@@ -9,9 +9,12 @@ import { GridProvider } from "@/features/pcb_editor/contexts/GridContext";
 import { LayerProvider, useLayers, type LayerId } from "@/features/pcb_editor/contexts/LayerContext";
 import { PcbProvider, usePcb } from "@/features/pcb_editor/contexts/PcbContext";
 import { ZoomProvider, useZoom } from "@/features/pcb_editor/contexts/ZoomContext";
+import { FootprintManagerProvider, FootprintManagerModal } from "@/features/footprint_manager";
+import type { FootprintMetadata } from "@/features/footprint_manager";
 import { ToolProvider } from "@/features/pcb_editor/contexts/ToolContext";
 import { ShapeProvider } from "@/features/pcb_editor/contexts/ShapeContext";
 import { SelectionProvider } from "@/features/pcb_editor/contexts/SelectionContext";
+import { FootprintPreviewProvider } from "@/features/pcb_editor/footprint/FootprintContext";
 import { ShapeSelectionModal } from "../components/shapes/ShapeSelectionModal";
 import { useToolContext } from "@/features/pcb_editor/contexts/ToolContext";
 
@@ -109,6 +112,7 @@ export function PCBEditorLayout() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [layersModalOpen, setLayersModalOpen] = useState(false);
   const [shapeModalOpen, setShapeModalOpen] = useState(false);
+  const [footprintModalOpen, setFootprintModalOpen] = useState(false);
   const [toast, setToast] = useState<ToastState | null>(null);
 
   const handleSaveSuccess = useCallback(() => {
@@ -135,6 +139,27 @@ export function PCBEditorLayout() {
     );
   }
 
+  // Controller that renders the FootprintManagerModal and handles placement
+  function FootprintModalController({ open, setOpen }: { open: boolean; setOpen: (v: boolean) => void }) {
+    const { placeFootprint } = usePcb();
+
+    const handlePlace = (pkg: FootprintMetadata) => {
+      // Create a minimal parser Footprint instance and place it into the PCB
+      const fp = {
+        uuid: crypto.randomUUID(),
+        at: { x: 0, y: 0 },
+        path: pkg.id,
+        properties: [{ key: "name", value: pkg.id }],
+      } as unknown as import("trackway-parser-wasm").Footprint;
+      placeFootprint(fp, { x: 0, y: 0, angle: 0 });
+      setOpen(false);
+    };
+
+    return (
+      <FootprintManagerModal open={open} onClose={() => setOpen(false)} onPlace={handlePlace} inEditor={true} />
+    );
+  }
+
   useEffect(() => {
     if (!toast) return undefined;
     const timer = window.setTimeout(() => setToast(null), 3000);
@@ -149,6 +174,8 @@ export function PCBEditorLayout() {
             <ToolProvider>
               <SelectionProvider>
                 <ShapeProvider>
+                <FootprintManagerProvider>
+                <FootprintPreviewProvider>
                 <div className="flex h-full min-h-screen w-full flex-col bg-slate-950 text-white">
                   <TopToolbar
                     onOpenSettings={() => setSettingsOpen(true)}
@@ -167,6 +194,7 @@ export function PCBEditorLayout() {
                         <ToolbarItem
                           label="Place Footprint"
                           labelSide="left"
+                          onClick={() => setFootprintModalOpen(true)}
                           className="!flex !h-10 !w-10 !items-center !justify-center !rounded-lg !border-white/20 !bg-white/5 !p-0"
                         >
                           <PackagePlus className="h-4 w-4" />
@@ -202,8 +230,12 @@ export function PCBEditorLayout() {
                   <EditorSettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
                   <LayerVisibilityModal open={layersModalOpen} onClose={() => setLayersModalOpen(false)} />
                   <ShapeSelectionModal open={shapeModalOpen} onClose={() => setShapeModalOpen(false)} />
+                  <FootprintModalController open={footprintModalOpen} setOpen={setFootprintModalOpen} />
+                  
                   <StatusToast toast={toast} />
                 </div>
+                </FootprintPreviewProvider>
+                </FootprintManagerProvider>
                 </ShapeProvider>
               </SelectionProvider>
             </ToolProvider>

@@ -38,6 +38,11 @@ export type PcbContextValue = {
   lastSavedAt: number | null;
   updatePcb: (updater: (current: Pcb) => Pcb) => void;
   addGraphicItem: (item: PcbGraphicItem) => void;
+  // Footprint helpers: operate on the `pcb.footprints` array
+  addFootprint: (fp: import("trackway-parser-wasm").Footprint) => void;
+  updateFootprint: (uuid: string, updater: (current: import("trackway-parser-wasm").Footprint) => import("trackway-parser-wasm").Footprint) => void;
+  removeFootprint: (uuid: string) => void;
+  placeFootprint: (fp: import("trackway-parser-wasm").Footprint, at: { x: number; y: number; angle?: number }) => void;
   reloadFromProject: () => void;
   savePcb: () => Promise<{ filePath: string }>;
 };
@@ -121,6 +126,45 @@ export function PcbProvider({ children }: PropsWithChildren) {
     [updatePcb],
   );
 
+  const addFootprint = useCallback(
+    (fp: import("trackway-parser-wasm").Footprint) => {
+      updatePcb((current) => ({
+        ...current,
+        footprints: [...(current.footprints ?? []), fp],
+      }));
+    },
+    [updatePcb],
+  );
+
+  const updateFootprint = useCallback(
+    (uuid: string, updater: (current: import("trackway-parser-wasm").Footprint) => import("trackway-parser-wasm").Footprint) => {
+      updatePcb((current) => ({
+        ...current,
+        footprints: (current.footprints ?? []).map((f) => (f.uuid === uuid ? updater(f) : f)),
+      }));
+    },
+    [updatePcb],
+  );
+
+  const removeFootprint = useCallback(
+    (uuid: string) => {
+      updatePcb((current) => ({
+        ...current,
+        footprints: (current.footprints ?? []).filter((f) => f.uuid !== uuid),
+      }));
+    },
+    [updatePcb],
+  );
+
+  const placeFootprint = useCallback(
+    (fp: import("trackway-parser-wasm").Footprint, at: { x: number; y: number; angle?: number }) => {
+      // clone an instance and set placement `at` and placed=true
+      const instance = { ...fp, at: { x: at.x, y: at.y, angle: at.angle ?? 0 }, placed: true } as import("trackway-parser-wasm").Footprint;
+      addFootprint(instance);
+    },
+    [addFootprint],
+  );
+
   const contextValue = useMemo<PcbContextValue>(
     () => ({
       pcb,
@@ -134,6 +178,10 @@ export function PcbProvider({ children }: PropsWithChildren) {
       lastSavedAt,
       updatePcb,
       addGraphicItem,
+      addFootprint,
+      updateFootprint,
+      removeFootprint,
+      placeFootprint,
       reloadFromProject: reloadFromProject,
       savePcb: persistPcb,
     }),
@@ -149,6 +197,10 @@ export function PcbProvider({ children }: PropsWithChildren) {
       lastSavedAt,
       updatePcb,
       addGraphicItem,
+      addFootprint,
+      updateFootprint,
+      removeFootprint,
+      placeFootprint,
       reloadFromProject,
       persistPcb,
     ],
