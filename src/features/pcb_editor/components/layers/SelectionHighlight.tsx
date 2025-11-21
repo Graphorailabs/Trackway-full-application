@@ -1,5 +1,5 @@
 // lightweight selection highlight renderer (no direct React import required)
-import { Rect, Circle, Line, Arc } from "react-konva";
+import { Rect, Circle, Line, Arc, Group } from "react-konva";
 import { usePcb } from "@/features/pcb_editor/contexts/PcbContext";
 import { useSelection } from "@/features/pcb_editor/contexts/SelectionContext";
 import { useLayers } from "@/features/pcb_editor/contexts/LayerContext";
@@ -10,13 +10,66 @@ export function SelectionHighlight() {
 	const { selectedUuid } = useSelection();
 	const { visibility } = useLayers();
 	if (!selectedUuid) return null;
+	const highlight = "rgba(255,200,0,0.9)";
 	const item = pcb.graphics?.find((g) => {
 		const d = g.data as unknown as { uuid?: string };
 		return d.uuid === selectedUuid;
 	});
-	if (!item) return null;
+	if (!item) {
+		// If no graphic matched, maybe a footprint is selected
+		const fp = pcb.footprints?.find((f) => (f as unknown as { uuid?: string }).uuid === selectedUuid);
+		if (!fp) return null;
+		// compute footprint bounds (local coords) similar to renderer
+		const pads = (fp.pads ?? []) as Array<any>;
+		const graphics = (fp.graphics ?? []) as Array<any>;
+		const texts = ((fp as any).texts ?? []) as Array<any>;
+		const points: Array<[number, number]> = [];
+		pads.forEach((p) => {
+			const at = p.at ?? { x: 0, y: 0 };
+			const sizeArr = p.size ?? [1, 1];
+			const w = sizeArr[0] ?? 1;
+			const h = sizeArr[1] ?? w;
+			points.push([at.x ?? 0 - w / 2, at.y ?? 0 - h / 2]);
+			points.push([at.x ?? 0 + w / 2, at.y ?? 0 + h / 2]);
+		});
+		graphics.forEach((g) => {
+			if (g.kind === "line") {
+				const s = g.start ?? (g.data?.start ?? { x: 0, y: 0 });
+				const e = g.end ?? (g.data?.end ?? { x: 0, y: 0 });
+				points.push([s.x ?? s[0] ?? 0, s.y ?? s[1] ?? 0]);
+				points.push([e.x ?? e[0] ?? 0, e.y ?? e[1] ?? 0]);
+			} else if (g.kind === "polygon") {
+				const rawPts = g.pts ?? g.data?.pts ?? null;
+				if (Array.isArray(rawPts)) {
+					rawPts.forEach((pt: any) => points.push([pt[0] ?? pt.x ?? 0, pt[1] ?? pt.y ?? 0]));
+				} else if (rawPts && Array.isArray(rawPts.xy)) {
+					rawPts.xy.forEach((pt: any) => points.push([pt[0] ?? pt.x ?? 0, pt[1] ?? pt.y ?? 0]));
+				}
+			}
+		});
+		texts.forEach((t) => {
+			const at = t.at ?? { x: 0, y: 0 };
+			points.push([at.x ?? 0, at.y ?? 0]);
+		});
+
+		const xs = points.map((p) => p[0]);
+		const ys = points.map((p) => p[1]);
+		const minX = xs.length ? Math.min(...xs) : -5;
+		const maxX = xs.length ? Math.max(...xs) : 5;
+		const minY = ys.length ? Math.min(...ys) : -5;
+		const maxY = ys.length ? Math.max(...ys) : 5;
+
+		const at = fp.at ?? { x: 0, y: 0, angle: 0 } as { x?: number; y?: number; angle?: number };
+		const x = at.x ?? 0;
+		const y = at.y ?? 0;
+		const rotation = (at.angle ?? 0) * (180 / Math.PI);
+		return (
+			<Group x={x} y={y} rotation={rotation} listening={false}>
+				<Rect x={minX} y={minY} width={maxX - minX} height={maxY - minY} stroke={highlight} strokeWidth={Math.max(0.6, DEFAULT_SHAPE_WIDTH + 0.2)} listening={false} />
+			</Group>
+		);
+	}
 	const data = item.data as unknown as Record<string, unknown>;
-	const highlight = "rgba(255,200,0,0.9)";
 	// ensure we only highlight visible layers
 	const layer = data?.layer as string | undefined;
 	if (layer && !visibility[layer]) return null;
@@ -109,3 +162,4 @@ export function SelectionHighlight() {
 }
 
 export default SelectionHighlight;
+

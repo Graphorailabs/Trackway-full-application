@@ -158,8 +158,24 @@ export function PcbProvider({ children }: PropsWithChildren) {
 
   const placeFootprint = useCallback(
     (fp: import("trackway-parser-wasm").Footprint, at: { x: number; y: number; angle?: number }) => {
-      // clone an instance and set placement `at` and placed=true
-      const instance = { ...fp, at: { x: at.x, y: at.y, angle: at.angle ?? 0 }, placed: true } as import("trackway-parser-wasm").Footprint;
+      // Ensure the placed instance contains the expected arrays and avoid
+      // accidental missing properties by normalizing the model. We also
+      // shallow-clone nested arrays so later mutations don't affect the
+      // original parsed model used for preview.
+      const instance = {
+        ...fp,
+        pads: Array.isArray((fp as any).pads) ? (fp as any).pads.map((p: any) => ({ ...p })) : [],
+        graphics: Array.isArray((fp as any).graphics) ? (fp as any).graphics.map((g: any) => ({ ...g })) : [],
+        texts: Array.isArray((fp as any).texts) ? (fp as any).texts.map((t: any) => ({ ...t })) : [],
+        properties: Array.isArray((fp as any).properties) ? (fp as any).properties.map((p: any) => ({ ...p })) : [],
+        at: { x: at.x, y: at.y, angle: at.angle ?? 0 },
+        placed: true,
+      } as import("trackway-parser-wasm").Footprint;
+
+      // Debug: log how many elements we're placing to help trace missing parts
+      // eslint-disable-next-line no-console
+      console.log("placeFootprint: placing footprint", { uuid: instance.uuid, pads: (instance as any).pads?.length, graphics: (instance as any).graphics?.length, texts: (instance as any).texts?.length });
+
       addFootprint(instance);
     },
     [addFootprint],

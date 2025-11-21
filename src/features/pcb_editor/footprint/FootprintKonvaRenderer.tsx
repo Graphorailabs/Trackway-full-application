@@ -1,19 +1,62 @@
 import { useMemo } from "react";
-import { Group, Rect, Circle, Text } from "react-konva";
+import { Group, Text } from "react-konva";
 import FootprintGraphicLine from "./components/FootprintGraphicLine";
 import FootprintGraphicCircle from "./components/FootprintGraphicCircle";
 import FootprintGraphicText from "./components/FootprintGraphicText";
 import FootprintGraphicArc from "./components/FootprintGraphicArc";
 import FootprintGraphicRect from "./components/FootprintGraphicRect";
 import FootprintGraphicPolygon from "./components/FootprintGraphicPolygon";
+import FootprintPad from "./components/FootprintPad";
 import type { Footprint } from "trackway-parser-wasm";
+import { useLayers } from "@/features/pcb_editor/contexts/LayerContext";
 
 type Props = {
   model: Footprint;
   scale?: number; // mm -> px scale (Stage scale is applied outside)
+  /**
+   * When false, the renderer ignores `LayerContext.visibility` and renders all
+   * items (used by the footprint-manager preview pane which should always show
+   * the full footprint regardless of editor layer visibility).
+   */
+  respectLayerVisibility?: boolean;
 };
 
-export default function FootprintKonvaRenderer({ model }: Props) {
+export default function FootprintKonvaRenderer({ model, respectLayerVisibility = true }: Props) {
+  const { visibility } = useLayers();
+
+  const isVisibleByLayer = (item: any) => {
+    if (!respectLayerVisibility) return true;
+    if (!item) return true;
+
+    const normalize = (raw: any): string | null => {
+      if (!raw && raw !== 0) return null;
+      if (typeof raw === "string") return raw.trim();
+      // some models may carry objects like { canonical_name: "F.Cu" }
+      if (typeof raw === "object" && raw.canonical_name && typeof raw.canonical_name === "string") return raw.canonical_name.trim();
+      return String(raw).trim();
+    };
+
+    // explicit array of layers (e.g. pad.layers)
+    const layersArr = (item.layers ?? item.data?.layers) as any[] | undefined;
+    if (Array.isArray(layersArr) && layersArr.length > 0) {
+      // pad should be visible if any of its layers is visible in the editor
+      return layersArr.some((l) => {
+        const key = normalize(l);
+        if (!key) return true; // defensively render if layer unknown
+        if (visibility[key] !== undefined) return !!visibility[key];
+        // fallback: case-insensitive match
+        const found = Object.keys(visibility).find((k) => k.toLowerCase() === key.toLowerCase());
+        return found ? !!visibility[found] : true;
+      });
+    }
+
+    const layer = normalize(item.layer ?? item.data?.layer);
+    if (!layer) return true;
+    if (visibility[layer] !== undefined) return !!visibility[layer];
+    const found = Object.keys(visibility).find((k) => k.toLowerCase() === layer.toLowerCase());
+    return found ? !!visibility[found] : true;
+  };
+
   // compute bounding box of the footprint to allow centering by the caller
   const { groups } = useMemo(() => {
     const pads = (model.pads ?? []) as Array<any>;
@@ -67,33 +110,13 @@ export default function FootprintKonvaRenderer({ model }: Props) {
     <>
       <Group>
         {pads.map((p: any, i: number) => {
-          const at = p.at ?? { x: 0, y: 0 };
-          const sizeArr = p.size ?? [1, 1];
-          const sx = Number(at.x) || 0;
-          const sy = Number(at.y) || 0;
-          const w = Number(sizeArr[0]) || 1;
-          const h = Number(sizeArr[1]) || w;
-          const shape = (p.shape ?? "rect") as string;
-          if (shape === "circle" || shape === "round") {
-            const r = Math.max(w, h) / 2;
-            return <Circle key={i} x={sx} y={sy} radius={r} fill="#d9d9d9" stroke="#444" strokeWidth={0.2} />;
-          }
-          return (
-            <Rect
-              key={i}
-              x={sx - w / 2}
-              y={sy - h / 2}
-              width={w}
-              height={h}
-              fill="#d9d9d9"
-              stroke="#444"
-              strokeWidth={0.2}
-            />
-          );
+          if (!isVisibleByLayer(p)) return null;
+          return <FootprintPad key={i} p={p} />;
         })}
 
         {graphics.map((g: any, i: number) => {
           if (!g || !g.kind) return null;
+          if (!isVisibleByLayer(g)) return null;
           if (g.kind === "line") {
             return <FootprintGraphicLine key={i} g={g} />;
           }
@@ -121,6 +144,7 @@ export default function FootprintKonvaRenderer({ model }: Props) {
         })}
 
         {texts.map((t: any, i: number) => {
+          if (!isVisibleByLayer(t)) return null;
           const at = t.at ?? { x: 0, y: 0 };
           const txt = t.text ?? t.string ?? "";
           const size = (t.size && t.size[0]) ?? 10;

@@ -38,8 +38,9 @@ export function LayerProvider({ children }: PropsWithChildren) {
   const defaultLayerId: LayerId = allLayers[0]?.canonical_name ?? "F.Cu";
   const [selectedLayerId, setSelectedLayerId] = useState<LayerId>(defaultLayerId);
   const [visibility, setVisibility] = useState<LayerVisibilityMap>(() => {
+    // Make all layers visible by default.
     return allLayers.reduce<LayerVisibilityMap>((acc, layer) => {
-      acc[layer.canonical_name] = layer.defaultVisible;
+      acc[layer.canonical_name] = true;
       return acc;
     }, {} as LayerVisibilityMap);
   });

@@ -36,6 +36,7 @@ export function SelectionProvider({ children }: { children: React.ReactNode }) {
         updatePcb((current) => ({
             ...current,
             graphics: (current.graphics ?? []).filter((g) => ((g.data as unknown as { uuid?: string }).uuid) !== selectedUuid),
+            footprints: (current.footprints ?? []).filter((f) => (f as unknown as { uuid?: string }).uuid !== selectedUuid),
         }));
         setSelectedUuid(null);
     };

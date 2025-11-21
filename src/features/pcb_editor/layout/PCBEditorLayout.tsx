@@ -14,7 +14,8 @@ import type { FootprintMetadata } from "@/features/footprint_manager";
 import { ToolProvider } from "@/features/pcb_editor/contexts/ToolContext";
 import { ShapeProvider } from "@/features/pcb_editor/contexts/ShapeContext";
 import { SelectionProvider } from "@/features/pcb_editor/contexts/SelectionContext";
-import { FootprintPreviewProvider } from "@/features/pcb_editor/footprint/FootprintContext";
+import { FootprintPreviewProvider, useFootprintPreview } from "@/features/pcb_editor/footprint/FootprintContext";
+import { useFootprintManagers } from "@/features/footprint_manager/FootprintManagerContext";
 import { ShapeSelectionModal } from "../components/shapes/ShapeSelectionModal";
 import { useToolContext } from "@/features/pcb_editor/contexts/ToolContext";
 
@@ -142,17 +143,86 @@ export function PCBEditorLayout() {
   // Controller that renders the FootprintManagerModal and handles placement
   function FootprintModalController({ open, setOpen }: { open: boolean; setOpen: (v: boolean) => void }) {
     const { placeFootprint } = usePcb();
+    const managers = useFootprintManagers();
+    const { setPreview } = useFootprintPreview();
 
-    const handlePlace = (pkg: FootprintMetadata) => {
-      // Create a minimal parser Footprint instance and place it into the PCB
-      const fp = {
-        uuid: crypto.randomUUID(),
-        at: { x: 0, y: 0 },
-        path: pkg.id,
-        properties: [{ key: "name", value: pkg.id }],
-      } as unknown as import("trackway-parser-wasm").Footprint;
-      placeFootprint(fp, { x: 0, y: 0, angle: 0 });
-      setOpen(false);
+    // We will lazily import the preview setter to avoid circular issues in some dev setups.
+    // Use the FootprintPreviewProvider above to expose `useFootprintPreview`.
+    // The actual placement flow will parse the footprint package and set preview active,
+    // allowing the preview layer to show it following the cursor.
+    const handlePlace = async (pkg: FootprintMetadata) => {
+      // Fetch package data using the manager available via the FootprintManagerProvider
+      try {
+        const pkgData = pkg.source === "cloud" ? await managers.cloud.getPackage(pkg.id) : await (managers.local as any).getPackage(pkg.id);
+        if (!pkgData || !pkgData.data) {
+          // fallback: create minimal footprint instance
+          const fp = {
+            uuid: crypto.randomUUID(),
+            at: { x: 0, y: 0, angle: 0 },
+            path: pkg.id,
+            properties: [{ key: "name", value: pkg.id }],
+          } as unknown as import("trackway-parser-wasm").Footprint;
+          // set as preview so user can still see something
+          setPreview({ active: true, footprint: fp, x: 0, y: 0, angle: 0 });
+          setOpen(false);
+          return;
+        }
+
+        // Resolve ArrayBuffer/string to text
+        let ab: ArrayBuffer | null = null;
+        if (pkgData.data instanceof ArrayBuffer) ab = pkgData.data as ArrayBuffer;
+        else if (typeof pkgData.data === "string" && pkgData.data.length) {
+          const res = await fetch(pkgData.data);
+          ab = await res.arrayBuffer();
+        }
+
+        if (!ab) throw new Error("Unsupported package data");
+        const txt = new TextDecoder().decode(ab);
+
+        // Parse via parser helpers (sexpr or json)
+        let parsed: any = null;
+        try {
+          const parser = await import("trackway-parser-wasm");
+          parsed = parser.footprintLibSexprToValue(txt as string);
+        } catch (err) {
+          try {
+            const parser = await import("trackway-parser-wasm");
+            parsed = parser.footprintLibJsonToValue(txt as string);
+          } catch (err2) {
+            // final fallback: minimal footprint
+            parsed = null;
+          }
+        }
+
+        const fpModel = parsed ? ((parsed as any).footprint ?? parsed) : null;
+        if (!fpModel) {
+          const fp = {
+            uuid: crypto.randomUUID(),
+            at: { x: 0, y: 0, angle: 0 },
+            path: pkg.id,
+            properties: [{ key: "name", value: pkg.id }],
+          } as unknown as import("trackway-parser-wasm").Footprint;
+          const ctx = (await import("@/features/pcb_editor/footprint/FootprintContext")).useFootprintPreview();
+          ctx.setPreview({ active: true, footprint: fp, x: 0, y: 0, angle: 0 });
+          setOpen(false);
+          return;
+        }
+
+        // Set preview so the preview layer will render the parsed model at the cursor when user moves
+        const instance = { ...fpModel, uuid: crypto.randomUUID(), at: { x: 0, y: 0, angle: 0 } } as import("trackway-parser-wasm").Footprint;
+        setPreview({ active: true, footprint: instance, x: 0, y: 0, angle: 0 });
+        setOpen(false);
+      } catch (err) {
+        // On error, fall back to immediate placement to avoid blocking user
+        const fp = {
+          uuid: crypto.randomUUID(),
+          at: { x: 0, y: 0, angle: 0 },
+          path: pkg.id,
+          properties: [{ key: "name", value: pkg.id }],
+        } as unknown as import("trackway-parser-wasm").Footprint;
+        placeFootprint(fp, { x: 0, y: 0, angle: 0 });
+        setOpen(false);
+      }
     };
 
     return (

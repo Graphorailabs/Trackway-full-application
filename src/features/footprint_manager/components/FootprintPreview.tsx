@@ -202,7 +202,7 @@ function FootprintPreviewInner({ meta }: Props) {
                 <Layer>
                   <Group x={stageW / 2} y={stageH / 2} scaleX={pxPerMm} scaleY={pxPerMm}>
                     <Group x={-centerX} y={-centerY}>
-                      {fpJson ? <FootprintKonvaRenderer model={model} /> : null}
+                      {fpJson ? <FootprintKonvaRenderer model={model} respectLayerVisibility={false} /> : null}
                     </Group>
                   </Group>
                 </Layer>
