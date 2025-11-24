@@ -50,6 +50,7 @@ import { useLayers } from "../../contexts/LayerContext";
 // footprint preview hook not needed here now
 import type { Xy } from "trackway-parser-wasm";
 import { useState, useRef, useEffect } from "react";
+import { useSelection } from "@/features/pcb_editor/contexts/SelectionContext";
 import type { Pt } from "../layers/routing/octilinearRouter";
 import { useRouting } from "../../contexts/RoutingContext";
 import { usePadHover } from "@/features/pcb_editor/contexts/PadHoverContext";
@@ -85,7 +86,7 @@ export default function ShapesCanvas() {
 		arcStartPoint,
 		arcRadius,
 	} = useShapeContext();
-    const { pcb, addVia, addTrack, removeVia } = usePcb();
+    const { pcb, addVia, addTrack, removeVia, updateViaPosition } = usePcb();
     const { tool, textEffects: defaultTextEffects, strokeWidth: toolStrokeWidth, viaSize } = useToolContext();
     const { visibility, selectedLayerId } = useLayers();
 	const {
@@ -104,6 +105,18 @@ export default function ShapesCanvas() {
 		handleMouseMove: originalHandleMouseMove,
 		handleMouseUp: originalHandleMouseUp,
 	} = useShapesCanvasLogic();
+
+    // Selection helper (safe fallback if provider missing)
+    const { select } = (() => {
+        try {
+            return useSelection();
+        } catch (e) {
+            return { select: (_: string | null) => {} } as const;
+        }
+    })();
+
+    // Track via dragging state when user drags a via from the top canvas
+    const draggingViaRef = useRef<string | null>(null);
 
     const handleViaMouseDown = (e: KonvaEventObject<MouseEvent>) => {
         const stagePos = e.target.getStage ? e.target.getStage()?.getPointerPosition() : null;
@@ -125,12 +138,31 @@ export default function ShapesCanvas() {
         }
     };
 
+    const tryStartViaDrag = (worldPos: { x: number; y: number }) => {
+        try {
+            if (!worldPos) return false;
+            if ((tool as string) !== 'select') return false;
+            const hit = findViaUnderCursor(worldPos);
+            if (hit && hit.uuid) {
+                draggingViaRef.current = hit.uuid;
+                try { select(hit.uuid); } catch (err) {}
+                return true;
+            }
+        } catch (err) {}
+        return false;
+    };
+
     const handleMouseDown = (e: KonvaEventObject<MouseEvent>) => {
         if (tool === "route") {
             handleRoutingMouseDown(e);
         } else if (tool === "via") {
             handleViaMouseDown(e);
         } else {
+            const stagePos = e.target.getStage ? e.target.getStage()?.getPointerPosition() : null;
+            if (stagePos) {
+                const worldPos = screenToWorld({ x: stagePos.x, y: stagePos.y });
+                if (tryStartViaDrag(worldPos)) return;
+            }
             originalHandleMouseDown(e);
         }
     };
@@ -161,6 +193,13 @@ export default function ShapesCanvas() {
         if (tool === "route") {
             handleRoutingMouseMove(e);
         } else {
+            const dragging = draggingViaRef.current;
+            if (dragging && updateViaPosition) {
+                try {
+                    updateViaPosition(dragging, { x: worldPos.x, y: worldPos.y });
+                } catch (err) {}
+                return;
+            }
             originalHandleMouseMove(e);
         }
     };
@@ -169,6 +208,10 @@ export default function ShapesCanvas() {
         if (tool === "route") {
             // For route, mouse up is handled in mouse down for finish
         } else {
+            if (draggingViaRef.current) {
+                draggingViaRef.current = null;
+                return;
+            }
             originalHandleMouseUp();
         }
     };
