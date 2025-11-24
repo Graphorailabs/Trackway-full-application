@@ -6,7 +6,14 @@ interface RoutingContextValue {
   setPreviewTracks: (tracks: Pt[]) => void;
 }
 
-const RoutingContext = createContext<RoutingContextValue | null>(null);
+interface RoutingLayerApi {
+  currentTraceLayer: string | null;
+  setCurrentTraceLayer: (layer: string | null) => void;
+  toggleCurrentTraceLayer: () => void;
+  resetCurrentTraceLayer: (layer?: string | null) => void;
+}
+
+const RoutingContext = createContext<(RoutingContextValue & RoutingLayerApi) | null>(null);
 
 export function useRouting() {
   const ctx = useContext(RoutingContext);
@@ -16,9 +23,21 @@ export function useRouting() {
 
 export function RoutingProvider({ children }: PropsWithChildren) {
   const [previewTracks, setPreviewTracks] = useState<Pt[]>([]);
+  const [currentTraceLayer, setCurrentTraceLayer] = useState<string | null>(null);
+
+  const toggleCurrentTraceLayer = () => {
+    setCurrentTraceLayer((cur) => {
+      if (!cur) return cur;
+      return cur === "F.Cu" ? "B.Cu" : "F.Cu";
+    });
+  };
+
+  const resetCurrentTraceLayer = (layer?: string | null) => {
+    setCurrentTraceLayer(layer ?? null);
+  };
 
   return (
-    <RoutingContext.Provider value={{ previewTracks, setPreviewTracks }}>
+    <RoutingContext.Provider value={{ previewTracks, setPreviewTracks, currentTraceLayer, setCurrentTraceLayer, toggleCurrentTraceLayer, resetCurrentTraceLayer }}>
       {children}
     </RoutingContext.Provider>
   );

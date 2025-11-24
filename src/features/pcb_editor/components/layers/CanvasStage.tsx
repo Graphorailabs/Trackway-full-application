@@ -24,10 +24,11 @@ type Props = {
   onMouseDown?: (e: KonvaEventObject<MouseEvent>) => void;
   onMouseMove?: (e: KonvaEventObject<MouseEvent>) => void;
   onMouseUp?: (e: KonvaEventObject<MouseEvent>) => void;
+  onContextMenu?: (e: KonvaEventObject<MouseEvent>) => void;
   children?: React.ReactNode;
 };
 
-export default function CanvasStage({ width, height, zoom, viewportCenter, camera, onMouseDown, onMouseMove, onMouseUp, children }: Props) {
+export default function CanvasStage({ width, height, zoom, viewportCenter, camera, onMouseDown, onMouseMove, onMouseUp, onContextMenu, children }: Props) {
   return (
     <Stage
       width={width}
@@ -39,6 +40,7 @@ export default function CanvasStage({ width, height, zoom, viewportCenter, camer
       onMouseDown={onMouseDown}
       onMouseMove={onMouseMove}
       onMouseUp={onMouseUp}
+      onContextMenu={onContextMenu}
     >
       {children}
     </Stage>

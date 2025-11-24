@@ -10,6 +10,102 @@ export function SelectionHighlight() {
 	const { selectedUuid } = useSelection();
 	const { visibility } = useLayers();
 	if (!selectedUuid) return null;
+
+	// If a route selection token is present, render highlight for the whole connected route
+	if (selectedUuid.startsWith("__route:")) {
+		const token = selectedUuid.slice("__route:".length);
+		// build list of segments with ids and endpoints
+		const segs: Array<{ id: string; start: [number, number]; end: [number, number]; width: number }> = [];
+		for (const t of (pcb.tracks ?? [])) {
+			if (t.kind !== 'segment') continue;
+			const d: any = t.data ?? {};
+			const s = d.start ?? [0,0];
+			const e = d.end ?? [0,0];
+			const id = (d.uuid as string) || `__track:${s[0]}:${s[1]}:${e[0]}:${e[1]}:${d.width ?? 0}`;
+			segs.push({ id, start: [s[0] ?? 0, s[1] ?? 0], end: [e[0] ?? 0, e[1] ?? 0], width: d.width ?? DEFAULT_SHAPE_WIDTH });
+		}
+		// find start index
+		const startIdx = segs.findIndex(s => s.id === token);
+		if (startIdx === -1) return null;
+		// adjacency by endpoint equality
+		const eps = 1e-6;
+		const eq = (a: [number, number], b: [number, number]) => Math.abs(a[0]-b[0]) <= eps && Math.abs(a[1]-b[1]) <= eps;
+		const neighbors = new Map<number, number[]>();
+		for (let i = 0; i < segs.length; i++) {
+			neighbors.set(i, []);
+		}
+		for (let i = 0; i < segs.length; i++) {
+			for (let j = i+1; j < segs.length; j++) {
+				const si = segs[i];
+				const sj = segs[j];
+				if (eq(si.start, sj.start) || eq(si.start, sj.end) || eq(si.end, sj.start) || eq(si.end, sj.end)) {
+					neighbors.get(i)!.push(j);
+					neighbors.get(j)!.push(i);
+				}
+			}
+		}
+		// BFS
+		const visited = new Set<number>();
+		const q: number[] = [startIdx];
+		visited.add(startIdx);
+		while (q.length) {
+			const cur = q.shift()!;
+			for (const nb of neighbors.get(cur) ?? []) {
+				if (!visited.has(nb)) { visited.add(nb); q.push(nb); }
+			}
+		}
+		const highlight = "rgba(255,200,0,0.9)";
+		return (
+			<>
+				{Array.from(visited).map((i) => {
+					const s = segs[i];
+					return <Line key={`sel-route-${i}`} points={[s.start[0], s.start[1], s.end[0], s.end[1]]} stroke={highlight} strokeWidth={Math.max(0.2, s.width + 0.4)} listening={false} />;
+				})}
+			</>
+		);
+	}
+
+	// First: check tracks (segments and vias)
+	for (const t of (pcb.tracks || [])) {
+		if (t.kind === 'segment') {
+			const d: any = t.data || {};
+			const segUuid = d.uuid as string | undefined;
+			// Match by explicit uuid or by special token created for segments
+			if (segUuid === selectedUuid || selectedUuid.startsWith('__track:')) {
+				// If token, ensure it corresponds to this segment by coords
+				if (selectedUuid.startsWith('__track:') && segUuid !== selectedUuid) {
+					const parts = selectedUuid.split(':');
+					if (parts.length >= 6) {
+						const sx = Number(parts[1]);
+						const sy = Number(parts[2]);
+						const ex = Number(parts[3]);
+						const ey = Number(parts[4]);
+						const w = Number(parts[5]);
+						const s = d.start ?? [0,0];
+						const e = d.end ?? [0,0];
+						const ww = d.width ?? 0;
+						const eps = 1e-6;
+						if (!(Math.abs((s[0]||0)-sx) <= eps && Math.abs((s[1]||0)-sy) <= eps && Math.abs((e[0]||0)-ex) <= eps && Math.abs((e[1]||0)-ey) <= eps && Math.abs((ww||0)-w) <= eps)) {
+							continue;
+						}
+					}
+				}
+				const start = d.start as number[];
+				const end = d.end as number[];
+				const w = typeof d.width === 'number' ? d.width : DEFAULT_SHAPE_WIDTH;
+				return <Line points={[start[0], start[1], end[0], end[1]]} stroke={"rgba(255,200,0,0.9)"} strokeWidth={Math.max(0.2, w + 0.4)} listening={false} />;
+			}
+		} else if (t.kind === 'via') {
+			const v: any = t.data || {};
+			const uuid = v.uuid as string | undefined;
+			if (uuid === selectedUuid) {
+				const at = v.at ?? [0,0];
+				const size = Number(v.size) || 0.8;
+				const radius = Math.max(size / 2 * 1.6, 0.8);
+				return <Circle x={at[0]} y={at[1]} radius={radius * 1.2} stroke={"rgba(255,200,0,0.9)"} strokeWidth={Math.max(0.6, 0.12)} listening={false} />;
+			}
+		}
+	}
 	const highlight = "rgba(255,200,0,0.9)";
 	const item = pcb.graphics?.find((g) => {
 		const d = g.data as unknown as { uuid?: string };

@@ -53,6 +53,7 @@ import { useState, useRef, useEffect } from "react";
 import type { Pt } from "../layers/routing/octilinearRouter";
 import { useRouting } from "../../contexts/RoutingContext";
 import { usePadHover } from "@/features/pcb_editor/contexts/PadHoverContext";
+import { useViaHover } from "@/features/pcb_editor/contexts/ViaHoverContext";
 import { ENABLE_ENDPOINT_SNAP, ENDPOINT_SNAP_TOLERANCE, ENABLE_PAD_HIGHLIGHT } from "@/features/pcb_editor/constants";
 import { PAD_SNAP_RADIUS } from "@/features/pcb_editor/constants";
 import { renderShape, renderPreviewShape } from "./ShapesRenderer";
@@ -84,9 +85,9 @@ export default function ShapesCanvas() {
 		arcStartPoint,
 		arcRadius,
 	} = useShapeContext();
-	const { pcb, updatePcb } = usePcb();
-	const { tool, textEffects: defaultTextEffects, strokeWidth: toolStrokeWidth } = useToolContext();
-	const { visibility } = useLayers();
+    const { pcb, addVia, addTrack, removeVia } = usePcb();
+    const { tool, textEffects: defaultTextEffects, strokeWidth: toolStrokeWidth, viaSize } = useToolContext();
+    const { visibility, selectedLayerId } = useLayers();
 	const {
 		containerRef,
 		size,
@@ -104,9 +105,31 @@ export default function ShapesCanvas() {
 		handleMouseUp: originalHandleMouseUp,
 	} = useShapesCanvasLogic();
 
+    const handleViaMouseDown = (e: KonvaEventObject<MouseEvent>) => {
+        const stagePos = e.target.getStage ? e.target.getStage()?.getPointerPosition() : null;
+        if (!stagePos) return;
+        const worldPos = screenToWorld({ x: stagePos.x, y: stagePos.y });
+        try {
+            const id = typeof crypto !== 'undefined' && (crypto as any).randomUUID ? (crypto as any).randomUUID() : `via-${Date.now()}-${Math.floor(Math.random()*10000)}`;
+            const via: import("trackway-parser-wasm").TrackVia = {
+                at: [worldPos.x, worldPos.y],
+                size: viaSize ?? 0.8,
+                drill: (viaSize ?? 0.8) / 2,
+                layers: ["F.Cu", "B.Cu"],
+                net: 0,
+                uuid: id,
+            } as any;
+            addVia?.(via);
+        } catch (err) {
+            // ignore
+        }
+    };
+
     const handleMouseDown = (e: KonvaEventObject<MouseEvent>) => {
         if (tool === "route") {
             handleRoutingMouseDown(e);
+        } else if (tool === "via") {
+            handleViaMouseDown(e);
         } else {
             originalHandleMouseDown(e);
         }
@@ -126,6 +149,13 @@ export default function ShapesCanvas() {
             const padHit = findPadUnderCursor(worldPos);
             if (padHit) padHoverApi.setHovered({ fpUuid: padHit.fpUuid ?? "", padIndex: padHit.padIndex });
             else padHoverApi.setHovered(null);
+            // via hover/magnet points
+            const viaHit = findViaUnderCursor(worldPos);
+            if (viaHit && viaHit.uuid) {
+                viaHoverApi.setHovered({ uuid: viaHit.uuid, point: viaHit.point });
+            } else {
+                viaHoverApi.setHovered(null);
+            }
         }
 
         if (tool === "route") {
@@ -143,17 +173,107 @@ export default function ShapesCanvas() {
         }
     };
 
+    // Right-click handler on the canvas stage: when routing, place a via
+    // at the click location and connect the current routing start to it.
+    const handleCanvasContextMenu = (e: KonvaEventObject<MouseEvent>) => {
+        try {
+            e.evt.preventDefault();
+        } catch (err) {}
+        // Only act when route tool active and routing session is ongoing
+        if (tool !== "route" || !routingActive || !routingStart) return;
+        const stagePos = e.target.getStage ? e.target.getStage()?.getPointerPosition() : null;
+        if (!stagePos) return;
+        let worldPos = screenToWorld({ x: stagePos.x, y: stagePos.y });
+        const snap = findNearestEndpoint(worldPos);
+        if (snap) worldPos = snap;
+
+        // create via
+        const viaId = typeof crypto !== 'undefined' && (crypto as any).randomUUID ? (crypto as any).randomUUID() : `via-${Date.now()}-${Math.floor(Math.random()*10000)}`;
+        const viaObj: import("trackway-parser-wasm").TrackVia = {
+            at: [worldPos.x, worldPos.y],
+            size: viaSize ?? 0.8,
+            drill: (viaSize ?? 0.8) / 2,
+            layers: ["F.Cu", "B.Cu"],
+            net: 0,
+            uuid: viaId,
+        } as any;
+        // add via to PCB first so collision checks treat via endpoints as non-blocking
+        addVia?.(viaObj);
+
+        // Build connecting segment from routingStart to via center
+        const segId = typeof crypto !== 'undefined' && (crypto as any).randomUUID ? (crypto as any).randomUUID() : `seg-${Date.now()}-${Math.floor(Math.random()*10000)}`;
+        const currentLayer = (currentTraceLayer as string) || (selectedLayerId as string) || "F.Cu";
+        const seg = { start: [routingStart.x, routingStart.y], end: [worldPos.x, worldPos.y], width: routerParams.trackWidth, layer: currentLayer, net: 0, uuid: segId } as any;
+
+        // If the segment would collide, remove the via and abort
+        if (!segmentsAreFree([seg])) {
+            console.warn('[routing] cannot place via: connecting segment would collide.');
+            try { removeVia?.(viaId); } catch (err) { /* ignore */ }
+            return;
+        }
+
+        // Commit the connecting segment and continue routing from the via
+        console.log('[routing] placing via during routing', { viaId, at: worldPos, segId, layer: currentLayer });
+        addTrack?.({ kind: 'segment', data: seg } as any);
+        // record placed segment locally
+                        placedSegmentsRef.current.push({ start: { x: seg.start[0], y: seg.start[1] }, end: { x: seg.end[0], y: seg.end[1] }, width: seg.width, layer: seg.layer });
+
+        // Toggle routing session layer so next segments are on the other side
+        const nextLayer = currentLayer === 'F.Cu' ? 'B.Cu' : 'F.Cu';
+        try { setCurrentTraceLayer(nextLayer); } catch (err) {}
+
+        // Continue routing from the via center
+        setRoutingStart({ x: worldPos.x, y: worldPos.y });
+        setRoutingActive(true);
+        routingActiveRef.current = true;
+        setPreviewTracks([]);
+        // Request a fresh preview when the mouse moves; worker will get updated start from move handler
+        return;
+    };
+
     // Routing state
     const [routingStart, setRoutingStart] = useState<Pt | null>(null);
     const [routingActive, setRoutingActive] = useState(false);
-    const { previewTracks, setPreviewTracks } = useRouting();
+    const { previewTracks, setPreviewTracks, currentTraceLayer, setCurrentTraceLayer, resetCurrentTraceLayer } = useRouting();
     const workerRef = useRef<Worker | null>(null);
     const routingActiveRef = useRef<boolean>(false);
     const workerRequestIdRef = useRef<number>(0);
     // Segments placed during the current continuous routing session.
     // Stored in a ref so we can include them in obstacle lists immediately
     // without waiting for `pcb` state to update.
-    const placedSegmentsRef = useRef<Array<{ start: Pt; end: Pt; width: number }>>([]);
+    const placedSegmentsRef = useRef<Array<{ start: Pt; end: Pt; width: number; layer?: string }>>([]);
+
+    // Build worker obstacles excluding segments that end at via centers so
+    // vias are not treated as blocking obstacles for continuation routing.
+    // When `layer` is provided, only return obstacles on that layer so the
+    // worker computes routes against the correct copper layer.
+    const buildWorkerObstacles = (layer?: string) => {
+        const viaCenters: Pt[] = (pcb.tracks || []).filter(t => t.kind === 'via').map((t: any) => {
+            const v = t.data as any;
+            const at = v.at ?? [0, 0];
+            return { x: Number(at[0]) || 0, y: Number(at[1]) || 0 } as Pt;
+        });
+        const viaTol = ENABLE_ENDPOINT_SNAP ? ENDPOINT_SNAP_TOLERANCE : 1e-6;
+        const isNearVia = (pt: Pt) => viaCenters.some(vc => Math.hypot(vc.x - pt.x, vc.y - pt.y) <= viaTol + 1e-9);
+        const pcbSegs = (pcb.tracks || [])
+            .filter(t => t.kind === 'segment')
+            .map((t: any) => ({ start: { x: t.data.start[0], y: t.data.start[1] }, end: { x: t.data.end[0], y: t.data.end[1] }, width: t.data.width ?? 0.25, layer: (t.data.layer as string) || undefined }))
+            .filter(o => !isNearVia(o.start) && !isNearVia(o.end));
+
+        const placedFiltered = (placedSegmentsRef.current || []).filter(o => !isNearVia(o.start) && !isNearVia(o.end));
+
+        // If caller requested a specific layer, filter obstacles to that layer
+        if (layer) {
+            const pcbLayer = pcbSegs.filter(o => (o as any).layer === layer);
+            const placedLayer = placedFiltered.filter(o => (o as any).layer === layer);
+            // eslint-disable-next-line no-console
+            console.log('[routing] buildWorkerObstacles()', { layer, pcbCount: pcbLayer.length, placedCount: placedLayer.length });
+            return [...pcbLayer, ...placedLayer];
+        }
+
+        // no layer filtering requested: return all obstacles
+        return [...pcbSegs, ...placedFiltered];
+    };
 
     useEffect(() => {
         // Initialize worker (module type so `import` inside worker works)
@@ -254,14 +374,42 @@ export default function ShapesCanvas() {
 
 
 
-    const findBlockingObstacleLocal = (p1: Pt, p2: Pt, _trackWidth: number, clearance: number) => {
-        const pcbObstacles = (pcb.tracks || []).filter(t => t.kind === 'segment').map((t: any) => ({ start: { x: t.data.start[0], y: t.data.start[1] }, end: { x: t.data.end[0], y: t.data.end[1] }, width: t.data.width ?? 0.25 }));
-        const allObstacles = [...pcbObstacles, ...placedSegmentsRef.current];
+    const findBlockingObstacleLocal = (p1: Pt, p2: Pt, _trackWidth: number, clearance: number, layer?: string) => {
+        // Build obstacles from PCB tracks (segments). However, if there are
+        // via centers at some segment endpoints, those segment endpoints
+        // should not block routing through the via — treat them as non-
+        // blocking so vias act as gateways between layers.
+        const viaCenters: Pt[] = (pcb.tracks || []).filter(t => t.kind === 'via').map((t: any) => {
+            const v = t.data as any;
+            const at = v.at ?? [0,0];
+            return { x: Number(at[0]) || 0, y: Number(at[1]) || 0 } as Pt;
+        });
+        const viaTol = ENABLE_ENDPOINT_SNAP ? ENDPOINT_SNAP_TOLERANCE : 1e-6;
+        const isNearVia = (pt: Pt) => viaCenters.some(vc => Math.hypot(vc.x - pt.x, vc.y - pt.y) <= viaTol + 1e-9);
+        const pcbObstacles = (pcb.tracks || [])
+            .filter(t => t.kind === 'segment')
+            .map((t: any) => ({ start: { x: t.data.start[0], y: t.data.start[1] }, end: { x: t.data.end[0], y: t.data.end[1] }, width: t.data.width ?? 0.25, layer: (t.data.layer as string) || undefined }))
+            .filter(o => {
+                // If either obstacle endpoint is essentially a via center,
+                // treat this obstacle as non-blocking for via passage.
+                if (isNearVia(o.start) || isNearVia(o.end)) return false;
+                return true;
+            });
+        const placedFiltered = (placedSegmentsRef.current || []).filter(o => !isNearVia(o.start) && !isNearVia(o.end));
+
+        // Combine and, if a layer was provided, keep only obstacles on same layer
+        let allObstacles: Array<{ start: Pt; end: Pt; width: number; layer?: string }> = [...pcbObstacles, ...placedFiltered];
+        if (layer) {
+            allObstacles = allObstacles.filter(o => (o as any).layer === layer);
+        }
         const eps = 1e-4;
         const ptsEq = (a: Pt, b: Pt) => Math.abs(a.x - b.x) <= eps && Math.abs(a.y - b.y) <= eps;
         const endpointTol = ENABLE_ENDPOINT_SNAP ? ENDPOINT_SNAP_TOLERANCE : 0; // allow small gaps near endpoints to be considered touching
         const ptDist = (a: Pt, b: Pt) => Math.hypot(a.x - b.x, a.y - b.y);
         for (const o of allObstacles) {
+            // Only consider obstacles on the same copper layer as the
+            // candidate segment; segments on different layers don't collide.
+            if (layer && (o as any).layer !== layer) continue;
             if (ptsEq(p1, o.start) || ptsEq(p1, o.end) || ptsEq(p2, o.start) || ptsEq(p2, o.end)) continue;
             const thresh = (o.width / 2) + clearance + (_trackWidth / 2);
             const dist = segSegDistLocal(p1, p2, o.start, o.end);
@@ -280,11 +428,31 @@ export default function ShapesCanvas() {
                     // treat as touching at endpoint — not a blocker
                     continue;
                 }
+                console.log('[routing] blocking obstacle detected', { obstacle: o, dist, thresh, nearViaStart: isNearVia(o.start), nearViaEnd: isNearVia(o.end), layer });
                 return { obstacle: o, dist, thresh };
             }
         }
         return null;
     };
+
+        // Find via under or near cursor (within PAD_SNAP_RADIUS). Returns { uuid, point, via }
+        const findViaUnderCursor = (cursorWorld: Pt) => {
+            const SNAP_RADIUS = PAD_SNAP_RADIUS;
+            for (const t of (pcb.tracks || [])) {
+                if (t.kind !== 'via') continue;
+                const via = (t as any).data as any;
+                const atArr = via.at ?? [0, 0];
+                const gx = Number(atArr[0]) || 0;
+                const gy = Number(atArr[1]) || 0;
+                const size = Number(via.size) || 0.8;
+                const radius = Math.max(size / 2, 0.2) + SNAP_RADIUS;
+                const dx = cursorWorld.x - gx;
+                const dy = cursorWorld.y - gy;
+                const dist = Math.hypot(dx, dy);
+                if (dist <= radius) return { uuid: via.uuid as string | undefined, point: { x: gx, y: gy }, via };
+            }
+            return null;
+        };
 
     // Find nearest endpoint among PCB tracks and session-placed segments.
     const findNearestEndpoint = (pt: Pt, tol = ENDPOINT_SNAP_TOLERANCE): Pt | null => {
@@ -299,6 +467,12 @@ export default function ShapesCanvas() {
         for (const s of placedSegmentsRef.current) {
             endpoints.push(s.start);
             endpoints.push(s.end);
+        }
+        // Include via centers as magnet endpoints
+        for (const v of (pcb.tracks || []).filter(x => x.kind === 'via')) {
+            const via = (v as any).data as any;
+            const at = via.at ?? [0,0];
+            endpoints.push({ x: Number(at[0]) || 0, y: Number(at[1]) || 0 });
         }
             // Include pad centers from placed footprints so endpoint-snap works
             for (const fp of (pcb.footprints || [])) {
@@ -329,10 +503,37 @@ export default function ShapesCanvas() {
         return null;
     };
 
+    const findViaAtPoint = (pt: Pt) => {
+        // Match via centers allowing a small tolerance so floating point
+        // differences or worker path approximations still hit the via.
+        const tol = ENDPOINT_SNAP_TOLERANCE || 1e-3;
+        for (const t of (pcb.tracks || [])) {
+            if (t.kind !== 'via') continue;
+            const via = (t as any).data as any;
+            const atArr = via.at ?? [0, 0];
+            const gx = Number(atArr[0]) || 0;
+            const gy = Number(atArr[1]) || 0;
+            const dx = pt.x - gx;
+            const dy = pt.y - gy;
+            const dist = Math.hypot(dx, dy);
+            if (dist <= tol) return via;
+        }
+        return null;
+    };
+
     // Pad hover hook (safe fallback if provider missing)
     const padHoverApi = (() => {
         try {
             return usePadHover();
+        } catch (e) {
+            return { hovered: null as any, setHovered: (_: any) => {} } as const;
+        }
+    })();
+
+    // Via hover hook (safe fallback if provider missing)
+    const viaHoverApi = (() => {
+        try {
+            return useViaHover();
         } catch (e) {
             return { hovered: null as any, setHovered: (_: any) => {} } as const;
         }
@@ -374,6 +575,40 @@ export default function ShapesCanvas() {
     // Returns { connected, pad?, point?, net? }
     const tryFinalizeAtCursor = (cursorWorld: Pt, fromPt?: Pt) => {
         const SNAP_RADIUS = PAD_SNAP_RADIUS;
+        // If the via hover provider indicates a hovered via, prefer that
+        // as the finalization target — the UI highlight should be
+        // authoritative for snapping behavior.
+        try {
+            const vh = viaHoverApi?.hovered;
+            if (vh && vh.uuid) {
+                const tv = (pcb.tracks || []).find(t => t.kind === 'via' && ((t.data as any)?.uuid === vh.uuid));
+                if (tv) {
+                    const via = (tv as any).data as any;
+                    const atArr = via.at ?? [0,0];
+                    const gx = Number(atArr[0]) || 0;
+                    const gy = Number(atArr[1]) || 0;
+                    const viaNet = via.net ?? null;
+                    return { connected: true, via, point: { x: gx, y: gy }, net: viaNet } as any;
+                }
+            }
+        } catch (err) {
+            // ignore and fall back to radius-based detection
+        }
+        // Check vias first: they act as magnet points similar to pad centers
+        for (const t of (pcb.tracks || [])) {
+            if (t.kind !== 'via') continue;
+            const via = (t as any).data as any;
+            const atArr = via.at ?? [0,0];
+            const gx = Number(atArr[0]) || 0;
+            const gy = Number(atArr[1]) || 0;
+            const dx = cursorWorld.x - gx;
+            const dy = cursorWorld.y - gy;
+            const dist = Math.hypot(dx, dy);
+            if (dist <= SNAP_RADIUS) {
+                const viaNet = via.net ?? null;
+                return { connected: true, via, point: { x: gx, y: gy }, net: viaNet } as any;
+            }
+        }
         // First: check magnet points (pad centers) — invisible anchor points that
         // immediately finalize a route when the endpoint is on them.
         for (const fp of (pcb.footprints || [])) {
@@ -527,13 +762,14 @@ export default function ShapesCanvas() {
         return { connected: true, pad, point: bestPoint, net: resultantNet };
     };
 
-    const segmentsAreFree = (segments: Array<{ start: [number, number]; end: [number, number]; width: number }>) => {
+    const segmentsAreFree = (segments: Array<{ start: [number, number]; end: [number, number]; width: number; layer?: string }>) => {
         for (const s of segments) {
             const p1: Pt = { x: s.start[0], y: s.start[1] };
             const p2: Pt = { x: s.end[0], y: s.end[1] };
-            const blocker = findBlockingObstacleLocal(p1, p2, s.width, routerParams.clearance);
+            const segLayer = (s.layer as string) || (currentTraceLayer as string) || (selectedLayerId as string) || "F.Cu";
+            const blocker = findBlockingObstacleLocal(p1, p2, s.width, routerParams.clearance, segLayer);
             if (blocker) {
-                console.warn("Routing placement blocked — segment would hit obstacle:", { segment: s, obstacle: blocker.obstacle, dist: blocker.dist, thresh: blocker.thresh });
+                console.warn("Routing placement blocked — segment would hit obstacle:", { segment: s, obstacle: blocker.obstacle, dist: blocker.dist, thresh: blocker.thresh, layer: segLayer });
                 return false;
             }
         }
@@ -553,6 +789,12 @@ export default function ShapesCanvas() {
             placedSegmentsRef.current = [];
             setRoutingActive(true);
             routingActiveRef.current = true;
+            // initialize routing session trace layer from currently selected layer
+            try {
+                resetCurrentTraceLayer((selectedLayerId as string) || "F.Cu");
+            } catch (err) {
+                // ignore if routing context not available
+            }
             setRoutingStart(worldPos);
             return;
         }
@@ -569,12 +811,14 @@ export default function ShapesCanvas() {
             if (previewTracks.length > 1) {
                 // Convert path to track segments
                 const segments: any[] = [];
+                // Use routing session layer if present, fall back to selected layer
+                let initialLayer = (currentTraceLayer as string) || (selectedLayerId as string) || "F.Cu";
                 for (let i = 0; i < previewTracks.length - 1; i++) {
                     segments.push({
                         start: [previewTracks[i].x, previewTracks[i].y],
                         end: [previewTracks[i + 1].x, previewTracks[i + 1].y],
                         width: routerParams.trackWidth,
-                        layer: "F.Cu",
+                        layer: initialLayer,
                         net: 0, // TODO: determine net
                     });
                 }
@@ -614,38 +858,74 @@ export default function ShapesCanvas() {
                 const finalizeLast = tryFinalizeAtCursor(lastPreview, prevPreview ?? undefined);
                 const finalize = finalizeClick.connected ? finalizeClick : (finalizeLast.connected ? finalizeLast : { connected: false });
 
-                // If finalize.connected, snap the last endpoint to the pad and
-                // adopt pad net if present. Finalizing a pad click terminates
-                // the continuous routing session (similar to connecting to a pad).
+                // If finalize.connected, snap the last endpoint to the pad or via.
+                // Pads terminate routing; vias act as magnet points but allow
+                // continuous routing through them (do not stop the session).
                 if (finalize.connected) {
                     console.debug('[routing] finalize detected (preview branch)', { finalize });
                     const finalPoint = finalize.point as Pt;
                     const padNet = finalize.net ?? null;
-                    // adjust the last point of previewTracks to the snapped pad point
+                    // adjust the last point of previewTracks to the snapped point
                     previewTracks[previewTracks.length - 1] = finalPoint;
                     // Convert path to track segments
                     const segmentsFinal: any[] = [];
+                    // Start routing on the routing-session layer (fallback to selected layer)
+                    let currentLayer = (currentTraceLayer as string) || (selectedLayerId as string) || "F.Cu";
                     for (let i = 0; i < previewTracks.length - 1; i++) {
+                        const a = previewTracks[i];
+                        const b = previewTracks[i + 1];
                         segmentsFinal.push({
-                            start: [previewTracks[i].x, previewTracks[i].y],
-                            end: [previewTracks[i + 1].x, previewTracks[i + 1].y],
+                            start: [a.x, a.y],
+                            end: [b.x, b.y],
                             width: routerParams.trackWidth,
-                            layer: "F.Cu",
+                            layer: currentLayer,
                             net: padNet ?? 0,
                         });
+                        // If we pass through a via at the segment end, toggle layer for next segment
+                        const via = findViaAtPoint({ x: b.x, y: b.y } as Pt);
+                        if (via) {
+                            const nextLayer = currentLayer === "F.Cu" ? "B.Cu" : "F.Cu";
+                            console.log('[routing] via encountered (finalize branch)', { viaUuid: (via as any).uuid ?? null, at: (via as any).at ?? null, currentLayer, nextLayer });
+                            currentLayer = nextLayer;
+                        }
                     }
                     if (!segmentsAreFree(segmentsFinal)) {
                         console.warn("Routing placement blocked due to collision with existing geometry (after pad snap).);");
                         setPreviewTracks([]);
                         return;
                     }
-                    updatePcb((current) => ({
-                        ...current,
-                        tracks: [...(current.tracks || []), ...segmentsFinal.map(s => ({ kind: "segment" as const, data: s }))],
-                    }));
-                    // finalize: stop routing
+                    // Add segments via context helper
+                    for (const s of segmentsFinal) {
+                        console.log('[routing] committing segment (finalize)', { layer: s.layer, start: s.start, end: s.end });
+                        addTrack?.({ kind: "segment", data: s } as any);
+                    }
+                    try { setCurrentTraceLayer(currentLayer); } catch (err) { /* ignore if absent */ }
+
+                    // If the finalize target was a via, keep routing active and
+                    // continue from the via center (do not stop). If it was a
+                    // pad, stop routing as before.
+                    const finalizedVia = (finalize as any).via;
+                    if (finalizedVia) {
+                        // continue routing from via
+                        console.debug('[routing] connected to via — continuing routing from via');
+                        const last = finalPoint;
+                        setRoutingStart({ x: last.x, y: last.y });
+                        setRoutingActive(true);
+                        routingActiveRef.current = true;
+                        // record placed segments
+                        placedSegmentsRef.current.push(...segmentsFinal.map(s => ({ start: { x: s.start[0], y: s.start[1] }, end: { x: s.end[0], y: s.end[1] }, width: s.width, layer: s.layer })));
+                        // request an updated preview using the new start
+                        if (workerRef.current) {
+                            const obstacles = buildWorkerObstacles(currentLayer);
+                            workerRequestIdRef.current += 1;
+                            workerRef.current.postMessage({ type: 'route', id: workerRequestIdRef.current, start: { x: last.x, y: last.y }, goal: worldPos, params: routerParams, obstacles });
+                        }
+                        setPreviewTracks([]);
+                        return;
+                    }
+
+                    // finalize: stop routing (pad case)
                     console.debug('[routing] finalizing: stopping routing (preview branch)');
-                    // Immediately mark routing inactive for worker message handler
                     routingActiveRef.current = false;
                     setRoutingStart(null);
                     setRoutingActive(false);
@@ -663,10 +943,20 @@ export default function ShapesCanvas() {
                     return;
                 }
                 // Add to PCB
-                updatePcb((current) => ({
-                    ...current,
-                    tracks: [...(current.tracks || []), ...segments.map(s => ({ kind: "segment" as const, data: s }))],
-                }));
+                // Assign layers while adding: start on routing-session layer and toggle when passing vias
+                let currentLayer = (currentTraceLayer as string) || (selectedLayerId as string) || "F.Cu";
+                    for (const s of segments) {
+                    const endPt = { x: s.end[0], y: s.end[1] } as Pt;
+                    console.log('[routing] committing segment (commit)', { layer: currentLayer, start: s.start, end: s.end });
+                    addTrack?.({ kind: "segment", data: { ...s, layer: currentLayer } } as any);
+                    const via = findViaAtPoint(endPt);
+                    if (via) {
+                        const nextLayer = currentLayer === "F.Cu" ? "B.Cu" : "F.Cu";
+                        console.log('[routing] via encountered (commit branch)', { viaUuid: (via as any).uuid ?? null, at: (via as any).at ?? null, currentLayer, nextLayer });
+                        currentLayer = nextLayer;
+                    }
+                    }
+                    try { setCurrentTraceLayer(currentLayer); } catch (err) { /* ignore if absent */ }
                 // Continue routing from the last placed point (continuous routing)
                 const last = previewTracks[previewTracks.length - 1];
                 setRoutingStart({ x: last.x, y: last.y });
@@ -677,20 +967,18 @@ export default function ShapesCanvas() {
                 // Record placed segments locally so subsequent worker calls
                 // include them immediately as obstacles (no need to wait for
                 // `pcb` state to propagate).
-                placedSegmentsRef.current.push(...segments.map(s => ({ start: { x: s.start[0], y: s.start[1] }, end: { x: s.end[0], y: s.end[1] }, width: s.width })));
+                placedSegmentsRef.current.push(...segments.map(s => ({ start: { x: s.start[0], y: s.start[1] }, end: { x: s.end[0], y: s.end[1] }, width: s.width, layer: s.layer })));
 
                 // Immediately request an updated preview from the worker using
                 // the newly placed endpoint as start and the current mouse
                 // position as goal. Include PCB tracks and locally placed
                 // segments as obstacles so the worker has an up-to-date
                 // collision set.
-                if (workerRef.current) {
-                    const obstacles = [
-                        ...(pcb.tracks || []).filter(t => t.kind === 'segment').map((t: any) => ({ start: { x: t.data.start[0], y: t.data.start[1] }, end: { x: t.data.end[0], y: t.data.end[1] }, width: t.data.width ?? 0.25 })),
-                        ...placedSegmentsRef.current,
-                    ];
-                    workerRequestIdRef.current += 1;
-                    workerRef.current.postMessage({ type: 'route', id: workerRequestIdRef.current, start: { x: last.x, y: last.y }, goal: worldPos, params: routerParams, obstacles });
+                    if (workerRef.current) {
+                        const workerLayer = (currentTraceLayer as string) || (selectedLayerId as string) || "F.Cu";
+                        const obstacles = buildWorkerObstacles(workerLayer);
+                        workerRequestIdRef.current += 1;
+                        workerRef.current.postMessage({ type: 'route', id: workerRequestIdRef.current, start: { x: last.x, y: last.y }, goal: worldPos, params: routerParams, obstacles });
                 }
                 return;
             }
@@ -717,14 +1005,21 @@ export default function ShapesCanvas() {
                 return [gridToWorld(sG.gx, sG.gy), gridToWorld(midGx, midGy), gridToWorld(gG.gx, gG.gy)];
             };
 
-            if (routingStart) {
+                    if (routingStart) {
                 const candidate = makeMinimal(routingStart, worldPos);
                 if (candidate.length > 1) {
                     const segments: any[] = [];
+                    let currentLayer = (currentTraceLayer as string) || (selectedLayerId as string) || 'F.Cu';
                     for (let i = 0; i < candidate.length - 1; i++) {
                         const a = candidate[i];
                         const b = candidate[i + 1];
-                        segments.push({ start: [a.x, a.y], end: [b.x, b.y], width: routerParams.trackWidth, layer: 'F.Cu', net: 0 });
+                        segments.push({ start: [a.x, a.y], end: [b.x, b.y], width: routerParams.trackWidth, layer: currentLayer, net: 0 });
+                        const via = findViaAtPoint({ x: b.x, y: b.y } as Pt);
+                        if (via) {
+                            const nextLayer = currentLayer === 'F.Cu' ? 'B.Cu' : 'F.Cu';
+                            console.log('[routing] via encountered (minimal candidate build)', { viaUuid: (via as any).uuid ?? null, at: (via as any).at ?? null, currentLayer, nextLayer });
+                            currentLayer = nextLayer;
+                        }
                     }
                                     // Prevent committing segments that collide with existing
                                     // tracks or segments placed this session.
@@ -744,18 +1039,47 @@ export default function ShapesCanvas() {
                                         const snapped = finalizeCandidate.point as Pt;
                                         candidate[candidate.length - 1] = snapped;
                                         const segmentsFinal: any[] = [];
+                                        let currentLayer = (currentTraceLayer as string) || (selectedLayerId as string) || 'F.Cu';
                                         for (let i = 0; i < candidate.length - 1; i++) {
                                             const a = candidate[i];
                                             const b = candidate[i + 1];
-                                            segmentsFinal.push({ start: [a.x, a.y], end: [b.x, b.y], width: routerParams.trackWidth, layer: 'F.Cu', net: padNet ?? 0 });
+                                            segmentsFinal.push({ start: [a.x, a.y], end: [b.x, b.y], width: routerParams.trackWidth, layer: currentLayer, net: padNet ?? 0 });
+                                            const via = findViaAtPoint({ x: b.x, y: b.y } as Pt);
+                                            if (via) {
+                                                const nextLayer = currentLayer === 'F.Cu' ? 'B.Cu' : 'F.Cu';
+                                                console.log('[routing] via encountered (minimal finalize branch)', { viaUuid: (via as any).uuid ?? null, at: (via as any).at ?? null, currentLayer, nextLayer });
+                                                currentLayer = nextLayer;
+                                            }
                                         }
                                         if (!segmentsAreFree(segmentsFinal)) {
                                             console.warn('Routing placement blocked due to collision with existing geometry.');
                                             setPreviewTracks([]);
                                             return;
                                         }
-                                        updatePcb((current) => ({ ...current, tracks: [...(current.tracks || []), ...segmentsFinal.map(s => ({ kind: 'segment' as const, data: s }))] }));
-                                        placedSegmentsRef.current.push(...segmentsFinal.map(s => ({ start: { x: s.start[0], y: s.start[1] }, end: { x: s.end[0], y: s.end[1] }, width: s.width })));
+                                        for (const s of segmentsFinal) {
+                                            console.log('[routing] committing segment (minimal finalize)', { layer: s.layer, start: s.start, end: s.end });
+                                            addTrack?.({ kind: 'segment', data: s } as any);
+                                        }
+                                        try { setCurrentTraceLayer(currentLayer); } catch (err) { }
+                                        placedSegmentsRef.current.push(...segmentsFinal.map(s => ({ start: { x: s.start[0], y: s.start[1] }, end: { x: s.end[0], y: s.end[1] }, width: s.width, layer: s.layer })));
+                                        // If finalize target is a via, continue routing from it
+                                        const finalizedVia = (finalizeCandidate as any).via;
+                                        if (finalizedVia) {
+                                            console.debug('[routing] connected to via — continuing routing (minimal candidate)');
+                                            const snappedPt = snapped;
+                                            routingActiveRef.current = true;
+                                            setRoutingActive(true);
+                                            setRoutingStart({ x: snappedPt.x, y: snappedPt.y });
+                                            // request updated preview
+                                                if (workerRef.current) {
+                                                    const obstacles = buildWorkerObstacles(currentLayer);
+                                                    workerRequestIdRef.current += 1;
+                                                    workerRef.current.postMessage({ type: 'route', id: workerRequestIdRef.current, start: { x: snappedPt.x, y: snappedPt.y }, goal: worldPos, params: routerParams, obstacles });
+                                                }
+                                            setPreviewTracks([]);
+                                            return;
+                                        }
+
                                         console.debug('[routing] finalizing: stopping routing (minimal candidate branch)');
                                         routingActiveRef.current = false;
                                         setRoutingStart(null);
@@ -766,19 +1090,17 @@ export default function ShapesCanvas() {
                                     }
 
                                     // otherwise commit and continue routing
-                                    updatePcb((current) => ({ ...current, tracks: [...(current.tracks || []), ...segments.map(s => ({ kind: 'segment' as const, data: s }))] }));
+                                        for (const s of segments) addTrack?.({ kind: 'segment', data: s } as any);
                                         // record placed segments so worker avoids them right away
-                                        placedSegmentsRef.current.push(...segments.map(s => ({ start: { x: s.start[0], y: s.start[1] }, end: { x: s.end[0], y: s.end[1] }, width: s.width })));
+                                        placedSegmentsRef.current.push(...segments.map(s => ({ start: { x: s.start[0], y: s.start[1] }, end: { x: s.end[0], y: s.end[1] }, width: s.width, layer: s.layer })));
                                     setRoutingStart({ x: last.x, y: last.y });
                             // trigger worker to update preview for continued routing
-                            if (workerRef.current) {
-                                const obstacles = [
-                                    ...(pcb.tracks || []).filter(t => t.kind === 'segment').map((t: any) => ({ start: { x: t.data.start[0], y: t.data.start[1] }, end: { x: t.data.end[0], y: t.data.end[1] }, width: t.data.width ?? 0.25 })),
-                                    ...placedSegmentsRef.current,
-                                ];
-                                workerRequestIdRef.current += 1;
-                                workerRef.current.postMessage({ type: 'route', id: workerRequestIdRef.current, start: { x: last.x, y: last.y }, goal: worldPos, params: routerParams, obstacles });
-                            }
+                                if (workerRef.current) {
+                                    const workerLayer = (currentTraceLayer as string) || (selectedLayerId as string) || "F.Cu";
+                                    const obstacles = buildWorkerObstacles(workerLayer);
+                                    workerRequestIdRef.current += 1;
+                                    workerRef.current.postMessage({ type: 'route', id: workerRequestIdRef.current, start: { x: last.x, y: last.y }, goal: worldPos, params: routerParams, obstacles });
+                                }
                     return;
                 }
             }
@@ -826,14 +1148,10 @@ export default function ShapesCanvas() {
             }
             // Build simple linear obstacles from existing PCB tracks and any
             // segments placed this session so the worker can avoid routing
-            // through them.
-            const pcbObstacles = (pcb.tracks || [])
-                .filter(t => t.kind === 'segment')
-                .map((t: any) => {
-                    const seg = t.data as any;
-                    return { start: { x: seg.start[0], y: seg.start[1] }, end: { x: seg.end[0], y: seg.end[1] }, width: seg.width ?? 0.25 };
-                });
-            const obstacles = [...pcbObstacles, ...placedSegmentsRef.current];
+            // through them. Only send obstacles for the active routing layer
+            // so the worker allows crossings on other copper layers.
+            const workerLayer = (currentTraceLayer as string) || (selectedLayerId as string) || "F.Cu";
+            const obstacles = buildWorkerObstacles(workerLayer);
 
             if (workerRef.current) {
                 workerRequestIdRef.current += 1;
@@ -892,6 +1210,7 @@ export default function ShapesCanvas() {
                 onMouseDown={handleMouseDown}
                 onMouseMove={handleMouseMove}
                 onMouseUp={handleMouseUp}
+                onContextMenu={handleCanvasContextMenu}
             >
                 <Layer>
                     {pcb.graphics

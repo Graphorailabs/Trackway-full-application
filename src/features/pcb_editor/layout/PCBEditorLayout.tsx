@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type ChangeEvent } from "react";
-import { GitBranch, Layers, Loader2, PackagePlus, Save, Settings, Square, ZoomIn, ZoomOut } from "lucide-react";
+import { GitBranch, Layers, Loader2, PackagePlus, Save, Settings, Square, ZoomIn, ZoomOut, Circle as CircleIcon } from "lucide-react";
 import { LuMousePointer2 } from "react-icons/lu";
 import { CanvasViewport } from "@/features/pcb_editor/components/CanvasViewport";
 import { EditorSettingsModal } from "@/features/pcb_editor/components/settings/EditorSettingsModal";
@@ -16,6 +16,7 @@ import { ShapeProvider } from "@/features/pcb_editor/contexts/ShapeContext";
 import { SelectionProvider } from "@/features/pcb_editor/contexts/SelectionContext";
 import { FootprintPreviewProvider, useFootprintPreview } from "@/features/pcb_editor/footprint/FootprintContext";
 import PadHoverProvider from "@/features/pcb_editor/contexts/PadHoverContext";
+import ViaHoverProvider from "@/features/pcb_editor/contexts/ViaHoverContext";
 import { useFootprintManagers } from "@/features/footprint_manager/FootprintManagerContext";
 import { ShapeSelectionModal } from "../components/shapes/ShapeSelectionModal";
 import { RoutingProvider } from "@/features/pcb_editor/contexts/RoutingContext";
@@ -158,6 +159,15 @@ export function PCBEditorLayout() {
             <GitBranch className="h-4 w-4" />
           </ToolbarItem>
           <ToolbarItem
+            label="Place Via"
+            labelSide="left"
+            onClick={() => setTool("via")}
+            active={tool === "via"}
+            className="!flex !h-10 !w-10 !items-center !justify-center !rounded-lg !border-white/20 !bg-white/5 !p-0"
+          >
+            <CircleIcon className="h-4 w-4" />
+          </ToolbarItem>
+          <ToolbarItem
             label="Layer Stack"
             labelSide="left"
             onClick={() => setLayersModalOpen(true)}
@@ -292,8 +302,9 @@ export function PCBEditorLayout() {
                   <RoutingProvider>
                     <FootprintManagerProvider>
                       <FootprintPreviewProvider>
+                        <ViaHoverProvider>
                         <PadHoverProvider>
-                <div className="flex h-full min-h-screen w-full flex-col bg-slate-950 text-white">
+                    <div className="flex h-full min-h-screen w-full flex-col bg-slate-950 text-white">
                   <TopToolbar />
                   <div className="flex flex-1 overflow-hidden">
                     <CanvasViewport />
@@ -307,6 +318,7 @@ export function PCBEditorLayout() {
                   <StatusToast toast={toast} />
                 </div>
                         </PadHoverProvider>
+                        </ViaHoverProvider>
                       </FootprintPreviewProvider>
                     </FootprintManagerProvider>
                   </RoutingProvider>

@@ -38,6 +38,15 @@ export type PcbContextValue = {
   lastSavedAt: number | null;
   updatePcb: (updater: (current: Pcb) => Pcb) => void;
   addGraphicItem: (item: PcbGraphicItem) => void;
+  // Via helpers: operate on `pcb.tracks` where kind === 'via'
+  addVia: (via: import("trackway-parser-wasm").TrackVia) => void;
+  updateVia: (uuid: string, updater: (current: import("trackway-parser-wasm").TrackVia) => import("trackway-parser-wasm").TrackVia) => void;
+  updateViaPosition: (uuid: string, at: { x: number; y: number }) => void;
+  removeVia: (uuid: string) => void;
+  // Track helpers: add/update/remove arbitrary track entries (segments, arcs, vias)
+  addTrack: (track: import("trackway-parser-wasm").Track) => void;
+  updateTrack: (uuid: string, updater: (current: import("trackway-parser-wasm").Track) => import("trackway-parser-wasm").Track) => void;
+  removeTrack: (uuid: string) => void;
   // Footprint helpers: operate on the `pcb.footprints` array
   addFootprint: (fp: import("trackway-parser-wasm").Footprint) => void;
   updateFootprint: (uuid: string, updater: (current: import("trackway-parser-wasm").Footprint) => import("trackway-parser-wasm").Footprint) => void;
@@ -126,6 +135,75 @@ export function PcbProvider({ children }: PropsWithChildren) {
     [updatePcb],
   );
 
+  // VIA helpers
+  const addVia = useCallback(
+    (via: import("trackway-parser-wasm").TrackVia) => {
+      updatePcb((current) => ({
+        ...current,
+        tracks: [...(current.tracks ?? []), { kind: "via" as const, data: via }],
+      }));
+    },
+    [updatePcb],
+  );
+
+  const updateVia = useCallback(
+    (uuid: string, updater: (current: import("trackway-parser-wasm").TrackVia) => import("trackway-parser-wasm").TrackVia) => {
+      updatePcb((current) => ({
+        ...current,
+        tracks: (current.tracks ?? []).map((t) => (t.kind === "via" && (t.data as any).uuid === uuid ? ({ kind: "via" as const, data: updater(t.data as import("trackway-parser-wasm").TrackVia) }) : t)),
+      }));
+    },
+    [updatePcb],
+  );
+
+  const updateViaPosition = useCallback(
+    (uuid: string, at: { x: number; y: number }) => {
+      updateVia(uuid, (current) => ({ ...current, at: [at.x, at.y] } as import("trackway-parser-wasm").TrackVia));
+    },
+    [updateVia],
+  );
+
+  const removeVia = useCallback(
+    (uuid: string) => {
+      updatePcb((current) => ({
+        ...current,
+        tracks: (current.tracks ?? []).filter((t) => !(t.kind === "via" && (t.data as any).uuid === uuid)),
+      }));
+    },
+    [updatePcb],
+  );
+
+  // Track helpers (segments, arcs, vias)
+  const addTrack = useCallback(
+    (track: import("trackway-parser-wasm").Track) => {
+      updatePcb((current) => ({
+        ...current,
+        tracks: [...(current.tracks ?? []), track],
+      }));
+    },
+    [updatePcb],
+  );
+
+  const updateTrack = useCallback(
+    (uuid: string, updater: (current: import("trackway-parser-wasm").Track) => import("trackway-parser-wasm").Track) => {
+      updatePcb((current) => ({
+        ...current,
+        tracks: (current.tracks ?? []).map((t) => ((t.data as any)?.uuid === uuid ? updater(t as import("trackway-parser-wasm").Track) : t)),
+      }));
+    },
+    [updatePcb],
+  );
+
+  const removeTrack = useCallback(
+    (uuid: string) => {
+      updatePcb((current) => ({
+        ...current,
+        tracks: (current.tracks ?? []).filter((t) => !((t.data as any)?.uuid === uuid)),
+      }));
+    },
+    [updatePcb],
+  );
+
   const addFootprint = useCallback(
     (fp: import("trackway-parser-wasm").Footprint) => {
       updatePcb((current) => ({
@@ -198,6 +276,13 @@ export function PcbProvider({ children }: PropsWithChildren) {
       updateFootprint,
       removeFootprint,
       placeFootprint,
+      addVia,
+      updateVia,
+      updateViaPosition,
+      removeVia,
+      addTrack,
+      updateTrack,
+      removeTrack,
       reloadFromProject: reloadFromProject,
       savePcb: persistPcb,
     }),
@@ -217,6 +302,13 @@ export function PcbProvider({ children }: PropsWithChildren) {
       updateFootprint,
       removeFootprint,
       placeFootprint,
+      addVia,
+      updateVia,
+      updateViaPosition,
+      removeVia,
+      addTrack,
+      updateTrack,
+      removeTrack,
       reloadFromProject,
       persistPcb,
     ],

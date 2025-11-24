@@ -7,6 +7,7 @@ import { useToolContext } from "../../../contexts/ToolContext";
 import { usePcb } from "../../../contexts/PcbContext";
 import { useLayers } from "../../../contexts/LayerContext";
 import { useGrid } from "@/features/pcb_editor/contexts/GridContext";
+import { PAD_SNAP_RADIUS } from "@/features/pcb_editor/constants";
 import { useFootprintPreview } from "@/features/pcb_editor/footprint/FootprintContext";
 import { useSelection } from "../../../contexts/SelectionContext";
 // import { DEFAULT_SHAPE_STROKE, DEFAULT_SHAPE_WIDTH, ENABLE_SNAP_TO_VISIBLE_GRID } from "@/features/pcb_editor/constants";
@@ -116,6 +117,62 @@ export function useShapesCanvasLogic() {
         draggingRef.current = true;
         dragLastPosRef.current = [worldPos.x, worldPos.y];
         return;
+      }
+
+      // If Konva didn't hit anything we can still try geometric hit-testing
+      // for PCB tracks (segments and vias) so the select tool can pick them.
+      // This allows routing canvas (a different stage) to be selectable
+      // from the main shapes stage via a geometric hit test.
+      // segment/via selection tolerance
+      const hitTol = PAD_SNAP_RADIUS;
+      // helper: point-segment distance
+      const pointSegmentDist = (px: number, py: number, a: { x: number; y: number }, b: { x: number; y: number }) => {
+        const vx = b.x - a.x;
+        const vy = b.y - a.y;
+        const wx = px - a.x;
+        const wy = py - a.y;
+        const c1 = vx * wx + vy * wy;
+        if (c1 <= 0) return Math.hypot(px - a.x, py - a.y);
+        const c2 = vx * vx + vy * vy;
+        if (c2 <= c1) return Math.hypot(px - b.x, py - b.y);
+        const t = c1 / c2;
+        const projx = a.x + t * vx;
+        const projy = a.y + t * vy;
+        return Math.hypot(px - projx, py - projy);
+      };
+
+      for (const tr of (pcb.tracks ?? [])) {
+        try {
+          if (tr.kind === 'segment') {
+            const d: any = tr.data ?? {};
+            const s = { x: d.start?.[0] ?? 0, y: d.start?.[1] ?? 0 };
+            const e = { x: d.end?.[0] ?? 0, y: d.end?.[1] ?? 0 };
+            const dist = pointSegmentDist(worldPos.x, worldPos.y, s, e);
+            if (dist <= hitTol) {
+              const nodeId = (d.uuid as string) || `__track:${s.x}:${s.y}:${e.x}:${e.y}:${d.width ?? 0}`;
+              // select as a route (select entire connected trace)
+              select(`__route:${nodeId}`);
+              draggingRef.current = true;
+              dragLastPosRef.current = [worldPos.x, worldPos.y];
+              return;
+            }
+          } else if (tr.kind === 'via') {
+            const v: any = tr.data ?? {};
+            const at = { x: (v.at?.[0]) ?? 0, y: (v.at?.[1]) ?? 0 };
+            const size = Number(v.size) || 0.8;
+            const radius = Math.max(size / 2, 0.2) + hitTol;
+            const d = Math.hypot(worldPos.x - at.x, worldPos.y - at.y);
+            if (d <= radius) {
+              if (v.uuid) select(v.uuid as string);
+              else select(`via-${Math.round(at.x)}-${Math.round(at.y)}`);
+              draggingRef.current = true;
+              dragLastPosRef.current = [worldPos.x, worldPos.y];
+              return;
+            }
+          }
+        } catch (err) {
+          // ignore per-track errors
+        }
       }
 
         // If Konva didn't provide a target id, try a geometric hit-test

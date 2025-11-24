@@ -9,17 +9,20 @@
  * - Handle different layers and visibility.
  */
 
-import { Layer, Line } from "react-konva";
+import { Layer, Line, Circle, Group } from "react-konva";
+import { useSelection } from "@/features/pcb_editor/contexts/SelectionContext";
 import { useLayoutEffect, useRef, useState } from "react";
 import CanvasStage from "./CanvasStage";
 import { useCameraViewport } from "@/features/pcb_editor/components/canvas/CameraViewport";
 import { usePcb } from "../../contexts/PcbContext";
 import { useLayers } from "../../contexts/LayerContext";
 import { useRouting } from "../../contexts/RoutingContext";
-import type { Track, TrackSegment } from "trackway-parser-wasm";
+import { useViaHover } from "../../contexts/ViaHoverContext";
+import type { TrackSegment } from "trackway-parser-wasm";
 
 export function RoutingCanvas() {
-  const { pcb } = usePcb();
+  const pcbApi = usePcb();
+  const { pcb } = pcbApi;
   const { visibility } = useLayers();
   const { previewTracks } = useRouting();
   const { camera, zoom, viewportCenter } = useCameraViewport();
@@ -40,20 +43,135 @@ export function RoutingCanvas() {
     return () => obs.disconnect();
   }, []);
 
-  const renderTrack = (track: Track, index: number) => {
-    if (track.kind !== "segment") return null;
+  const viaHover = (() => {
+    try {
+      return useViaHover().hovered;
+    } catch (e) {
+      return null as any;
+    }
+  })();
+  const { select, openContextMenu } = (() => {
+    try {
+      return useSelection();
+    } catch (e) {
+      return { select: (_: string | null) => {}, openContextMenu: (_: { x: number; y: number } | null) => {} } as any;
+    }
+  })();
 
-    const segment = track.data as TrackSegment;
-    if (!visibility[segment.layer]) return null;
-
+  const segs = (pcb.tracks || []).filter((t) => t.kind === "segment").map((t: any) => t.data as TrackSegment);
+  const backSegs = segs.filter(s => (s.layer === 'B.Cu') && visibility[s.layer]);
+  const frontSegs = segs.filter(s => (s.layer !== 'B.Cu') && visibility[s.layer]);
+  const renderLine = (segment: TrackSegment, idx: number) => {
+    const layerStroke = segment.layer === 'B.Cu' ? '#4fc3f7' : 'red';
+    const nodeId = segment.uuid || `__track:${segment.start[0]}:${segment.start[1]}:${segment.end[0]}:${segment.end[1]}:${segment.width}`;
     return (
       <Line
-        key={segment.uuid || `track-${index}`}
+        id={nodeId}
+        key={segment.uuid || `track-${idx}`}
         points={[segment.start[0], segment.start[1], segment.end[0], segment.end[1]]}
-        stroke="red"
+        stroke={layerStroke}
         strokeWidth={segment.width}
+        onContextMenu={(e) => {
+          try {
+            e.evt.preventDefault();
+            const stage = e.target.getStage ? e.target.getStage() : null;
+            if (!stage) return;
+            const container = stage.container ? stage.container() : null;
+            if (!container) return;
+            const rect = container.getBoundingClientRect();
+            const x = (e.evt.clientX || 0) - rect.left;
+            const y = (e.evt.clientY || 0) - rect.top;
+            if (segment.uuid) select(segment.uuid);
+            else select(nodeId);
+            openContextMenu({ x, y });
+          } catch (err) {}
+        }}
       />
     );
+  };
+
+  const renderBackSegments = () => backSegs.map((s, i) => renderLine(s, i));
+  const renderFrontSegments = () => frontSegs.map((s, i) => renderLine(s, i + backSegs.length));
+
+  const renderVias = () => {
+    return (pcb.tracks || [])
+      .filter((t) => t.kind === "via")
+      .map((t: any, idx) => {
+        const via = t.data as any;
+        const viaLayers: string[] = via.layers ?? [];
+        const anyVisible = viaLayers.length === 0 ? true : viaLayers.some((l) => visibility[l]);
+        if (!anyVisible) return null;
+        const at = via.at ?? [0, 0];
+        const size = Number(via.size) || 0.8;
+        const radius = size / 2;
+        // increase display size for visibility
+        const displayRadius = Math.max(radius * 1.6, 0.8);
+        const uuid = via.uuid as string | undefined;
+        const isHovered = viaHover && viaHover.uuid === uuid;
+        const nodeId = uuid || `via-${idx}`;
+        return (
+          <Group
+            id={nodeId}
+            key={uuid || `via-${idx}`}
+            x={at[0]}
+            y={at[1]}
+            draggable={true}
+            onDragEnd={(e) => {
+              if (!uuid) return;
+              const nx = e.target.x();
+              const ny = e.target.y();
+              try {
+                pcbApi.updateViaPosition?.(uuid, { x: nx, y: ny });
+              } catch (err) {
+                // silent
+              }
+            }}
+            onDblClick={() => {
+              if (!uuid) return;
+              try {
+                pcbApi.removeVia?.(uuid);
+              } catch (err) {
+                // silent
+              }
+            }}
+            onContextMenu={(e) => {
+              try {
+                e.evt.preventDefault();
+                const stage = e.target.getStage ? e.target.getStage() : null;
+                if (!stage) return;
+                const container = stage.container ? stage.container() : null;
+                if (!container) return;
+                const rect = container.getBoundingClientRect();
+                const x = (e.evt.clientX || 0) - rect.left;
+                const y = (e.evt.clientY || 0) - rect.top;
+                if (uuid) select(uuid);
+                openContextMenu({ x, y });
+              } catch (err) {}
+            }}
+          >
+            {/* Outer yellow ring */}
+            <Circle
+              x={0}
+              y={0}
+              radius={isHovered ? displayRadius * 1.25 : displayRadius}
+              fill={"#ffeb3b"}
+              stroke={isHovered ? "#f57f17" : "#f9a825"}
+              strokeWidth={isHovered ? 0.12 : 0.08}
+              listening={false}
+            />
+            {/* Inner 'hole' painted white (approximate drill/hole) */}
+            <Circle
+              x={0}
+              y={0}
+              radius={Math.max(0.12, (Number(via.drill) || (size / 4)))}
+              fill={"#ffffff"}
+              stroke={"#e0e0e0"}
+              strokeWidth={0.02}
+              listening={false}
+            />
+          </Group>
+        );
+      });
   };
 
   const previewLines = [];
@@ -69,7 +187,7 @@ export function RoutingCanvas() {
     <div className="absolute inset-0" ref={containerRef} style={{ pointerEvents: "none" }}>
       <CanvasStage width={size.width} height={size.height} zoom={zoom} viewportCenter={viewportCenter} camera={camera}>
         <Layer>
-          {(pcb.tracks || []).map(renderTrack)}
+          {renderBackSegments()}
           {previewLines.map((line, i) => (
             <Line
               key={`preview-${i}`}
@@ -80,6 +198,8 @@ export function RoutingCanvas() {
               dash={[5, 5]}
             />
           ))}
+          {renderFrontSegments()}
+          {renderVias()}
         </Layer>
       </CanvasStage>
     </div>
