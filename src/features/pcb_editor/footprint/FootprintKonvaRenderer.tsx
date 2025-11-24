@@ -111,7 +111,7 @@ export default function FootprintKonvaRenderer({ model, respectLayerVisibility =
       <Group>
         {pads.map((p: any, i: number) => {
           if (!isVisibleByLayer(p)) return null;
-          return <FootprintPad key={i} p={p} />;
+          return <FootprintPad key={i} p={p} fpUuid={model.uuid} padIndex={i} />;
         })}
 
         {graphics.map((g: any, i: number) => {

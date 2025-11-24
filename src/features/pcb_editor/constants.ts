@@ -216,3 +216,13 @@ export const GRID_MAJOR_FACTOR = 10;
 // Feature flags for PCB editor
 export const ENABLE_GRID_DEBUG = true;
 export const ENABLE_SNAP_TO_VISIBLE_GRID = true;
+// Endpoint snapping: when enabled, clicks/preview near an existing track
+// endpoint will snap to that endpoint and endpoint-only contacts are
+// treated as non-blocking. Tolerance is in millimeters.
+export const ENABLE_ENDPOINT_SNAP = true;
+export const ENDPOINT_SNAP_TOLERANCE = 0.18;
+// Pad connection snap radius (mm). When the cursor is within this distance
+// from a pad's copper, the router will snap the endpoint to the pad.
+export const PAD_SNAP_RADIUS = 0.2;
+// Toggle to enable pad hover highlight in the editor UI
+export const ENABLE_PAD_HIGHLIGHT = true;

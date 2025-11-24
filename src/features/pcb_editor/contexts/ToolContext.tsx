@@ -2,7 +2,7 @@ import { createContext, useContext, useState } from "react";
 import type { PcbGraphicItem, TextEffects } from "trackway-parser-wasm";
 
 /* eslint-disable react-refresh/only-export-components -- context exports hooks/helpers */
-export type Tool = PcbGraphicItem["kind"] | "select";
+export type Tool = PcbGraphicItem["kind"] | "select" | "route";
 
 type ToolContextState = {
 	tool: Tool;
