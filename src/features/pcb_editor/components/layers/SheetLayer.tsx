@@ -48,20 +48,14 @@ function resolvePageDimensions(page: Paper) {
 export function SheetLayer({ page, metadata, variant = "centered" }: SheetLayerProps) {
   const activePage = page ?? DEFAULT_PAGE;
   useEffect(() => {
-    if (process.env.NODE_ENV !== "production") {
-      console.log("[SheetLayer] paper props", {
-        provided: page ? { size: page.size, portrait: page.portrait } : null,
-        active: { size: activePage.size, portrait: activePage.portrait },
-        usedFallback: !page,
-      });
-    }
+    // Debug logging removed: previously emitted paper props in dev builds.
+    // Keep effect present only if future side-effects are necessary.
+    return () => {};
   }, [page, activePage]);
 
   const { widthPx, heightPx } = useMemo(() => {
     const { width, height } = resolvePageDimensions(activePage);
-    if (process.env.NODE_ENV !== "production") {
-      console.log("[SheetLayer] resolved dimensions", { width, height, variant });
-    }
+    // Debug logging removed: resolved page dimensions are used directly.
     return {
       widthPx: width * MM_TO_PX,
       heightPx: height * MM_TO_PX,

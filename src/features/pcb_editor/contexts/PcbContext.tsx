@@ -18,6 +18,7 @@ import {
 } from "react";
 
 import { useProject } from "@/hooks/useProject";
+import flipFootprintService from "@/features/pcb_editor/services/flipFootprint";
 import type { SheetMetadata } from "@/features/pcb_editor/types";
 import { createBlankPcb, deriveMetadata } from "@/features/pcb_editor/state/pcbDocumentUtils";
 import { usePcbSourceManager, type PcbSource } from "@/features/pcb_editor/state/usePcbSourceManager";
@@ -38,11 +39,23 @@ export type PcbContextValue = {
   lastSavedAt: number | null;
   updatePcb: (updater: (current: Pcb) => Pcb) => void;
   addGraphicItem: (item: PcbGraphicItem) => void;
+  // Via helpers: operate on `pcb.tracks` where kind === 'via'
+  addVia: (via: import("trackway-parser-wasm").TrackVia) => void;
+  updateVia: (uuid: string, updater: (current: import("trackway-parser-wasm").TrackVia) => import("trackway-parser-wasm").TrackVia) => void;
+  updateViaPosition: (uuid: string, at: { x: number; y: number }) => void;
+  removeVia: (uuid: string) => void;
+  // Track helpers: add/update/remove arbitrary track entries (segments, arcs, vias)
+  addTrack: (track: import("trackway-parser-wasm").Track) => void;
+  updateTrack: (uuid: string, updater: (current: import("trackway-parser-wasm").Track) => import("trackway-parser-wasm").Track) => void;
+  removeTrack: (uuid: string) => void;
   // Footprint helpers: operate on the `pcb.footprints` array
   addFootprint: (fp: import("trackway-parser-wasm").Footprint) => void;
   updateFootprint: (uuid: string, updater: (current: import("trackway-parser-wasm").Footprint) => import("trackway-parser-wasm").Footprint) => void;
   removeFootprint: (uuid: string) => void;
-  placeFootprint: (fp: import("trackway-parser-wasm").Footprint, at: { x: number; y: number; angle?: number }) => void;
+  placeFootprint: (fp: import("trackway-parser-wasm").Footprint, at: { x: number; y: number; angle?: number }) => string;
+  flipFootprint: (uuid: string) => void;
+  highlightFootprint: (uuid: string) => void;
+  flashHighlightUuid: string | null;
   reloadFromProject: () => void;
   savePcb: () => Promise<{ filePath: string }>;
 };
@@ -126,6 +139,85 @@ export function PcbProvider({ children }: PropsWithChildren) {
     [updatePcb],
   );
 
+  const [flashHighlightUuid, setFlashHighlightUuid] = useState<string | null>(null);
+  const highlightFootprint = useCallback((uuid: string) => {
+    setFlashHighlightUuid(uuid);
+    try {
+      window.setTimeout(() => setFlashHighlightUuid((cur) => (cur === uuid ? null : cur)), 900);
+    } catch (e) {
+      // ignore
+    }
+  }, []);
+
+  // VIA helpers
+  const addVia = useCallback(
+    (via: import("trackway-parser-wasm").TrackVia) => {
+      updatePcb((current) => ({
+        ...current,
+        tracks: [...(current.tracks ?? []), { kind: "via" as const, data: via }],
+      }));
+    },
+    [updatePcb],
+  );
+
+  const updateVia = useCallback(
+    (uuid: string, updater: (current: import("trackway-parser-wasm").TrackVia) => import("trackway-parser-wasm").TrackVia) => {
+      updatePcb((current) => ({
+        ...current,
+        tracks: (current.tracks ?? []).map((t) => (t.kind === "via" && (t.data as any).uuid === uuid ? ({ kind: "via" as const, data: updater(t.data as import("trackway-parser-wasm").TrackVia) }) : t)),
+      }));
+    },
+    [updatePcb],
+  );
+
+  const updateViaPosition = useCallback(
+    (uuid: string, at: { x: number; y: number }) => {
+      updateVia(uuid, (current) => ({ ...current, at: [at.x, at.y] } as import("trackway-parser-wasm").TrackVia));
+    },
+    [updateVia],
+  );
+
+  const removeVia = useCallback(
+    (uuid: string) => {
+      updatePcb((current) => ({
+        ...current,
+        tracks: (current.tracks ?? []).filter((t) => !(t.kind === "via" && (t.data as any).uuid === uuid)),
+      }));
+    },
+    [updatePcb],
+  );
+
+  // Track helpers (segments, arcs, vias)
+  const addTrack = useCallback(
+    (track: import("trackway-parser-wasm").Track) => {
+      updatePcb((current) => ({
+        ...current,
+        tracks: [...(current.tracks ?? []), track],
+      }));
+    },
+    [updatePcb],
+  );
+
+  const updateTrack = useCallback(
+    (uuid: string, updater: (current: import("trackway-parser-wasm").Track) => import("trackway-parser-wasm").Track) => {
+      updatePcb((current) => ({
+        ...current,
+        tracks: (current.tracks ?? []).map((t) => ((t.data as any)?.uuid === uuid ? updater(t as import("trackway-parser-wasm").Track) : t)),
+      }));
+    },
+    [updatePcb],
+  );
+
+  const removeTrack = useCallback(
+    (uuid: string) => {
+      updatePcb((current) => ({
+        ...current,
+        tracks: (current.tracks ?? []).filter((t) => !((t.data as any)?.uuid === uuid)),
+      }));
+    },
+    [updatePcb],
+  );
+
   const addFootprint = useCallback(
     (fp: import("trackway-parser-wasm").Footprint) => {
       updatePcb((current) => ({
@@ -158,12 +250,100 @@ export function PcbProvider({ children }: PropsWithChildren) {
 
   const placeFootprint = useCallback(
     (fp: import("trackway-parser-wasm").Footprint, at: { x: number; y: number; angle?: number }) => {
-      // clone an instance and set placement `at` and placed=true
-      const instance = { ...fp, at: { x: at.x, y: at.y, angle: at.angle ?? 0 }, placed: true } as import("trackway-parser-wasm").Footprint;
+      // Ensure the placed instance contains the expected arrays and avoid
+      // accidental missing properties by normalizing the model. We also
+      // shallow-clone nested arrays so later mutations don't affect the
+      // original parsed model used for preview.
+      const instance = {
+        ...fp,
+        pads: Array.isArray((fp as any).pads) ? (fp as any).pads.map((p: any) => ({ ...p })) : [],
+        graphics: Array.isArray((fp as any).graphics) ? (fp as any).graphics.map((g: any) => ({ ...g })) : [],
+        texts: Array.isArray((fp as any).texts) ? (fp as any).texts.map((t: any) => ({ ...t })) : [],
+        properties: Array.isArray((fp as any).properties) ? (fp as any).properties.map((p: any) => ({ ...p })) : [],
+        at: { x: at.x, y: at.y, angle: at.angle ?? 0 },
+        placed: true,
+      } as import("trackway-parser-wasm").Footprint;
+
+      // Debug logging removed: placement details were previously emitted here.
+
+      // Ensure instance has a uuid
+      if (!instance.uuid) instance.uuid = crypto.randomUUID();
       addFootprint(instance);
+      try {
+        highlightFootprint(instance.uuid as string);
+      } catch (e) {}
+      return instance.uuid as string;
     },
-    [addFootprint],
+    [addFootprint, highlightFootprint],
   );
+
+    // Flip a footprint in-place on the PCB. Uses the shared service to
+    // produce a flipped clone then replaces the footprint entry so React
+    // consumers re-render consistently.
+    const flipFootprint = useCallback(
+      (uuid: string) => {
+        try {
+            try { console.debug('[pcb] flipFootprint called', { uuid }); } catch (e) {}
+            try { console.log('[pcb] flipFootprint called', { uuid }); } catch (e) {}
+            console.log(pcb)
+        } catch (err) {}
+        // Reuse updateFootprint so we follow the same update path as rotate
+        try {
+          updateFootprint(uuid, (f: any) => {
+            try {
+              const flipped = flipFootprintService(f);
+              // Emit compact before/after summary to help runtime diagnosis
+              try {
+                const sampleOldPad = (f.pads && f.pads[0]) ? f.pads[0] : null;
+                const sampleNewPad = (flipped.pads && flipped.pads[0]) ? flipped.pads[0] : null;
+                // compact pad/graphics summary
+                const summarizeGraphics = (arr: any[] | undefined) => (arr ?? []).map((g) => {
+                  try {
+                    return {
+                      kind: g.kind ?? (g.data && g.data.kind) ?? 'unknown',
+                      start: Array.isArray(g.start) ? [g.start[0], g.start[1]] : (g.start ? { x: g.start.x, y: g.start.y } : null),
+                      end: Array.isArray(g.end) ? [g.end[0], g.end[1]] : (g.end ? { x: g.end.x, y: g.end.y } : null),
+                      center: Array.isArray(g.center) ? [g.center[0], g.center[1]] : (g.center ? { x: g.center.x, y: g.center.y } : null),
+                      mid: Array.isArray(g.mid) ? [g.mid[0], g.mid[1]] : (g.mid ? { x: g.mid.x, y: g.mid.y } : null),
+                      ptsCount: Array.isArray(g.pts) ? g.pts.length : (g.data && g.data.pts && Array.isArray(g.data.pts.xy) ? g.data.pts.xy.length : 0),
+                      x: typeof g.x === 'number' ? g.x : (g.data && typeof g.data.x === 'number' ? g.data.x : null),
+                      y: typeof g.y === 'number' ? g.y : (g.data && typeof g.data.y === 'number' ? g.data.y : null),
+                      layer: g.layer ?? g.data?.layer ?? null,
+                    };
+                  } catch (e) { return { kind: 'err' }; }
+                });
+
+                console.log('[pcb] flipFootprint before/after summary', {
+                  uuid: f.uuid,
+                  beforeAt: f.at,
+                  afterAt: flipped.at,
+                  padBefore: sampleOldPad ? { at: sampleOldPad.at ?? { x: sampleOldPad.x, y: sampleOldPad.y }, layers: sampleOldPad.layers ?? sampleOldPad.data?.layers ?? null } : null,
+                  padAfter: sampleNewPad ? { at: sampleNewPad.at ?? { x: sampleNewPad.x, y: sampleNewPad.y }, layers: sampleNewPad.layers ?? sampleNewPad.data?.layers ?? null } : null,
+                  graphicsBefore: summarizeGraphics(f.graphics),
+                  graphicsAfter: summarizeGraphics(flipped.graphics),
+                });
+              } catch (e) {}
+              const oldAt = f.at ?? { x: 0, y: 0, angle: 0 };
+              const newAt = flipped.at ?? {};
+              const atObj = {
+                x: (oldAt as any).x ?? (Array.isArray(oldAt) ? oldAt[0] ?? 0 : 0),
+                y: (oldAt as any).y ?? (Array.isArray(oldAt) ? oldAt[1] ?? 0 : 0),
+                angle: (newAt as any).angle ?? (oldAt as any).angle ?? 0,
+              };
+              return { ...flipped, at: atObj, uuid: f.uuid, placed: f.placed ?? true } as any;
+            } catch (err) {
+              return f;
+            }
+          });
+        } catch (err) {
+          // ignore
+        }
+        try {
+          highlightFootprint(uuid);
+        } catch (e) {}
+      },
+      [updateFootprint],
+    );
 
   const contextValue = useMemo<PcbContextValue>(
     () => ({
@@ -180,8 +360,18 @@ export function PcbProvider({ children }: PropsWithChildren) {
       addGraphicItem,
       addFootprint,
       updateFootprint,
+      flipFootprint,
+      highlightFootprint,
+      flashHighlightUuid,
       removeFootprint,
       placeFootprint,
+      addVia,
+      updateVia,
+      updateViaPosition,
+      removeVia,
+      addTrack,
+      updateTrack,
+      removeTrack,
       reloadFromProject: reloadFromProject,
       savePcb: persistPcb,
     }),
@@ -199,8 +389,18 @@ export function PcbProvider({ children }: PropsWithChildren) {
       addGraphicItem,
       addFootprint,
       updateFootprint,
+      flipFootprint,
+      highlightFootprint,
+      flashHighlightUuid,
       removeFootprint,
       placeFootprint,
+      addVia,
+      updateVia,
+      updateViaPosition,
+      removeVia,
+      addTrack,
+      updateTrack,
+      removeTrack,
       reloadFromProject,
       persistPcb,
     ],

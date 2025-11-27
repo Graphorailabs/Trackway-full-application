@@ -1,4 +1,4 @@
-import { type MouseEvent } from "react";
+import { type MouseEvent, useMemo, useState } from "react";
 import { X } from "lucide-react";
 
 import { useLayers, type LayerId } from "@/features/pcb_editor/contexts/LayerContext";
@@ -10,6 +10,19 @@ type LayerVisibilityModalProps = {
 
 export function LayerVisibilityModal({ open, onClose }: LayerVisibilityModalProps) {
   const { layers, selectedLayerId, selectLayer, visibility, setLayerVisibility } = useLayers();
+
+  const [searchTerm, setSearchTerm] = useState("");
+
+  const filteredLayers = useMemo(() => {
+    if (!searchTerm) return layers;
+    const term = searchTerm.toLowerCase();
+    return layers.filter(layer => {
+      const displayName = (layer.user_name ?? layer.canonical_name).toLowerCase();
+      const canonical = layer.canonical_name.toLowerCase();
+      const desc = layer.description.toLowerCase();
+      return displayName.includes(term) || canonical.includes(term) || desc.includes(term);
+    });
+  }, [layers, searchTerm]);
 
   if (!open) return null;
 
@@ -61,8 +74,17 @@ export function LayerVisibilityModal({ open, onClose }: LayerVisibilityModalProp
           <p className="text-sm text-white/70">
             Toggle which layers are visible in the canvas and choose the active editing layer.
           </p>
+          <div className="mt-4">
+            <input
+              type="text"
+              placeholder="Search layers..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full rounded-lg border border-white/20 bg-white/5 px-3 py-2 text-sm text-white placeholder-white/50 focus:border-white/40 focus:outline-none"
+            />
+          </div>
           <div className="mt-4 space-y-3">
-            {layers.map((layer) => {
+            {filteredLayers.map((layer) => {
               const layerId = layer.canonical_name;
               const displayName = layer.user_name ?? layer.canonical_name;
               const shortName = layer.canonical_name;

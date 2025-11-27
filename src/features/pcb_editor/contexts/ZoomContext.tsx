@@ -50,7 +50,8 @@ export function ZoomProvider({
   children,
 }: PropsWithChildren<{ config?: ZoomConfig }>) {
   const minZoom = config?.minZoom ?? 0.2;
-  const maxZoom = config?.maxZoom ?? 5;
+  // Increase default maximum zoom so users can inspect details more closely.
+  const maxZoom = config?.maxZoom ?? 20;
   const step = config?.step ?? 0.1;
   const [zoom, setZoomState] = useState<number>(config?.defaultZoom ?? 1);
   const [camera, setCamera] = useState<Point>({ x: 0, y: 0 });
