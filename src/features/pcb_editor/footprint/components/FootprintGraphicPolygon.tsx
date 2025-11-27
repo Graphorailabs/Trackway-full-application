@@ -1,4 +1,3 @@
-import React from "react";
 import { Line } from "react-konva";
 import { FOOTPRINT_PREVIEW_DEBUG as DEFAULT_DEBUG } from "@/features/footprint_manager/constants";
 

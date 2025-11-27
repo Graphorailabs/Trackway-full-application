@@ -6,6 +6,7 @@ import { makeOrthogonalRoundedPath } from "../hooks/makeOrthogonalPath";
 import { useComponents } from "../context/ComponentContext";
 import { useTool } from "../context/ToolContext";
 import { useWires } from "../context/WireContext";
+import { useSymbol } from "../context/SymbolContext";
 
 type Wire = {
   id: string;
@@ -39,11 +40,12 @@ export default function WireTool() {
 
   const step = 1; // or 2 for light snapping
 
-  const baseStroke = 3;
+  const baseStroke = 1;
 
   const { wires, setWires } = useWires();
   const [drawing, setDrawing] = useState<{ worldPoints: Point[] } | null>(null);
   const { components } = useComponents();
+  const { placedSymbols, updatePlacedSymbol } = useSymbol();
   const { updateWirePinPosition } = useWires();
 
 
@@ -130,6 +132,17 @@ function getClosestPin(world: Point): ClosestPin {
     });
   });
 
+  // Also search placed symbol pins
+  (placedSymbols || []).forEach((sym: any) => {
+    (sym.pins || []).forEach((pin: any) => {
+      const dist = Math.hypot(world.x - (pin.x ?? 0), world.y - (pin.y ?? 0));
+      if (dist < minDist) {
+        closest = { comp: sym, pin };
+        minDist = dist;
+      }
+    });
+  });
+
   return closest;
 }
 
@@ -162,17 +175,21 @@ useEffect(() => {
     const target = getClosestPin(worldPos);
 
     // ✅ Snap wire endpoint exactly onto pin center
-   if (target) {
-  worldPos = { x: target.pin.x, y: target.pin.y }; // ✅ only valid fields
+    if (target) {
+      worldPos = { x: target.pin.x, y: target.pin.y };
 
-  target.pin.connected = true;
+      // If the pin belongs to a placed symbol, update via symbol context
+      const sym = (placedSymbols || []).find((s: any) => s.id === target.comp?.id);
+      if (sym) {
+        const updatedPins = (sym.pins || []).map((p: any) => (p.id === target.pin.id ? { ...p, connected: true } : p));
+        updatePlacedSymbol(sym.id, { pins: updatedPins });
+      } else {
+        // Otherwise assume it's a component pin and mutate (legacy behavior)
+        target.pin.connected = true;
+      }
 
-  updateWirePinPosition(
-      target.pin.id,
-      worldPos.x,
-      worldPos.y
-  );
-}
+      updateWirePinPosition(target.pin.id, worldPos.x, worldPos.y);
+    }
 
 
     setDrawing((d) => {
@@ -309,12 +326,191 @@ const processedWires = useMemo(() => {
 }, [wires]);
 
 
+// ----------------------
+// Manhattan router
+// ----------------------
+// Simple grid-based A* router that returns orthogonal waypoints between points.
+const manhattanRoutePolyline = (pts: Point[]): Point[] => {
+  if (!pts || pts.length < 2) return pts;
+  const out: Point[] = [];
+  for (let i = 0; i < pts.length - 1; i++) {
+    const a = pts[i];
+    const b = pts[i + 1];
+    const seg = routeSegmentManhattan(a, b);
+    if (i === 0) out.push(...seg);
+    else out.push(...seg.slice(1)); // avoid duplicating junction
+  }
+  return out;
+};
+
+// Build obstacle rects from components and placed symbols (approximated)
+const buildObstacles = () => {
+  const rects: { x1: number; y1: number; x2: number; y2: number }[] = [];
+
+  // components: use pin positions to form a bbox
+  components.forEach((c: any) => {
+    if (!c.pins || c.pins.length === 0) return;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    c.pins.forEach((p: any) => {
+      minX = Math.min(minX, p.x);
+      minY = Math.min(minY, p.y);
+      maxX = Math.max(maxX, p.x);
+      maxY = Math.max(maxY, p.y);
+    });
+    const pad = 8; // world units padding
+    rects.push({ x1: minX - pad, y1: minY - pad, x2: maxX + pad, y2: maxY + pad });
+  });
+
+  // placed symbols: attempt to compute gfx bbox from symbolData.graphics (if present)
+  (placedSymbols || []).forEach((s: any) => {
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    const units = Array.isArray(s.symbolData) ? s.symbolData : s.symbolData?.unit || [];
+    units.forEach((u: any) => {
+      if (Array.isArray(u.graphics)) {
+        u.graphics.forEach((g: any) => {
+          if (g.kind === 'Rectangle') {
+            const { start, end } = g.data;
+            minX = Math.min(minX, start[0], end[0]);
+            minY = Math.min(minY, start[1], end[1]);
+            maxX = Math.max(maxX, start[0], end[0]);
+            maxY = Math.max(maxY, start[1], end[1]);
+          } else if (g.kind === 'Polyline') {
+            const raw = g.data?.pts?.xy || [];
+            raw.forEach((pt: any) => {
+              minX = Math.min(minX, pt[0]);
+              minY = Math.min(minY, pt[1]);
+              maxX = Math.max(maxX, pt[0]);
+              maxY = Math.max(maxY, pt[1]);
+            });
+          }
+        });
+      }
+    });
+
+    if (minX !== Infinity) {
+      // transform by placed position and scale (assume 1:1 world coords)
+      const px = s.position?.x ?? 0;
+      const py = s.position?.y ?? 0;
+      const pad = 8;
+      rects.push({ x1: px + minX - pad, y1: py + minY - pad, x2: px + maxX + pad, y2: py + maxY + pad });
+    }
+  });
+
+  return rects;
+};
+
+// A very small A* on integer grid
+const routeSegmentManhattan = (start: Point, end: Point): Point[] => {
+  const gridSize = 8; // world units per cell
+  const obstacles = buildObstacles();
+
+  const snapToGrid = (p: Point) => ({ x: Math.round(p.x / gridSize), y: Math.round(p.y / gridSize) });
+  const unsnap = (g: { x: number; y: number }) => ({ x: g.x * gridSize, y: g.y * gridSize });
+
+  const s = snapToGrid(start);
+  const e = snapToGrid(end);
+
+  // quick direct orthogonal path if aligned
+  if (s.x === e.x || s.y === e.y) return [start, end];
+
+  const key = (n: any) => `${n.x},${n.y}`;
+
+  const inObstacle = (gx: number, gy: number) => {
+    const wx = gx * gridSize;
+    const wy = gy * gridSize;
+    return obstacles.some(r => wx >= r.x1 && wx <= r.x2 && wy >= r.y1 && wy <= r.y2);
+  };
+
+  const neighbors = (n: any) => {
+    return [
+      { x: n.x + 1, y: n.y },
+      { x: n.x - 1, y: n.y },
+      { x: n.x, y: n.y + 1 },
+      { x: n.x, y: n.y - 1 },
+    ].filter((nb) => !inObstacle(nb.x, nb.y));
+  };
+
+  const h = (n: any) => Math.abs(n.x - e.x) + Math.abs(n.y - e.y);
+
+  const open: Map<string, { n: any; g: number; f: number; parent?: any }> = new Map();
+  const closed: Set<string> = new Set();
+
+  open.set(key(s), { n: s, g: 0, f: h(s) });
+
+  while (open.size > 0) {
+    // find lowest f
+    let currentKey = "";
+    let current: any = null;
+    for (const [k, v] of open) {
+      if (!current || v.f < current.f) {
+        current = v; currentKey = k;
+      }
+    }
+
+    if (!current) break;
+
+    open.delete(currentKey);
+    closed.add(currentKey);
+
+    if (current.n.x === e.x && current.n.y === e.y) {
+      // reconstruct
+      const path: any[] = [];
+      let cur = current;
+      while (cur) {
+        path.push(cur.n);
+        cur = (cur as any).parent;
+      }
+      path.reverse();
+      // convert to world points and compress straight segments
+      const worldPts = path.map(unsnap);
+      return compressOrthogonal(worldPts);
+    }
+
+    for (const nb of neighbors(current.n)) {
+      const k = key(nb);
+      if (closed.has(k)) continue;
+      const g = current.g + 1;
+      const existing = open.get(k);
+      if (!existing || g < existing.g) {
+        open.set(k, { n: nb, g, f: g + h(nb), parent: current });
+      }
+    }
+  }
+
+  // fallback: simple L-shaped: horizontal then vertical
+  return [start, { x: end.x, y: start.y }, end];
+};
+
+// compress consecutive colinear points (world coords)
+const compressOrthogonal = (pts: Point[]) => {
+  if (!pts || pts.length === 0) return pts;
+  const out: Point[] = [pts[0]];
+  for (let i = 1; i < pts.length; i++) {
+    const p = pts[i];
+    const prev = out[out.length - 1];
+    if (prev.x === p.x && prev.y === p.y) continue;
+    // if same line as previous segment, replace
+    if (out.length >= 2) {
+      const prev2 = out[out.length - 2];
+      if ((prev2.x === prev.x && prev.x === p.x) || (prev2.y === prev.y && prev.y === p.y)) {
+        out[out.length - 1] = p;
+        continue;
+      }
+    }
+    out.push(p);
+  }
+  return out;
+};
+
+
   // ✨ Smooth live preview
   const previewPath = useMemo(() => {
     if (!drawing) return "";
     const snapped = drawing.worldPoints.map(snapWorld);
     const poly = buildPolyline(snapped);
-    return makeOrthogonalRoundedPath(poly, 6);
+    // Route each consecutive segment with Manhattan router to avoid obstacles
+    const routed = manhattanRoutePolyline(poly);
+    return makeOrthogonalRoundedPath(routed, 6);
   }, [drawing, snapWorld, buildPolyline]);
 
 
@@ -328,17 +524,20 @@ const processedWires = useMemo(() => {
     >
       {/* ✅ Final wires */}
 
-    {processedWires.map(w => (
-        <Path
-          key={w.id}
-          data={makeOrthogonalRoundedPath(w.points, 6)}
-          stroke="#29AF0F"
-          strokeWidth={Math.max(baseStroke / scale, 1)}
-          lineCap="round"
-          lineJoin="round"
-          listening={false}
-        />
-      ))}
+    {processedWires.map(w => {
+        const routed = manhattanRoutePolyline(w.points);
+        return (
+          <Path
+            key={w.id}
+            data={makeOrthogonalRoundedPath(routed, 6)}
+            stroke="#29AF0F"
+            strokeWidth={Math.max(baseStroke / scale, 0.5)}
+            lineCap="round"
+            lineJoin="round"
+            listening={false}
+          />
+        )
+      })}
 
   {/* ✅ Draw hump arcs on top */}
   {processedWires.flatMap(w =>
@@ -363,14 +562,14 @@ const processedWires = useMemo(() => {
       {/* ✅ Live glowing preview */}
     {drawing && previewPath && (
         <Path
-            data={previewPath}
-            stroke="#2a9908ff"  // bright green but we reduce visibility with low opacity
-            strokeWidth={Math.max(baseStroke / scale, 1)}
-            opacity={0.25} // ✅ faint watermark look
-            lineCap="round"
-            lineJoin="round"
-            //dash={[6 / scale, 6 / scale]} // ✅ dashed ghost wire
-            listening={false}
+          data={previewPath}
+          stroke="#2a9908ff"  // bright green but we reduce visibility with low opacity
+          strokeWidth={Math.max(baseStroke / scale, 1)}
+          opacity={0.25} // ✅ faint watermark look
+          lineCap="round"
+          lineJoin="round"
+          //dash={[6 / scale, 6 / scale]} // ✅ dashed ghost wire
+          listening={false}
         />
         )}
 

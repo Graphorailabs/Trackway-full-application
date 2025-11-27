@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components -- Canvas component is fine to export */
-import React, { useEffect, useRef } from "react";
+import  { useEffect, useRef } from "react";
 import { useGrid } from "@/features/pcb_editor/contexts/GridContext";
 import { useZoom } from "@/features/pcb_editor/contexts/ZoomContext";
 

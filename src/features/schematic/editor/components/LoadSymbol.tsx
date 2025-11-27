@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react"
-import { api } from  "@/api/api"
-import { extractSymbolByName, extractSymbolNames } from "./extractSymbolLib";
-import { SiCircuitverse } from "react-icons/si";
-import { symbolLibJsonToValue, symbolLibSexprToJson, symbolLibSexprToValue } from "pkg/trackway_parser_wasm";
-import { SymbolPreview } from "./symbolPreview";
 
+import {  extractSymbolNames } from "./extractSymbolLib";
+import { SiCircuitverse } from "react-icons/si";
+import { api } from "@/api/api";
+import {  symbolLibSexprToJson } from "pkg/trackway_parser_wasm";
+import { SymbolPreview } from "./symbolPreview";
+import { useSymbol } from "../context/SymbolContext";
+import { useTool } from "../context/ToolContext";
 
 interface SymbolLibrary {
   id: string;
@@ -13,9 +15,7 @@ interface SymbolLibrary {
 }
 
 
-
 export const LoadSymbol = () => {
-     
      const [isOpen, setIsOpen] = useState(false);
      const [symbolLib, setSymbolLib] = useState<SymbolLibrary[]>([]);
      const [error, setError] = useState("");
@@ -23,7 +23,9 @@ export const LoadSymbol = () => {
     const [selectedLibId, setSelectedLibId] = useState<string | null>(null);
     const [getContentById, setGetContentById] = useState<Record<any, any> | string>("");
     
-    // const [convertedJson, setConvertedJson] = useState<any[]>([]);
+  const { setSelectedSymbol, setSymbolData, setPendingSymbol } = useSymbol();
+
+   const {setTool, setSelectedSymbolId} = useTool();
 
     useEffect(() => {
       let isMounted = true;
@@ -37,7 +39,6 @@ export const LoadSymbol = () => {
               }
               if(isMounted){
                  setSymbolLib(data);
-
                  console.log(data);
               }
   
@@ -51,52 +52,43 @@ export const LoadSymbol = () => {
       }
     }, [])
 
-     const loadSymbolNames = (content: string) => {
-        const name = extractSymbolNames(content);
-        setSymbolNames(name);
-     }
- 
-    //  const handleContent = (name: string , content: string) => {
-    //         const symbolBlock = extractSymbolByName(name, content);
-    //         console.log("symbolBlock", symbolBlock!);  
-    //         setGetContentById(symbolBlock!);
-    //  }
-     
-    //  const handleContent = (id: string, content: string) => {
-    //      const getValue = symbolLibValueFromSexpr
-    //  }
+   
+   const loadSymbolNames = (content: string) => {
+      let names = extractSymbolNames(content);
+
+      // keep only names that do NOT contain "_"
+      names = names.filter((n: string) => !n.includes("_"));
+
+      setSymbolNames(names);
+    };
+
 
 
     const handleContent = (id: string, content: string) => {
           const convertedJson = symbolLibSexprToJson(content, true);         
           const parsedJson = JSON.parse(convertedJson);
           console.log("parsed value",parsedJson);
-       
-          const symbolData = parsedJson.symbol.map((sym: any) => {
-             const units: Record<string, {graphics: any[]; pin: any[]}> = {};
-             sym.unit?.forEach((u: any) => {
-               if(u && u.id){
-                units[u.id] = {
-                  graphics: u.graphics || [],
-                  pin: u.pin || [],
-                }
-              }
-             });
-
-             return {
-                id: sym.id,
-                properties: Object.fromEntries(sym.property.map((p: any) => [p.key, p.value])),
-                units,
-             }
-          })
-
         
+          const symbolData = parsedJson.symbol.map((sym: any) => ({
+            id: sym.id,
+            properties: Object.fromEntries(sym.property.map((p: any) => [p.key, p.value])),
+            unit: sym.unit
+          }));
+
+           console.log('symbolData : ', symbolData)
+
           const selectedSymbol = symbolData.find((sym: any) => sym.id === id);
 
           if (selectedSymbol) {
-            console.log("Found symbol:", selectedSymbol.units);
-            setGetContentById(selectedSymbol.units);
-            
+            console.log("Found symbol:", selectedSymbol.unit);
+            setGetContentById(selectedSymbol);        // ⭐ STORE FULL SYMBOL OBJECT
+            setSelectedSymbol(selectedSymbol);        // ⭐ STORE FULL OBJECT
+            setSymbolData(selectedSymbol); 
+           setSelectedSymbolId(selectedSymbol.id);
+          console.log("✔ selectedSymbolId set:", selectedSymbol.id);
+          setPendingSymbol(selectedSymbol);
+          console.log('pendingsymolfromhandlecontent', selectedSymbol )
+                              
           } else {
             console.warn("Symbol not found:", id);
             // fallback — just show first symbol
@@ -109,22 +101,14 @@ export const LoadSymbol = () => {
           }
         };
 
-
-         console.log(getContentById);
-
-
-      // const maindata = symbolLib.find(s => s.id === selectedLibId)
-      // console.log("maindata", maindata)
-      // const convertedJson = maindata ? symbolLibSexprToJson(maindata.content , true) : null;
-      // console.log("convertedJson", convertedJson)
-
     return (
         <>
           <button
               onClick={() => setIsOpen(true)}
               className="bg-white text-black font-semibold px-4 py-2 rounded-lg shadow-md hover:bg-gray-300 transition"
             >
-            <SiCircuitverse />         
+            <SiCircuitverse />
+           
           </button>
         
        {isOpen && (
@@ -160,6 +144,7 @@ export const LoadSymbol = () => {
                 onClick={() => {
                   setSelectedLibId(s.id);
                   loadSymbolNames(s.content);
+                  console.log("Selected Library name:",s.name);
                 }}
                 className={`cursor-pointer px-4 py-2 transition-colors ${
                   selectedLibId === s.id ? "bg-[#333]" : "hover:bg-[#222]"
@@ -191,6 +176,7 @@ export const LoadSymbol = () => {
                 {name}
               </li>
             ))}
+            
           </ul>
         </aside>
 
@@ -202,14 +188,46 @@ export const LoadSymbol = () => {
 
           <div className="flex bg-[#131313] rounded overflow-y-auto h-full p-3">
             <pre className="text-gray-400 text-xs whitespace-pre-wrap break-words">
-              {/* {typeof getContentById === "string"
-                ? getContentById
-                : JSON.stringify(getContentById, null, 2)} */}
-
-                  <SymbolPreview data={getContentById as any} />
+              {/* <SymbolPreview data={getContentById}/> */}
+              <SymbolPreview  data={getContentById}/>
             </pre>
           </div>
 
+          <div className="mt-4 flex justify-end gap-2">
+            <button 
+             onClick={() => setIsOpen(false) }
+            className="mt-4 bg-gray-600 rounded px-8 cursor-pointer text-white transition hover:bg-gray-">
+              Cancel
+            </button>
+
+            <button
+              onClick={() => {
+                  if (!getContentById || typeof getContentById !== "object") {
+                      // No symbol selected — keep modal open and inform user
+                      console.warn("No symbol selected — please choose a symbol before pressing OK");
+                      return;
+                  }
+
+                  // ✔ send full symbol object as pending (do not mark it as placed)
+                  setPendingSymbol(getContentById.unit);
+                  console.log('pendingsymbolfromok', getContentById);
+                  // Do not set `selectedSymbol` here — that's reserved for placed components
+                  setSymbolData(getContentById);
+                  setSelectedSymbolId(getContentById.id);
+                  console.log("✔ OK selected symbol id:", getContentById.id);
+
+                  // small delay to ensure pendingSymbol state is applied before switching tool
+                  setTimeout(() => setTool("symbol"), 10);
+
+                  setIsOpen(false);
+                }}
+              className="mt-4 bg-blue-600 text-white px-8 rounded hover:bg-blue-700"
+            >
+              OK
+            </button>
+
+
+          </div>
         </div>
       </div>
     </div>
@@ -220,3 +238,16 @@ export const LoadSymbol = () => {
         </>
     )
 }
+
+
+
+// function extractPinsFromSymbol(unit: any) {
+//   if (!unit?.pins) return [];
+
+//   return unit.pins.map((p: any) => ({
+//     id: p.number[""] ,
+//     x: p.at[0],
+//     y: p.at[1],
+//     connected: false
+//   }));
+// }

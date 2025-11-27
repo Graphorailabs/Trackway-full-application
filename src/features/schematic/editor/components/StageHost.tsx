@@ -14,7 +14,7 @@ type StageHostProps = PropsWithChildren<{
 export default function StageHost({
   children,
   className,
-  style,
+  // style,
   draggable = false,
   enableWheelZoom = true,
 }: StageHostProps) {

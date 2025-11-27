@@ -1,33 +1,50 @@
-import { useState } from "react";
-import { useTool, type ComponentKey } from "../context/ToolContext";
+
+// import { useState } from "react";
+import { useTool } from "../context/ToolContext";
 import { LuMousePointer2, LuSpline } from "react-icons/lu";
-import { TbCircuitResistor, TbCircuitCapacitor, TbCircuitInductor, TbCircuitGround } from "react-icons/tb";
-import { IoIosArrowDown } from "react-icons/io";
+// import {
+//   TbCircuitResistor,
+//   TbCircuitCapacitor,
+//   TbCircuitInductor,
+//   TbCircuitGround,
+// } from "react-icons/tb";
+
+// import { IoIosArrowDown } from "react-icons/io";
 import { LoadSymbol } from "./LoadSymbol";
+import { useSymbol } from "../context/SymbolContext";
 
 export default function Toolbar() {
-  const { tool, setTool, selectedComponent, setSelectedComponent } = useTool();
-  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const { tool, setTool, setSelectedComponent } = useTool();
 
- const COMPONENTS: { key: ComponentKey; icon: React.ReactNode }[] = [
-  { key: "resistor", icon: <TbCircuitResistor /> },
-  { key: "capacitor", icon: <TbCircuitCapacitor /> },
-  { key: "inductor", icon: <TbCircuitInductor /> },
-  { key: "ground", icon: <TbCircuitGround /> },
-  // Optional: add "vcc" only if you have an icon for it
-];
+  // ⭐ SymbolContext → contains selectedSymbol
+  const { selectedSymbol } = useSymbol();
+  // const [dropdownOpen, setDropdownOpen] = useState(false);
 
+  // const handlesymboldata = () => {
+  //     console.log('pendingdatatoolbar', pendingSymbol )
+  // }
+  // const COMPONENTS = [
+  //   { key: "resistor", icon: <TbCircuitResistor /> },
+  //   { key: "capacitor", icon: <TbCircuitCapacitor /> },
+  //   { key: "inductor", icon: <TbCircuitInductor /> },
+  //   { key: "ground", icon: <TbCircuitGround /> },
+  // ];
 
-  // default show resistor if none selected
-  const currentComponent =
-    COMPONENTS.find(c => c.key === selectedComponent)?.icon || <TbCircuitResistor />;
+  // ⭐ If a symbol is selected → show its ID
+  //const currentComponent = selectedSymbol?.id 
+// const currentComponent = selectedSymbol?.id;
+
+    // COMPONENTS.find((c) => c.key === selectedComponent)?.key ||
+    // "resistor";
 
   return (
-    <div className="relative flex gap-3 p-2 bg-gray-200 text-black">
-
+    <div className="flex flex-col items-center gap-2 p-1">
       {/* SELECT TOOL */}
       <button
-        className={`px-3 py-2 rounded ${tool === "none" ? "bg-green-300" : "bg-gray-100"}`}
+        title="Select"
+        className={`w-10 h-10 rounded flex items-center justify-center ${
+          tool === "none" ? "bg-green-300" : "bg-gray-100"
+        }`}
         onClick={() => {
           setTool("none");
           setSelectedComponent(null);
@@ -38,7 +55,10 @@ export default function Toolbar() {
 
       {/* WIRE TOOL */}
       <button
-        className={`px-3 py-2 rounded ${tool === "wire" ? "bg-green-300" : "bg-gray-100"}`}
+        title="Wire"
+        className={`w-10 h-10 rounded flex items-center justify-center ${
+          tool === "wire" ? "bg-green-300" : "bg-gray-100"
+        }`}
         onClick={() => {
           setTool("wire");
           setSelectedComponent(null);
@@ -47,33 +67,46 @@ export default function Toolbar() {
         <LuSpline />
       </button>
 
-      <button >
+      {/* Load Symbol Button */}
+      <div className="w-10 h-10 flex items-center justify-center">
         <LoadSymbol />
-      </button>
+      </div>
 
-      {/* COMPONENT DROPDOWN */}
-      <div className="relative">
+      {selectedSymbol && (
+        <div className="text-xs text-gray-700 truncate w-12 text-center">
+          {selectedSymbol.id}
+        </div>
+      )}
+      
+
+      {/* COMPONENT / SYMBOL SELECT DROPDOWN */}
+      {/* <div className="relative">
         <button
           className={`flex items-center gap-2 px-3 py-2 rounded ${
-            tool === "component" ? "bg-green-300" : "bg-gray-100"
+            tool ===  "symbol" ? "bg-red-300" : "bg-gray-100"
           }`}
           onClick={() => setDropdownOpen(!dropdownOpen)}
         >
-          {currentComponent}
+      {selectedSymbol ? (
+        <div className="flex items-center">
+          <span className="ml-1">{selectedSymbol.id}</span>
+        </div>
+      ) : (
+         currentComponent  // built-in resistor/capacitor icons
+      )}
+
           <IoIosArrowDown size={14} />
-        </button>
+        </button> */}
 
-        
-
-        {/* DROPDOWN LIST */}
-        {dropdownOpen && (
-          <div className="absolute mt-1 left-0 bg-white shadow-lg border rounded z-50">
-            {COMPONENTS.map((comp) => (
+        {/* DROPDOWN */}
+        {/* {dropdownOpen && (
+          <div className="absolute mt-1 left-0 bg-white shadow-lg border rounded z-50"> */}
+            {/* Built-in Components */}
+            {/* {COMPONENTS.map((comp) => (
               <button
                 key={comp.key}
                 className="flex gap-2 items-center px-3 py-1 hover:bg-gray-200 w-full text-left"
                 onClick={() => {
-                  setSelectedComponent(comp.key);
                   setTool("component");
                   setDropdownOpen(false);
                 }}
@@ -81,11 +114,31 @@ export default function Toolbar() {
                 {comp.icon}
                 {comp.key}
               </button>
-            ))}
-          </div>
-        )}
-      </div>
+            ))} */}
 
+            {/* ⭐ If symbol loaded → show symbol id */}
+            {/* {selectedSymbol && selectedSymbolId ? (
+              <button
+                className="flex gap-2 items-center px-3 py-1 hover:bg-blue-200 w-full text-left"
+                onClick={() => {
+                  if (!selectedSymbol) return;
+                  setSelectedSymbolId(selectedSymbol.id); // string ID
+                  setPendingSymbol(selectedSymbol); // full object
+                  setTool("symbol");
+                  setDropdownOpen(false);
+                }}
+              >
+                📘 Symbol: {selectedSymbol.id}
+              </button>
+
+            ): (
+                <span>Select Symbol</span>
+            )} */}
+          {/* </div>
+        )} */}
+
+{/*        
+      </div> */}
     </div>
   );
 }

@@ -1,5 +1,7 @@
-import { useMemo } from "react";
-import { Group } from "react-konva";
+
+import  { useMemo } from "react";
+import {  Group, Rect, Circle, Line, Text } from "react-konva";
+
 import { usePcb } from "@/features/pcb_editor/contexts/PcbContext";
 import FootprintKonvaRenderer from "@/features/pcb_editor/footprint/FootprintKonvaRenderer";
 import { useLayers } from "@/features/pcb_editor/contexts/LayerContext";

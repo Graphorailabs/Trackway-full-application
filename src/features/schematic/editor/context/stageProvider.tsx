@@ -27,8 +27,8 @@ type StageContextValue = {
 
 };
 
-export type Tool = "none" | "wire" | "component";
-export type ComponentType = "res" | "cap" | "ind" | "dio" | null;
+export type Tool = "none" | "wire" | "component" | "symbol";
+export type ComponentType = "res" | "cap" | "ind" | "dio" | string | null;
 
 const StageContext = createContext<StageContextValue | null>(null);
 
