@@ -130,11 +130,6 @@ export default function FootprintKonvaRenderer({ model, respectLayerVisibility =
             return <FootprintGraphicCircle key={i} g={g} />;
           }
           if (g.kind === "arc") {
-            // Debug: log arc geometry to confirm arc objects reach the arc renderer
-            try {
-              // eslint-disable-next-line no-console
-              console.log("FootprintKonvaRenderer: arc", g);
-            } catch (e) {}
             return <FootprintGraphicArc key={i} g={g} />;
           }
           if (g.kind === "text") {

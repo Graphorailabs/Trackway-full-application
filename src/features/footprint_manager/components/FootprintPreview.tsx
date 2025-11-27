@@ -133,14 +133,12 @@ function FootprintPreviewInner({ meta }: Props) {
           const fp = (lib as any).footprint ?? lib;
           if (mounted) {
             setFpJson(fp);
-            console.log("Footprint parsed (sexpr):", fp, { meta });
           }
         } catch (e) {
           const lib = footprintLibJsonToValue(txt as string);
           const fp = (lib as any).footprint ?? lib;
           if (mounted) {
             setFpJson(fp);
-            console.log("Footprint parsed (json):", fp, { meta });
           }
         }
       } catch (e: any) {
@@ -156,7 +154,7 @@ function FootprintPreviewInner({ meta }: Props) {
 
   // Debug: log parsed footprint model when available
   useEffect(() => {
-    if (fpJson) console.log("FootprintPreview parsed model:", fpJson);
+    // debug logging removed: parsed footprint model was previously logged here
   }, [fpJson]);
 
   if (!meta) return <div className="p-6 text-sm text-slate-400">No footprint selected</div>;

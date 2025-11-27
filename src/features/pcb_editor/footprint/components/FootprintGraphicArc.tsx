@@ -64,25 +64,23 @@ export default function FootprintGraphicArc({ g }: Props) {
   let midUsedAsCenter = false;
   if (mx !== null && my !== null) {
     const cc = circumcenter(sx, sy, mx, my, ex, ey);
-    if (cc) {
+      if (cc) {
       cx = cc.x;
       cy = cc.y;
       midUsedAsCenter = false;
-      // debug
-      if (dbg) console.log("FootprintGraphicArc: circumcenter computed", { cx, cy, sx, sy, mx, my, ex, ey, uuid: g?.data?.uuid ?? g?.uuid });
     } else {
       // fallback: mid used as explicit center
       cx = mx;
       cy = my;
       midUsedAsCenter = true;
       const flipArc = (typeof window !== "undefined" ? (window as any).FOOTPRINT_PREVIEW_FLIP_ARC_POINTS ?? DEFAULT_FLIP : DEFAULT_FLIP) as boolean;
-      if (flipArc) {
+        if (flipArc) {
         const _sx = sx, _sy = sy;
         sx = ex; sy = ey;
         ex = _sx; ey = _sy;
-        if (dbg) console.log("FootprintGraphicArc: using mid as center and flipped start/end", { sx, sy, ex, ey, mx, my, uuid: g?.data?.uuid ?? g?.uuid });
+        
       } else {
-        if (dbg) console.log("FootprintGraphicArc: using mid as center", { sx, sy, ex, ey, mx, my, uuid: g?.data?.uuid ?? g?.uuid });
+        
       }
     }
   }
@@ -96,8 +94,6 @@ export default function FootprintGraphicArc({ g }: Props) {
   if (dbg) {
     if (cx === null || cy === null) {
       console.warn("FootprintGraphicArc: could not compute circumcenter for arc", { sx, sy, mx, my, ex, ey, g });
-    } else {
-      console.log("FootprintGraphicArc: computed center", { cx, cy, r });
     }
   }
 

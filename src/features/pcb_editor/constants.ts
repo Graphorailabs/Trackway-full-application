@@ -214,7 +214,7 @@ export const GRID_PIXEL_TARGET_MAX = 40;
 export const GRID_MAJOR_FACTOR = 10;
 
 // Feature flags for PCB editor
-export const ENABLE_GRID_DEBUG = true;
+export const ENABLE_GRID_DEBUG = false;
 export const ENABLE_SNAP_TO_VISIBLE_GRID = true;
 // Endpoint snapping: when enabled, clicks/preview near an existing track
 // endpoint will snap to that endpoint and endpoint-only contacts are
@@ -226,3 +226,6 @@ export const ENDPOINT_SNAP_TOLERANCE = 0.18;
 export const PAD_SNAP_RADIUS = 0.2;
 // Toggle to enable pad hover highlight in the editor UI
 export const ENABLE_PAD_HIGHLIGHT = true;
+// Debug toggle: when true, draw a visible marker at each pad's canonical
+// center to help debug snapping/finalization behavior in the PCB editor.
+export const ENABLE_PAD_CENTER_DEBUG = true;

@@ -1,7 +1,7 @@
 import { Group, Rect, Circle, Text } from "react-konva";
 import { useGrid } from "@/features/pcb_editor/contexts/GridContext";
 import { usePadHover } from "@/features/pcb_editor/contexts/PadHoverContext";
-import { ENABLE_PAD_HIGHLIGHT } from "@/features/pcb_editor/constants";
+import { ENABLE_PAD_HIGHLIGHT, ENABLE_PAD_CENTER_DEBUG } from "@/features/pcb_editor/constants";
 
 type PadProps = {
   p: any;
@@ -84,6 +84,7 @@ export default function FootprintPad({ p, fpUuid, padIndex }: PadProps) {
             fill="#fff"
           />
         ) : null}
+        {ENABLE_PAD_CENTER_DEBUG ? <Circle x={sx} y={sy} radius={0.35} fill="#ffeb3b" stroke="#000" strokeWidth={0.1} listening={false} /> : null}
       </Group>
     );
   }
@@ -113,6 +114,7 @@ export default function FootprintPad({ p, fpUuid, padIndex }: PadProps) {
           fill="#fff"
         />
       ) : null}
+      {ENABLE_PAD_CENTER_DEBUG ? <Circle x={sx} y={sy} radius={0.35} fill="#ffeb3b" stroke="#000" strokeWidth={0.1} listening={false} /> : null}
     </Group>
   );
 }

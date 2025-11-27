@@ -49,18 +49,17 @@ export default function FootprintCanvas() {
   };
 
   const handleMouseDown = (e: KonvaEventObject<MouseEvent>) => {
-    console.log("[FootprintCanvas] MouseDown event", { tool, previewActive: preview?.active });
+    // Debug logging removed: MouseDown footprint canvas event
     const pos = e.target.getStage()?.getPointerPosition();
     if (!pos) {
-      console.log("[FootprintCanvas] No pointer position");
+      // No pointer position available
       return;
     }
     const worldPos = screenToWorld(pos);
-    console.log("[FootprintCanvas] WorldPos", worldPos);
+    // worldPos computed for footprint handling
 
     // If preview active, place footprint
     if (preview?.active && preview?.footprint) {
-      console.log("[FootprintCanvas] Placing footprint preview");
       const placeAt = computeSnapped(worldPos);
       placeFootprint(preview.footprint as any, { x: placeAt.x, y: placeAt.y, angle: preview.angle ?? 0 });
       clearPreview();
@@ -85,10 +84,10 @@ export default function FootprintCanvas() {
       } catch (err) {}
       node = node.getParent ? node.getParent() : null;
     }
-    console.log("[FootprintCanvas] TargetId", targetId);
+    // computed targetId for selection
 
     if (targetId) {
-      console.log("[FootprintCanvas] Selecting footprint", targetId);
+      // selecting footprint id
       select(targetId);
       // Start dragging if selection tool is active
       if (tool === "select") {
@@ -99,7 +98,6 @@ export default function FootprintCanvas() {
     }
 
     // No footprint targeted: clear selection
-    console.log("[FootprintCanvas] No footprint targeted, clearing selection");
     clear();
   };
 

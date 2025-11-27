@@ -50,6 +50,9 @@ export function ToolbarItem({
     <button type="button" className={classNames(base, palette, className)} {...props}>
       {children}
       {label ? <ToolLabel side={labelSide}>{label}</ToolLabel> : null}
+      {active ? (
+        <span className="pointer-events-none absolute inset-0 rounded-lg ring-2 ring-emerald-400/50" aria-hidden="true" />
+      ) : null}
     </button>
   );
 }

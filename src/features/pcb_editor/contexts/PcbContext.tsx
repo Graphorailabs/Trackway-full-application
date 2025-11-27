@@ -250,9 +250,7 @@ export function PcbProvider({ children }: PropsWithChildren) {
         placed: true,
       } as import("trackway-parser-wasm").Footprint;
 
-      // Debug: log how many elements we're placing to help trace missing parts
-      // eslint-disable-next-line no-console
-      console.log("placeFootprint: placing footprint", { uuid: instance.uuid, pads: (instance as any).pads?.length, graphics: (instance as any).graphics?.length, texts: (instance as any).texts?.length });
+      // Debug logging removed: placement details were previously emitted here.
 
       addFootprint(instance);
     },

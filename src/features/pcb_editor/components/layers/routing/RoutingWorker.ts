@@ -36,6 +36,7 @@ interface RouteMessage {
   goal: Pt;
   params: RouterParams;
   obstacles?: ObstacleSeg[];
+  padZones?: Array<{ cx: number; cy: number; r: number }>;
 }
 
 interface RouteResponse {
@@ -47,9 +48,11 @@ interface RouteResponse {
 // Basic collision API for worker that uses a list of linear obstacles.
 class WorkerCollisionAPI {
   obstacles: ObstacleSeg[];
+  padZones: Array<{ cx: number; cy: number; r: number }> | undefined;
 
   constructor(obstacles?: ObstacleSeg[]) {
     this.obstacles = obstacles ?? [];
+    this.padZones = undefined;
   }
 
   // Helper: check if two segments intersect (including colinear overlap)
@@ -99,6 +102,18 @@ class WorkerCollisionAPI {
     const endpointTol = ENABLE_ENDPOINT_SNAP ? ENDPOINT_SNAP_TOLERANCE : 0;
     const ptDist = (a: Pt, b: Pt) => Math.hypot(a.x - b.x, a.y - b.y);
     for (const o of this.obstacles) {
+      // If pad zones provided, allow segment-obstacle overlap when both
+      // the tested segment and the obstacle overlap the same pad zone.
+      if (this.padZones && this.padZones.length) {
+        for (const z of this.padZones) {
+          const segDistToZone = this.pointSegmentDist({ x: z.cx, y: z.cy }, p1, p2);
+          const obsDistToZone = this.pointSegmentDist({ x: z.cx, y: z.cy }, o.start, o.end);
+          if (segDistToZone <= z.r + 1e-6 && obsDistToZone <= z.r + 1e-6) {
+            // both lie within same pad zone -> ignore this obstacle
+            continue;
+          }
+        }
+      }
       // Ignore obstacle if it only shares an endpoint with the tested segment.
       if (ptsEq(p1, o.start) || ptsEq(p1, o.end) || ptsEq(p2, o.start) || ptsEq(p2, o.end)) continue;
       const thresh = (o.width / 2) + clearance + (_trackWidth / 2);
@@ -124,6 +139,17 @@ class WorkerCollisionAPI {
     const ptDist = (a: Pt, b: Pt) => Math.hypot(a.x - b.x, a.y - b.y);
     return this.obstacles.filter(o => {
       if (ptsEq(p1, o.start) || ptsEq(p1, o.end) || ptsEq(p2, o.start) || ptsEq(p2, o.end)) return false;
+      // If pad zones provided, allow segment-obstacle overlap when both
+      // the tested segment and the obstacle overlap the same pad zone.
+      if (this.padZones && this.padZones.length) {
+        for (const z of this.padZones) {
+          const segDistToZone = this.pointSegmentDist({ x: z.cx, y: z.cy }, p1, p2);
+          const obsDistToZone = this.pointSegmentDist({ x: z.cx, y: z.cy }, o.start, o.end);
+          if (segDistToZone <= z.r + 1e-6 && obsDistToZone <= z.r + 1e-6) {
+            return false;
+          }
+        }
+      }
       const dist = this.segSegDist(p1, p2, o.start, o.end);
       const thresh = (o.width / 2) + clearance + (_trackWidth / 2);
       if (dist <= thresh) {
@@ -386,6 +412,8 @@ self.onmessage = (e: MessageEvent<RouteMessage>) => {
 
   if (message.type === "route") {
     const collisionAPI = new WorkerCollisionAPI((message as any).obstacles as ObstacleSeg[] | undefined);
+    // attach padZones if provided so collision checks can allow pad-internal crossings
+    (collisionAPI as any).padZones = (message as any).padZones ?? [];
     const router = new WorkerOctilinearRouter(message.params, collisionAPI);
     const result = router.route(message.start, message.goal);
 

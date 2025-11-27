@@ -4,6 +4,8 @@ import type { Pt } from "../components/layers/routing/octilinearRouter";
 interface RoutingContextValue {
   previewTracks: Pt[];
   setPreviewTracks: (tracks: Pt[]) => void;
+  previewIncompatibleWithPad: boolean;
+  setPreviewIncompatibleWithPad: (v: boolean) => void;
 }
 
 interface RoutingLayerApi {
@@ -23,6 +25,7 @@ export function useRouting() {
 
 export function RoutingProvider({ children }: PropsWithChildren) {
   const [previewTracks, setPreviewTracks] = useState<Pt[]>([]);
+  const [previewIncompatibleWithPad, setPreviewIncompatibleWithPad] = useState<boolean>(false);
   const [currentTraceLayer, setCurrentTraceLayer] = useState<string | null>(null);
 
   const toggleCurrentTraceLayer = () => {
@@ -37,7 +40,7 @@ export function RoutingProvider({ children }: PropsWithChildren) {
   };
 
   return (
-    <RoutingContext.Provider value={{ previewTracks, setPreviewTracks, currentTraceLayer, setCurrentTraceLayer, toggleCurrentTraceLayer, resetCurrentTraceLayer }}>
+    <RoutingContext.Provider value={{ previewTracks, setPreviewTracks, previewIncompatibleWithPad, setPreviewIncompatibleWithPad, currentTraceLayer, setCurrentTraceLayer, toggleCurrentTraceLayer, resetCurrentTraceLayer }}>
       {children}
     </RoutingContext.Provider>
   );

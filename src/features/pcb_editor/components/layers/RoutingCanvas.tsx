@@ -24,7 +24,7 @@ export function RoutingCanvas() {
   const pcbApi = usePcb();
   const { pcb } = pcbApi;
   const { visibility } = useLayers();
-  const { previewTracks } = useRouting();
+  const { previewTracks, previewIncompatibleWithPad } = useRouting();
   const { camera, zoom, viewportCenter } = useCameraViewport();
 
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -187,18 +187,41 @@ export function RoutingCanvas() {
     <div className="absolute inset-0" ref={containerRef} style={{ pointerEvents: "none" }}>
       <CanvasStage width={size.width} height={size.height} zoom={zoom} viewportCenter={viewportCenter} camera={camera}>
         <Layer>
-          {renderBackSegments()}
-          {previewLines.map((line, i) => (
-            <Line
-              key={`preview-${i}`}
-              points={[line.start.x, line.start.y, line.end.x, line.end.y]}
-              stroke="yellow"
-              strokeWidth={line.width}
-              opacity={0.7}
-              dash={[5, 5]}
-            />
-          ))}
-          {renderFrontSegments()}
+          {/* If preview is incompatible with a pad, draw it under other geometry
+              with a dimmed style so it appears to be 'passing under' the pad. */}
+          {previewIncompatibleWithPad ? (
+            // draw preview first (beneath tracks/vias) with dimmed gray style
+            <>
+              {previewLines.map((line, i) => (
+                <Line
+                  key={`preview-incompat-${i}`}
+                  points={[line.start.x, line.start.y, line.end.x, line.end.y]}
+                  stroke="#777"
+                  strokeWidth={line.width}
+                  opacity={0.45}
+                  dash={[3, 4]}
+                />
+              ))}
+              {renderBackSegments()}
+              {renderFrontSegments()}
+            </>
+          ) : (
+            // compatible preview: draw between back and front segments with highlight
+            <>
+              {renderBackSegments()}
+              {previewLines.map((line, i) => (
+                <Line
+                  key={`preview-${i}`}
+                  points={[line.start.x, line.start.y, line.end.x, line.end.y]}
+                  stroke="yellow"
+                  strokeWidth={line.width}
+                  opacity={0.7}
+                  dash={[5, 5]}
+                />
+              ))}
+              {renderFrontSegments()}
+            </>
+          )}
           {renderVias()}
         </Layer>
       </CanvasStage>

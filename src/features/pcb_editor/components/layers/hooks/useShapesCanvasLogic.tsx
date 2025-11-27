@@ -34,12 +34,12 @@ export function useShapesCanvasLogic() {
   const measurement = useMeasurementSafe();
   const {
     isDrawing,
-    startPoint,
-    currentPoint,
+    // startPoint,
+    // currentPoint,
     polygonPoints,
     arcPhase,
-    arcStartPoint,
-    arcRadius,
+    // arcStartPoint,
+    // arcRadius,
     startDrawing,
     addPolygonPoint,
     advanceArcToSweep,
@@ -51,8 +51,8 @@ export function useShapesCanvasLogic() {
   const { pcb, addGraphicItem, updatePcb, placeFootprint, updateFootprint } = usePcb();
   const { minorSpacing, renderMinorPx } = useGrid();
   const { selectedUuid, select, clear, openContextMenu } = useSelection();
-  const { tool, setTool, textEffects: defaultTextEffects, strokeWidth: toolStrokeWidth } = useToolContext();
-  const { selectedLayerId, visibility } = useLayers();
+  const { tool, setTool, textEffects: defaultTextEffects } = useToolContext();
+  const { selectedLayerId } = useLayers();
   const { preview, setPreview, clearPreview } = useFootprintPreview();
 
   // text overlay state

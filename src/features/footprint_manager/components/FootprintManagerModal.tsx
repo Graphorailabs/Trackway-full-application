@@ -47,7 +47,7 @@ export default function FootprintManagerModal({ open, onClose, onPlace, inEditor
   } = manager;
 
   useEffect(() => {
-    if (selected) console.log("Footprint selected metadata:", selected);
+    // debug logging removed: selected footprint metadata was previously logged here
   }, [selected]);
 
   return !open ? null : (
