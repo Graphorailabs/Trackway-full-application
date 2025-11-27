@@ -1,5 +1,5 @@
-import React, { useMemo } from "react";
-import { Layer, Group, Rect, Circle, Line, Text } from "react-konva";
+import  { useMemo } from "react";
+import {  Group, Rect, Circle, Line, Text } from "react-konva";
 import { usePcb } from "@/features/pcb_editor/contexts/PcbContext";
 
 // Footprint Konva renderer that returns Konva nodes to be placed inside the

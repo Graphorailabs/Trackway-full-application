@@ -14,6 +14,7 @@ export type ComponentItem = {
   name?: string;
   position: Point; 
   pins: Pin[];
+  symbolData?: any;
 };
 
 type ComponentContextValue = {

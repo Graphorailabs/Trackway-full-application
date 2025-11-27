@@ -14,7 +14,7 @@ export default function DottedGrid() {
   // Adjust dot visibility based on zoom
   const worldMinor = MINOR_WORLD;
   const screenMinor = worldMinor * scale;
-  const screenMajor = screenMinor * MAJOR_EVERY;
+  // const screenMajor = screenMinor * MAJOR_EVERY;
 
   // Dot sizes (scale-aware)
   const minorDotSize = Math.max(0.6 * scale, 0.5);

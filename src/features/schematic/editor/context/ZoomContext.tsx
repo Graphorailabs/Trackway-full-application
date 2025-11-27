@@ -45,7 +45,7 @@ export function ZoomProvider({ children, config }: PropsWithChildren<{ config?: 
   const value = useMemo<ZoomContextValue>(() => {
     const minScale = config?.minScale ?? 0.25;
     const maxScale = config?.maxScale ?? 4;
-    const scaleStep =  1.25;
+const scaleStep = config?.scaleStep ?? 1.06;
 
     const clamp = (s: number) => Math.max(minScale, Math.min(maxScale, s));
 

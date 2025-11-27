@@ -6,6 +6,7 @@ import { useComponents } from "../context/ComponentContext";
 import { SvgSymbol } from "./SvgSymbol";
 import { useWires } from "../context/WireContext";
 import { useGrid } from "../context/GlobalGrid";
+// import { useSymbol } from "../context/SymbolContext";
 // import { useGrid } from "../context/GridContext";
 
 export default function ComponentTool() {
@@ -85,7 +86,7 @@ export default function ComponentTool() {
       if (!stage) return;
 
       stage.on("click", placeComponent);
-
+      
       const exitPlacement = (e: KeyboardEvent) => {
         if (e.key === "Escape") {
           setSelectedComponent(null);
@@ -101,6 +102,8 @@ export default function ComponentTool() {
       };
     }, [tool, selectedComponent]);
 
+
+    
 
 
  const { gridStep } = useGrid(); // ✅ get grid spacing
@@ -143,6 +146,7 @@ const handleDragMove = (comp: any, e: any) => {
     ground: "/symbols/ground.svg",
   };
 
+
   return (
     <Layer
       x = {position.x}
@@ -168,7 +172,8 @@ const handleDragMove = (comp: any, e: any) => {
         >
           {/* ✅ Component symbol */}
           <SvgSymbol path={symbolPath[c.name]} scale={scale} />
-
+         {/* <SymbolPreviewCanvas symbolData={symbolData} /> */}
+         
  {c.pins.map((p: any) =>
   !p.connected && (
     <Circle

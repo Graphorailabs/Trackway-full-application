@@ -1,4 +1,3 @@
-
 import { Layer } from "react-konva";
 
 import StageHost from "./components/StageHost";
@@ -8,48 +7,44 @@ import { StageProvider } from "./context/stageProvider";
 import { ZoomProvider } from "./context/ZoomContext";
 import WireTool from "./layers/WireTool";
 import BoardSheet from "./layers/BoardSheet";
-import { WireProvider } from "./context/WireContext";
-// import DottedGrid from "./layers/DotedGridLayer";
+// WireProvider moved to page-level so RightBar can access wires
 import CrossHairGrid from "./layers/CrossHairGrid";
-import ComponentTool from "./components/componentTool";
-
+// import ComponentTool from "./components/componentTool";
+// import { SymbolPreview } from "./components/symbolPreview";
+// import { LoadSymbol } from "./components/LoadSymbol";
+// import { SymbolPreviewCanvas } from "./components/SymbolPreviewCanvas";
+import SymbolPlacementTool from "./components/SymbolPlacementTool";
 
 
 export function SchematicCanvas() {
 
-    return (
-      
+
+  return (
     <StageProvider>
-  <ZoomProvider config={{ minScale: 0.25, maxScale: 4, scaleStep: 1.05 }}>
-    <GridProvider initial={{ step: 40, baseStep: 40, visible: true }}>
-      <ComponentProvider>
-        <WireProvider>   {/* ✅ Add this wrapper here! */}
-          <StageHost
-            style={{ width: "100%", height: "100%" }}
-            enableWheelZoom
-            draggable={false}
-          >
-             <CrossHairGrid />
-             {/* <DottedGrid /> */}
-             
-            <Layer listening={false}>
-              <BoardSheet />
-            </Layer>
+      <ZoomProvider config={{ minScale: 0.25, maxScale: 4, scaleStep: 1.05 }}>
+        <GridProvider initial={{ step: 40, baseStep: 40, visible: true }}>
+          <ComponentProvider>
+                <StageHost
+                  style={{ width: "100%", height: "100%" }}
+                  enableWheelZoom
+                  draggable={false}
+                >
+                  <CrossHairGrid />
 
-            {/* ✅ Now both tools can access wires */}
-            <ComponentTool />
-            <WireTool />
-            {/* <GridLayer /> */}
-        
-            {/* <PinLayer /> */}
-          </StageHost>
+                  <Layer listening={false}>
+                    <BoardSheet />
+                  </Layer>
 
-        </WireProvider>
-      </ComponentProvider>
-    </GridProvider>
-  </ZoomProvider>
-</StageProvider>
-
-    
-    )
+                    <SymbolPlacementTool />
+                 {/* <SymbolPreviewCanvas /> */}
+                  {/* <ComponentTool /> */}
+                  <WireTool />
+                 
+                
+                </StageHost>
+          </ComponentProvider>
+        </GridProvider>
+      </ZoomProvider>
+    </StageProvider>
+  );
 }

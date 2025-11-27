@@ -1,4 +1,4 @@
-import React from "react";
+// import React from "react";
 import { Rect } from "react-konva";
 
 type Props = { g: any };

@@ -1,6 +1,6 @@
 // hooks/useGridSnap.ts
 import { useContext, useCallback } from "react";
-import { GridContext } from "../context/globalGrid";
+import { GridContext } from "../context/GlobalGrid";
 
 export function useGridSnap() {
   const { gridStep } = useContext(GridContext);
