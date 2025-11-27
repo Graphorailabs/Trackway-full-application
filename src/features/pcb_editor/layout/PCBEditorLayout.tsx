@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type ChangeEvent } from "react";
 import { GitBranch, Layers, Loader2, PackagePlus, Save, Settings, Square, ZoomIn, ZoomOut, Circle as CircleIcon } from "lucide-react";
 import { LuMousePointer2 } from "react-icons/lu";
 import { CanvasViewport } from "@/features/pcb_editor/components/CanvasViewport";
+import { ENABLE_PCB_DEBUG_LOG_BUTTON } from "@/features/pcb_editor/constants";
 import { EditorSettingsModal } from "@/features/pcb_editor/components/settings/EditorSettingsModal";
 import { LayerVisibilityModal } from "@/features/pcb_editor/components/layers/LayerVisibilityModal";
 import { Toolbar, ToolbarItem } from "@/features/pcb_editor/components/toolbar/Toolbar";
@@ -40,7 +41,8 @@ export function PCBEditorLayout() {
 
   const TopToolbar = () => {
     const { zoomIn, zoomOut, zoom } = useZoom();
-    const { savePcb, isSaving } = usePcb();
+    const { savePcb, isSaving, pcb } = usePcb();
+    const SHOW_PCB_DEBUG = Boolean(ENABLE_PCB_DEBUG_LOG_BUTTON);
     const { layers, selectedLayerId, selectLayer } = useLayers();
     const handleSave = async () => {
       try {
@@ -76,6 +78,22 @@ export function PCBEditorLayout() {
           >
             <Settings className="h-3 w-3" />
           </ToolbarItem>
+          {SHOW_PCB_DEBUG ? (
+            <ToolbarItem
+              label="Log PCB"
+              aria-label="Log PCB to console"
+              onClick={() => {
+                try {
+                  console.log("[pcb-debug] current pcb state:", pcb);
+                } catch (e) {
+                  console.error("[pcb-debug] failed to log pcb", e);
+                }
+              }}
+              className="!flex !h-7 !w-7 !items-center !justify-center !rounded-full !border-white/20 !bg-white/5 !p-0"
+            >
+              <Loader2 className="h-3 w-3" />
+            </ToolbarItem>
+          ) : null}
           <div className="flex items-center gap-2">
             <ToolbarItem
               label="Zoom out"

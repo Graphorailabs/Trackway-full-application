@@ -228,4 +228,10 @@ export const PAD_SNAP_RADIUS = 0.2;
 export const ENABLE_PAD_HIGHLIGHT = true;
 // Debug toggle: when true, draw a visible marker at each pad's canonical
 // center to help debug snapping/finalization behavior in the PCB editor.
-export const ENABLE_PAD_CENTER_DEBUG = true;
+export const ENABLE_PAD_CENTER_DEBUG = false;
+// Debug toggle: when true, render pad index/number text on each pad for
+// visual debugging of pad transforms (flips/rotations).
+export const ENABLE_PAD_NUMBER_DEBUG = false;
+// Debug toggle: when true, show a `Log PCB` button in the top toolbar which
+// will `console.log` the current PCB state for debugging purposes.
+export const ENABLE_PCB_DEBUG_LOG_BUTTON = false;

@@ -1,7 +1,7 @@
 import { Group, Rect, Circle, Text } from "react-konva";
 import { useGrid } from "@/features/pcb_editor/contexts/GridContext";
 import { usePadHover } from "@/features/pcb_editor/contexts/PadHoverContext";
-import { ENABLE_PAD_HIGHLIGHT, ENABLE_PAD_CENTER_DEBUG } from "@/features/pcb_editor/constants";
+import { ENABLE_PAD_HIGHLIGHT, ENABLE_PAD_CENTER_DEBUG, ENABLE_PAD_NUMBER_DEBUG } from "@/features/pcb_editor/constants";
 
 type PadProps = {
   p: any;
@@ -34,6 +34,48 @@ export default function FootprintPad({ p, fpUuid, padIndex }: PadProps) {
   let padFill = "#c62828";
   let padStroke = "#6b0f0f";
 
+  // If the pad explicitly lists layers (or nested data.layers), prefer
+  // choosing the color based on whether it sits on the front or back
+  // copper. This makes a flip that remaps `F.` <-> `B.` automatically
+  // update the visual color without adding synthetic properties.
+  try {
+    const layerCandidates: any[] = [];
+    if (Array.isArray(p.layers)) layerCandidates.push(...p.layers);
+    if (Array.isArray(p.data?.layers)) layerCandidates.push(...p.data.layers);
+    if (p.layer) layerCandidates.push(p.layer);
+    if (p.data && p.data.layer) layerCandidates.push(p.data.layer);
+    const normalizeLayer = (l: any) => {
+      try {
+        if (!l) return null;
+        if (typeof l === "string") return String(l);
+        if (typeof l === "object") {
+          // common shape: { canonical_name: 'F.Cu' }
+          if (typeof l.canonical_name === "string") return String(l.canonical_name);
+          if (typeof l.canonicalName === "string") return String(l.canonicalName);
+          if (typeof l.name === "string") return String(l.name);
+        }
+      } catch (e) {}
+      return null;
+    };
+    const hasBack = layerCandidates.some((l) => {
+      const v = normalizeLayer(l);
+      return typeof v === "string" && v.toUpperCase().startsWith("B.");
+    });
+    const hasFront = layerCandidates.some((l) => {
+      const v = normalizeLayer(l);
+      return typeof v === "string" && v.toUpperCase().startsWith("F.");
+    });
+    if (hasBack && !hasFront) {
+      // Back copper: blue-ish
+      padFill = "#1565c0";
+      padStroke = "#0d47a1";
+    } else if (hasFront && !hasBack) {
+      // Front copper: keep default red
+      padFill = "#c62828";
+      padStroke = "#6b0f0f";
+    }
+  } catch (e) {}
+
   // Special case: n/np_thru_hole pads render as light purple.
   // We'll detect this variant and also avoid drawing the inner hole for NP pads.
   let isPurpleType = false;
@@ -57,8 +99,14 @@ export default function FootprintPad({ p, fpUuid, padIndex }: PadProps) {
 
   if (shape === "circle" || shape === "round") {
     const r = Math.max(w, h) / 2;
-    const fontSize = Math.max(6, Math.min(24, Math.floor(Math.min(w, h) * 0.6)));
+    let fontSize = Math.max(6, Math.min(24, Math.floor(Math.min(w, h) * 0.6)));
+    if (ENABLE_PAD_NUMBER_DEBUG) fontSize = Math.max(10, fontSize);
     // reuse isHovered declared above
+    if (ENABLE_PAD_NUMBER_DEBUG) {
+      try {
+        console.debug('[debug] FootprintPad render (circle)', { fpUuid, padIndex, number: p.number, sx, sy, r, fontSize });
+      } catch (e) {}
+    }
 
     return (
       <Group {...(ENABLE_PAD_HIGHLIGHT ? { onMouseEnter: () => setHovered && setHovered({ fpUuid: fpUuid ?? "", padIndex: padIndex ?? 0 }), onMouseLeave: () => setHovered && setHovered(null) } : {})}>
@@ -85,11 +133,32 @@ export default function FootprintPad({ p, fpUuid, padIndex }: PadProps) {
           />
         ) : null}
         {ENABLE_PAD_CENTER_DEBUG ? <Circle x={sx} y={sy} radius={0.35} fill="#ffeb3b" stroke="#000" strokeWidth={0.1} listening={false} /> : null}
+        {ENABLE_PAD_NUMBER_DEBUG ? (
+          <Text
+            x={sx - r}
+            y={sy - fontSize / 2}
+            width={r * 2}
+            align="center"
+            verticalAlign="middle"
+            text={String(p.number ?? padIndex ?? p.name ?? "")}
+            fontSize={fontSize}
+            fill="#000"
+            stroke="#ffd54f"
+            strokeWidth={0.4}
+            listening={false}
+          />
+        ) : null}
       </Group>
     );
   }
 
-  const fontSize = Math.max(6, Math.min(24, Math.floor(Math.min(w, h) * 0.6)));
+  let fontSize = Math.max(6, Math.min(24, Math.floor(Math.min(w, h) * 0.6)));
+  if (ENABLE_PAD_NUMBER_DEBUG) fontSize = Math.max(10, fontSize);
+  if (ENABLE_PAD_NUMBER_DEBUG) {
+    try {
+      console.debug('[debug] FootprintPad render (rect)', { fpUuid, padIndex, number: p.number, sx, sy, w, h, fontSize });
+    } catch (e) {}
+  }
   return (
     <Group {...(ENABLE_PAD_HIGHLIGHT ? { onMouseEnter: () => setHovered && setHovered({ fpUuid: fpUuid ?? "", padIndex: padIndex ?? 0 }), onMouseLeave: () => setHovered && setHovered(null) } : {})}>
       <Rect x={sx - w / 2} y={sy - h / 2} width={w} height={h} fill={padFill} stroke={padStroke} strokeWidth={0.2} />
@@ -115,6 +184,21 @@ export default function FootprintPad({ p, fpUuid, padIndex }: PadProps) {
         />
       ) : null}
       {ENABLE_PAD_CENTER_DEBUG ? <Circle x={sx} y={sy} radius={0.35} fill="#ffeb3b" stroke="#000" strokeWidth={0.1} listening={false} /> : null}
+      {ENABLE_PAD_NUMBER_DEBUG ? (
+        <Text
+          x={sx - w / 2}
+          y={sy - h / 2 - fontSize}
+          width={w}
+          align="center"
+          verticalAlign="middle"
+          text={String(p.number ?? padIndex ?? p.name ?? "")}
+          fontSize={fontSize}
+          fill="#000"
+          stroke="#ffd54f"
+          strokeWidth={0.4}
+          listening={false}
+        />
+      ) : null}
     </Group>
   );
 }

@@ -4,7 +4,7 @@ import { usePcb } from "@/features/pcb_editor/contexts/PcbContext";
 
 export function SelectionContextMenu() {
 	const { contextMenuPos, selectedUuid, deleteSelected, openContextMenu } = useSelection();
-	const { updateFootprint, pcb } = usePcb();
+	const { updateFootprint, pcb, flipFootprint } = usePcb();
 	if (!contextMenuPos || !selectedUuid) return null;
 
 	const isFootprintSelected = !!(pcb.footprints ?? []).find((f) => f.uuid === selectedUuid);
@@ -20,6 +20,19 @@ export function SelectionContextMenu() {
 			const next = ((current + radiansDelta) % twoPi + twoPi) % twoPi;
 			return { ...fp, at: { ...(fp.at ?? {}), angle: next } } as any;
 		});
+		openContextMenu(null);
+	};
+
+	const flipSelectedFootprint = () => {
+		if (!isFootprintSelected) return;
+		try {
+			try {
+				console.debug('[ui] flipSelectedFootprint clicked', { selectedUuid });
+			} catch (e) {}
+			flipFootprint(selectedUuid);
+		} catch (err) {
+			console.error('[ui] flipSelectedFootprint error', err);
+		}
 		openContextMenu(null);
 	};
 	return (
@@ -45,6 +58,12 @@ export function SelectionContextMenu() {
 							className="block w-full px-3 py-1 text-left text-sm hover:bg-slate-700/40"
 						>
 							Rotate Right
+						</button>
+						<button
+							onClick={() => flipSelectedFootprint()}
+							className="block w-full px-3 py-1 text-left text-sm hover:bg-slate-700/40"
+						>
+							Flip Footprint
 						</button>
 					</>
 				) : null}

@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import { useMemo } from "react";
 import { Group } from "react-konva";
 import { usePcb } from "@/features/pcb_editor/contexts/PcbContext";
 import FootprintKonvaRenderer from "@/features/pcb_editor/footprint/FootprintKonvaRenderer";
@@ -7,7 +7,7 @@ import { useLayers } from "@/features/pcb_editor/contexts/LayerContext";
 // Render footprints using the shared `FootprintKonvaRenderer` so previews
 // and placed footprints use the exact same rendering code.
 export default function FootprintKonvaLayer() {
-  const { pcb } = usePcb();
+  const { pcb, flashHighlightUuid } = usePcb();
   const { visibility } = useLayers();
 
   const footprints = pcb.footprints ?? [];
@@ -65,7 +65,7 @@ export default function FootprintKonvaLayer() {
     <>
       {groups.map((g) => (
         <Group key={g.uuid} id={g.uuid} x={g.x} y={g.y} rotation={(g.angle ?? 0) * (180 / Math.PI)}>
-          <FootprintKonvaRenderer model={g.model as any} />
+          <FootprintKonvaRenderer model={g.model as any} highlight={flashHighlightUuid === g.uuid} />
         </Group>
       ))}
     </>

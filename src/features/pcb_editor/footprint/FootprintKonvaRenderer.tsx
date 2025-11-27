@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Group, Text } from "react-konva";
+import { Group, Text, Rect } from "react-konva";
 import FootprintGraphicLine from "./components/FootprintGraphicLine";
 import FootprintGraphicCircle from "./components/FootprintGraphicCircle";
 import FootprintGraphicText from "./components/FootprintGraphicText";
@@ -19,9 +19,10 @@ type Props = {
    * the full footprint regardless of editor layer visibility).
    */
   respectLayerVisibility?: boolean;
+  highlight?: boolean;
 };
 
-export default function FootprintKonvaRenderer({ model, respectLayerVisibility = true }: Props) {
+export default function FootprintKonvaRenderer({ model, respectLayerVisibility = true, highlight = false }: Props) {
   const { visibility } = useLayers();
 
   const isVisibleByLayer = (item: any) => {
@@ -109,6 +110,18 @@ export default function FootprintKonvaRenderer({ model, respectLayerVisibility =
   return (
     <>
       <Group>
+        {/** highlight rectangle drawn around computed bounding box when requested */}
+        {(groups as any).minX !== undefined && (groups as any).minY !== undefined && highlight ? (
+          <Rect
+            x={(groups as any).minX - 1}
+            y={(groups as any).minY - 1}
+            width={(groups as any).maxX - (groups as any).minX + 2}
+            height={(groups as any).maxY - (groups as any).minY + 2}
+            stroke="#ffd54f"
+            strokeWidth={0.4}
+            listening={false}
+          />
+        ) : null}
         {pads.map((p: any, i: number) => {
           if (!isVisibleByLayer(p)) return null;
           return <FootprintPad key={i} p={p} fpUuid={model.uuid} padIndex={i} />;

@@ -10,7 +10,7 @@ import {
   createMinimalPcb,
   pcbJsonToValue,
   pcbSexprToValue,
-  type Page,
+  type Paper,
   type Pcb,
   type Property,
 } from "trackway-parser-wasm";
@@ -90,6 +90,14 @@ export function ensureDefaults(base: Pcb): Pcb {
     ...base,
     page: base.page ?? null,
     properties: mergeProperties(base.properties, DEFAULT_PROPERTIES),
+    // Ensure optional lists are always present as arrays to avoid undefined checks
+    footprints: base.footprints ?? [],
+    nets: base.nets ?? [],
+    graphics: base.graphics ?? [],
+    images: base.images ?? [],
+    tracks: base.tracks ?? [],
+    zones: base.zones ?? [],
+    groups: base.groups ?? [],
   };
 }
 
@@ -172,4 +180,4 @@ export function createBlankPcb(): Pcb {
   };
 }
 
-export type { Page, Pcb, Property };
+export type { Paper, Pcb, Property };
