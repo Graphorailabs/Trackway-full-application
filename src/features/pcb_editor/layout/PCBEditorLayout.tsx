@@ -218,6 +218,7 @@ export function PCBEditorLayout() {
     const { placeFootprint } = usePcb();
     const managers = useFootprintManagers();
     const { setPreview } = useFootprintPreview();
+    const { setTool } = useToolContext();
 
     // We will lazily import the preview setter to avoid circular issues in some dev setups.
     // Use the FootprintPreviewProvider above to expose `useFootprintPreview`.
@@ -237,6 +238,7 @@ export function PCBEditorLayout() {
           } as unknown as import("trackway-parser-wasm").Footprint;
           // set as preview so user can still see something
           setPreview({ active: true, footprint: fp, x: 0, y: 0, angle: 0 });
+          try { setTool("select"); } catch (err) {}
           setOpen(false);
           return;
         }
@@ -277,6 +279,7 @@ export function PCBEditorLayout() {
           } as unknown as import("trackway-parser-wasm").Footprint;
           const ctx = (await import("@/features/pcb_editor/footprint/FootprintContext")).useFootprintPreview();
           ctx.setPreview({ active: true, footprint: fp, x: 0, y: 0, angle: 0 });
+          try { setTool("select"); } catch (err) {}
           setOpen(false);
           return;
         }
@@ -284,6 +287,7 @@ export function PCBEditorLayout() {
         // Set preview so the preview layer will render the parsed model at the cursor when user moves
         const instance = { ...fpModel, uuid: crypto.randomUUID(), at: { x: 0, y: 0, angle: 0 } } as import("trackway-parser-wasm").Footprint;
         setPreview({ active: true, footprint: instance, x: 0, y: 0, angle: 0 });
+        try { setTool("select"); } catch (err) {}
         setOpen(false);
       } catch (err) {
         // On error, fall back to immediate placement to avoid blocking user
@@ -294,6 +298,7 @@ export function PCBEditorLayout() {
           properties: [{ key: "name", value: pkg.id }],
         } as unknown as import("trackway-parser-wasm").Footprint;
         placeFootprint(fp, { x: 0, y: 0, angle: 0 });
+        try { setTool("select"); } catch (err) {}
         setOpen(false);
       }
     };
