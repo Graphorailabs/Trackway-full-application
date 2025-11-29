@@ -16,6 +16,7 @@ import { ToolProvider, useToolContext, type Tool } from "@/features/pcb_editor/c
 import { ShapeProvider } from "@/features/pcb_editor/contexts/ShapeContext";
 import { SelectionProvider } from "@/features/pcb_editor/contexts/SelectionContext";
 import { FootprintPreviewProvider, useFootprintPreview } from "@/features/pcb_editor/footprint/FootprintContext";
+import { footprintLibSexprToValue, footprintLibJsonToValue } from "trackway-parser-wasm";
 import PadHoverProvider from "@/features/pcb_editor/contexts/PadHoverContext";
 import ViaHoverProvider from "@/features/pcb_editor/contexts/ViaHoverContext";
 import { useFootprintManagers } from "@/features/footprint_manager/FootprintManagerContext";
@@ -257,12 +258,10 @@ export function PCBEditorLayout() {
         // Parse via parser helpers (sexpr or json)
         let parsed: any = null;
         try {
-          const parser = await import("trackway-parser-wasm");
-          parsed = parser.footprintLibSexprToValue(txt as string);
+          parsed = footprintLibSexprToValue(txt as string);
         } catch (err) {
           try {
-            const parser = await import("trackway-parser-wasm");
-            parsed = parser.footprintLibJsonToValue(txt as string);
+            parsed = footprintLibJsonToValue(txt as string);
           } catch (err2) {
             // final fallback: minimal footprint
             parsed = null;
@@ -277,8 +276,7 @@ export function PCBEditorLayout() {
             path: pkg.id,
             properties: [{ key: "name", value: pkg.id }],
           } as unknown as import("trackway-parser-wasm").Footprint;
-          const ctx = (await import("@/features/pcb_editor/footprint/FootprintContext")).useFootprintPreview();
-          ctx.setPreview({ active: true, footprint: fp, x: 0, y: 0, angle: 0 });
+          setPreview({ active: true, footprint: fp, x: 0, y: 0, angle: 0 });
           try { setTool("select"); } catch (err) {}
           setOpen(false);
           return;

@@ -6,7 +6,7 @@ interface Pt {
 }
 
 // Import editor-level constants (worker bundler will inline these)
-import { ENABLE_ENDPOINT_SNAP, ENDPOINT_SNAP_TOLERANCE } from "@/features/pcb_editor/constants";
+import { ENABLE_ENDPOINT_SNAP, ENDPOINT_SNAP_TOLERANCE } from "../../../constants";
 
 interface RouterParams {
   gridStep: number;

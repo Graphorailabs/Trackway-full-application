@@ -69,6 +69,8 @@ function bytesOfString(s: string): number {
   return new Blob([s]).size;
 }
 
+import JSZip from "jszip";
+
 // Import helpers
 function stripTopFolder(path: string): string {
   const clean = path.replace(/^[./]+/, "");
@@ -78,7 +80,6 @@ function stripTopFolder(path: string): string {
 
 async function unzipToFileMap(blob: Blob): Promise<Record<string, string>> {
   try {
-    const JSZip = (await import("jszip")).default;
     const zip = await JSZip.loadAsync(blob);
     const files: Record<string, string> = {};
     await Promise.all(
@@ -187,7 +188,6 @@ export class WebStorage implements MediaStorage {
     if (!proj) throw new Error("Project not found");
 
     try {
-      const JSZip = (await import("jszip")).default;
       const zip = new JSZip();
 
       zip.file(

@@ -2,11 +2,11 @@ import type { ProjectID, ProjectRecord, ProjectFileMap } from "@/types/project";
 import { getMediaStorage } from "@/storage/providers/MediaStorageProvider";
 import { createProjectZip, createProjectJson } from "@/services/ProjectService";
 import type { StorageEstimate, MediaStorageCapabilities } from "@/storage/MediaStorage";
+import JSZip from "jszip";
 
 /* ------------------------------ helpers ----------------------------------- */
 
 async function unzipToFileMap(blob: Blob): Promise<ProjectFileMap> {
-  const JSZip = (await import("jszip")).default;
   const zip = await JSZip.loadAsync(blob);
   const files: ProjectFileMap = {};
   const entries = Object.values(zip.files);

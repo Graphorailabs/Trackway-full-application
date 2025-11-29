@@ -1,6 +1,8 @@
 import { API_BASE_URL, ENDPOINTS } from "@/constants";
 import { ApiService } from "./ApiService";
 import { useMutation, type UseMutationOptions } from "@tanstack/react-query";
+import * as parser from "trackway-parser-wasm";
+import JSZip from "jszip";
 
 function normalizeProjectName(name: string): string {
   const trimmed = (name ?? "").trim();
@@ -34,14 +36,6 @@ export async function createProjectJson(name: string) {
 }
 
 export async function createProjectZip(name: string) {
-  const [parser, jszipModule] = await Promise.all([
-    import("trackway-parser-wasm"),
-    import("jszip"),
-  ]);
-
-  const JSZip = jszipModule.default;
-  if (!JSZip) throw new Error("Failed to load ZIP generator");
-
   const pretty = true;
   const schematicSexpr = parser.schematicJsonToSexpr(
     parser.createMinimalSchematicJson(pretty),
