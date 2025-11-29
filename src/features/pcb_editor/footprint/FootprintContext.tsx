@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, type PropsWithChildren } from "react";
+import { createContext, useContext, useState, type PropsWithChildren } from "react";
 import type { Footprint } from "trackway-parser-wasm";
 
 export type FootprintPreview = {

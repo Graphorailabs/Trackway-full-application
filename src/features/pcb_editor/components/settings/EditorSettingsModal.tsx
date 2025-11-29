@@ -3,8 +3,7 @@ import { Check, X } from "lucide-react";
 
 import { PAPER_SIZE_OPTIONS } from "@/features/pcb_editor/constants";
 import { usePcb } from "@/features/pcb_editor/contexts/PcbContext";
-import type { Page } from "trackway-parser-wasm";
-
+import type { Paper } from "pkg/trackway_parser_wasm";
 type SettingsCategory = "sheet";
 
 const SETTINGS_CATEGORIES: Array<{ id: SettingsCategory; label: string; description: string }> = [
@@ -109,9 +108,9 @@ type SheetLayerFormState = {
 	portrait: boolean;
 };
 
-const FALLBACK_PAGE: Page = { size: "A4", portrait: false };
+const FALLBACK_PAGE: Paper = { size: "A4", portrait: false };
 
-function createInitialSheetState(page: Page | null): SheetLayerFormState {
+function createInitialSheetState(page: Paper | null): SheetLayerFormState {
 	const activePage = page ?? FALLBACK_PAGE;
 
 	const resolvedSize = typeof activePage.size === "string" ? activePage.size.toLowerCase() : "a4";
@@ -147,7 +146,7 @@ function SheetLayerSettingsPanel({ onClose }: SheetLayerSettingsPanelProps) {
 	const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
 		event.preventDefault();
 		updatePcb((current) => {
-			const nextPage: Page = {
+			const nextPage: Paper = {
 				...(current.page ?? {}),
 				size: formState.paperSize.toUpperCase(),
 				portrait: formState.portrait,

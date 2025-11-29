@@ -6,7 +6,10 @@
  * out segments that end at via centers so vias remain pass-through).
  */
 import type { Pt } from "../routing/octilinearRouter";
-import { ENABLE_ENDPOINT_SNAP, ENDPOINT_SNAP_TOLERANCE } from "@/features/pcb_editor/constants";
+import type React from 'react';
+
+type Segment = { start: Pt; end: Pt; width: number; layer?: string };
+import { ENABLE_ENDPOINT_SNAP, ENDPOINT_SNAP_TOLERANCE, PAD_SNAP_RADIUS } from "@/features/pcb_editor/constants";
 
 /**
  * buildWorkerObstacles
@@ -15,7 +18,11 @@ import { ENABLE_ENDPOINT_SNAP, ENDPOINT_SNAP_TOLERANCE } from "@/features/pcb_ed
  * sent to the routing worker. If `layer` is provided, only obstacles on
  * that layer are returned.
  */
-export const buildWorkerObstacles = (layer: string | undefined, pcb: any, placedSegmentsRef: React.MutableRefObject<Array<{ start: Pt; end: Pt; width: number; layer?: string }>>) => {
+export const buildWorkerObstacles = (
+    layer: string | undefined,
+    pcb: any,
+    placedSegmentsRef: React.MutableRefObject<Array<Segment>>
+): { obstacles: Array<Segment>; padZones: Array<{ cx: number; cy: number; r: number }> } => {
     const viaCenters: Pt[] = (pcb.tracks || []).filter((t: any) => t.kind === 'via').map((t: any) => {
         const v = t.data as any;
         const at = v.at ?? [0, 0];
@@ -23,12 +30,12 @@ export const buildWorkerObstacles = (layer: string | undefined, pcb: any, placed
     });
     const viaTol = ENABLE_ENDPOINT_SNAP ? ENDPOINT_SNAP_TOLERANCE : 1e-6;
     const isNearVia = (pt: Pt) => viaCenters.some(vc => Math.hypot(vc.x - pt.x, vc.y - pt.y) <= viaTol + 1e-9);
-    const pcbSegs = (pcb.tracks || [])
+    const pcbSegs: Array<Segment> = (pcb.tracks || [])
         .filter((t: any) => t.kind === 'segment')
-        .map((t: any) => ({ start: { x: t.data.start[0], y: t.data.start[1] }, end: { x: t.data.end[0], y: t.data.end[1] }, width: t.data.width ?? 0.25, layer: (t.data.layer as string) || undefined }))
-        .filter(o => !isNearVia(o.start) && !isNearVia(o.end));
+        .map((t: any) => ({ start: { x: Number(t.data.start[0]) || 0, y: Number(t.data.start[1]) || 0 }, end: { x: Number(t.data.end[0]) || 0, y: Number(t.data.end[1]) || 0 }, width: Number(t.data.width) || 0.25, layer: (t.data.layer as string) || undefined }))
+        .filter((o: Segment) => !isNearVia(o.start) && !isNearVia(o.end));
 
-    const placedFiltered = (placedSegmentsRef.current || []).filter(o => !isNearVia(o.start) && !isNearVia(o.end));
+    const placedFiltered: Array<Segment> = (placedSegmentsRef.current || []).filter((o: Segment) => !isNearVia(o.start) && !isNearVia(o.end));
 
     // Build simple pad zones so the worker can allow crossings inside pads.
     // Only include pads that accept the requested routing layer — otherwise

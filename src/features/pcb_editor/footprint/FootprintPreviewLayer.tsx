@@ -1,4 +1,3 @@
-import React from "react";
 import { Group } from "react-konva";
 import FootprintKonvaRenderer from "@/features/pcb_editor/footprint/FootprintKonvaRenderer";
 import { useFootprintPreview } from "@/features/pcb_editor/footprint/FootprintContext";

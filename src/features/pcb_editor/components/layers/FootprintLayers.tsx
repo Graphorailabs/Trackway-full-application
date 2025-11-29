@@ -1,4 +1,3 @@
-import React from "react";
 import { Layer } from "react-konva";
 import FootprintKonvaLayer from "@/features/pcb_editor/footprint/FootprintKonvaLayer";
 import FootprintPreviewLayer from "@/features/pcb_editor/footprint/FootprintPreviewLayer";

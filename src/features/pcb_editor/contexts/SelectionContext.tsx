@@ -38,7 +38,7 @@ export function SelectionProvider({ children }: { children: React.ReactNode }) {
             const token = selectedUuid.slice("__route:".length);
             // Build segments list with ids
             const segs: Array<{ id: string; start: [number, number]; end: [number, number] }> = [];
-            for (const t of (updatePcb as any ? [] : [])) { /* noop placeholder to satisfy TS */ }
+            for (const _t of (updatePcb as any ? [] : [])) { /* noop placeholder to satisfy TS */ }
             // We can't access pcb here directly, so rely on updatePcb's callback snapshot
             updatePcb((current) => {
                 for (const t of (current.tracks ?? [])) {

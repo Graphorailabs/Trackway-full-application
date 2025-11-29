@@ -1,5 +1,6 @@
 import type { KonvaEventObject } from "konva/lib/Node";
 import type { Pt } from "../routing/octilinearRouter";
+import type React from 'react';
 import { useRef } from "react";
 import { findViaUnderCursor, findPadUnderCursor, tryFinalizeAtCursor, findNearestEndpoint, findViaAtPoint, findPadCenterUnderCursor } from "../services/PadViaService";
 import { segmentsAreFree, findBlockingObstacleLocal } from "../services/CollisionService";
@@ -42,7 +43,7 @@ export const useMouseHandlers = (
     placedSegmentsRef: React.MutableRefObject<Array<{ start: Pt; end: Pt; width: number; layer?: string }>>,
     setPreviewTracks: (tracks: Pt[]) => void,
     previewTracks: Pt[],
-    previewIncompatibleWithPad: boolean,
+    _previewIncompatibleWithPad: boolean,
     setPreviewIncompatibleWithPad: (v: boolean) => void,
     currentTraceLayer: string | undefined,
     setCurrentTraceLayer: ((layer: string) => void) | undefined,

@@ -268,6 +268,20 @@ export default function ShapesCanvas() {
         return () => window.removeEventListener("keydown", onKey);
     }, [setPreviewTracks]);
 
+    // Clear routing preview and stop routing when the active tool changes
+    // away from the route tool so preview doesn't persist across tools.
+    useEffect(() => {
+        if (tool !== "route") {
+            setRoutingStart(null);
+            setPreviewTracks([]);
+            setRoutingActive(false);
+            routingActiveRef.current = false;
+            placedSegmentsRef.current = [];
+            try { setPreviewIncompatibleWithPad(false); } catch (e) { /* noop */ }
+            try { resetCurrentTraceLayer?.(); } catch (e) { /* noop */ }
+        }
+    }, [tool, setPreviewTracks, setRoutingStart, setRoutingActive, setPreviewIncompatibleWithPad, resetCurrentTraceLayer]);
+
     // routing constants moved to `constants/routingConstants.ts`
     // Routing, pad/via and collision helpers moved to dedicated services/hooks.
     // See `services/PadViaService.ts`, `services/CollisionService.ts`,
