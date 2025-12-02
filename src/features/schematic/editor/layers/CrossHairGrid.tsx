@@ -110,7 +110,7 @@ function CrossHairGrid() {
 
     return (
       <GridContext.Provider value={{gridStep: worldMinor}}>
-      <Layer listening={false} transformsEnabled="position">
+      <Layer listening={false} t pransformsEnabled="position">
         {minorLines}
         {majorLines}
       </Layer>

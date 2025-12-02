@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect } from "react";
+import { createContext, useContext, useState, useEffect, useRef } from "react";
 
 export type selectsymbol = {
       id: string;
@@ -11,6 +11,8 @@ export type selectsymbol = {
 export type pendingSymbolItem = any;
 
 type SymbolContextType = {
+    // Ref for live pin positions during drag
+    livePinPositionsRef: React.MutableRefObject<{ [symbolId: string]: { [pinId: string]: { x: number; y: number } } }>;
   // Symbol currently loaded from KiCad JSON
   symbolData: any;
   setSymbolData: (data: any) => void;
@@ -38,6 +40,8 @@ type SymbolContextType = {
 export const SymbolContext = createContext<SymbolContextType | null>(null);
 
 export const SymbolProvider = ({ children }: any) => {
+    // Ref to store live pin positions for all symbols
+    const livePinPositionsRef = useRef<{ [symbolId: string]: { [pinId: string]: { x: number; y: number } } }>({});
   const providerId = crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2, 9);
   const [symbolData, setSymbolData] = useState<any>(null);
   const [pendingSymbol, setPendingSymbol] = useState<any>(null);
@@ -82,6 +86,7 @@ export const SymbolProvider = ({ children }: any) => {
 
         previewSymbol,
         setPreviewSymbol,
+        livePinPositionsRef,
       }}
     >
       {children}

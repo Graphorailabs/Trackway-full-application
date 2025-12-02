@@ -1,5 +1,6 @@
 import { Circle, Group, Layer, Rect } from "react-konva";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
+  // Store live drag positions for each symbol by id
 
 import { useStage } from "../context/stageProvider";
 import { useTool } from "../context/ToolContext";
@@ -14,7 +15,7 @@ export default function SymbolPlacementTool() {
   const { scale, position } = state;
 
   const { tool, setTool, selectedSymbolId, setSelectedSymbolId } = useTool();
-  const { updateWirePinPosition } = useWires();
+  const { updateWirePinPosition, wires } = useWires();
   const { gridStep } = useGrid();
 
   const {
@@ -27,8 +28,11 @@ export default function SymbolPlacementTool() {
     addPlacedSymbol,
     updatePlacedSymbol,
     removePlacedSymbol,
+    livePinPositionsRef,
+    ...symbolCtx
   } = useSymbol();
 
+   const liveDragPositions = useRef<{ [id: string]: { x: number; y: number } }>({});
   const [mousePos, setMousePos] = useState<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
@@ -254,7 +258,8 @@ export default function SymbolPlacementTool() {
 
   // During drag we avoid updating React state (which is expensive) —
   // let Konva move the node smoothly and only update app state on drag end.
-  const handleDragEnd = (e: any, id: string) => {
+  // Update pin positions live during drag
+  const handleDragMove = (e: any, id: string) => {
     const stage = e.target.getStage();
     const ptr = stage?.getPointerPosition();
     if (!ptr) return;
@@ -263,18 +268,46 @@ export default function SymbolPlacementTool() {
     const snappedX = Math.round(worldPos.x / gridStep) * gridStep;
     const snappedY = Math.round(worldPos.y / gridStep) * gridStep;
 
+    // Store live position in ref for this symbol
+    liveDragPositions.current[id] = { x: snappedX, y: snappedY };
+
+    // Also update live pin positions in context for this symbol
+    const placed = placedSymbols.find((p: any) => p.id === id);
+    if (placed) {
+      const livePins: { [pinId: string]: { x: number; y: number } } = {};
+      (placed.pins || []).forEach((p: any) => {
+        const px = snappedX + (p.offsetX ?? 0);
+        const py = snappedY + (p.offsetY ?? 0);
+        livePins[p.id] = { x: px, y: py };
+      });
+      livePinPositionsRef.current[id] = livePins;
+    }
+  };
+
+  const handleDragEnd = (_: any, id: string) => {
+    // On drag end, update state with the final position
+    const pos = liveDragPositions.current[id];
+    if (!pos) return;
     const placed = placedSymbols.find((p: any) => p.id === id);
     if (!placed) return;
-
     const updatedPins = (placed.pins || []).map((p: any) => {
-      const px = snappedX + (p.offsetX ?? 0);
-      const py = snappedY + (p.offsetY ?? 0);
+      const px = pos.x + (p.offsetX ?? 0);
+      const py = pos.y + (p.offsetY ?? 0);
       if (p.connected) updateWirePinPosition(p.id, px, py);
       return { ...p, x: px, y: py };
     });
-
-    // Update placed symbol atomically on drag end
-    updatePlacedSymbol(id, { position: { x: snappedX, y: snappedY }, pins: updatedPins });
+    updatePlacedSymbol(id, { position: { x: pos.x, y: pos.y }, pins: updatedPins });
+    // Clean up
+    delete liveDragPositions.current[id];
+    delete livePinPositionsRef.current[id];
+    // Optionally reroute wires here as well
+    const allPins = placedSymbols.flatMap((sym: any) => {
+      if (sym.id === id) {
+        return updatedPins;
+      }
+      return sym.pins || [];
+    });
+    window.dispatchEvent(new CustomEvent('symbol-pin-moved', { detail: { pins: allPins } }));
   };
 
   const ghostPos = mousePos && gridStep ? { x: Math.round(mousePos.x / gridStep) * gridStep, y: Math.round(mousePos.y / gridStep) * gridStep } : null;
@@ -287,15 +320,19 @@ export default function SymbolPlacementTool() {
         </Group>
       )}
 
-      {Array.isArray(placedSymbols) && placedSymbols.map((placed: any) => (
-        placed?.position ? (
+      {Array.isArray(placedSymbols) && placedSymbols.map((placed: any) => {
+        // Use live drag position if available, else use state
+        const livePos = liveDragPositions.current[placed.id];
+        const pos = livePos || placed.position;
+        if (!placed?.position) return null;
+        return (
           <Group
             key={placed.id}
-            x={placed.position.x}
-            y={placed.position.y}
+            x={pos.x}
+            y={pos.y}
             draggable
             onDragStart={() => console.debug('dragstart', placed.id)}
-            onDragMove={() => console.debug('dragmove', placed.id)}
+            onDragMove={(e) => handleDragMove(e, placed.id)}
             onDragEnd={(e) => handleDragEnd(e, placed.id)}
             onMouseEnter={(e) => {
               const container = e.target.getStage()?.container();
@@ -329,8 +366,13 @@ export default function SymbolPlacementTool() {
 
             <SymbolPreviewCanvas symbolData={placed.symbolData?.unit ?? placed.symbolData} />
 
-            {(Array.isArray(placed.pins) ? placed.pins : []).map((p: any) => (
-              !p.connected && (
+            {(Array.isArray(placed.pins) ? placed.pins : []).map((p: any) => {
+              // Hide overlay if any wire endpoint is connected to this pin
+              const isConnected = (wires || []).some((w: any) =>
+                w.points.some((pt: any) => pt.pinId === p.id)
+              ) || p.connected;
+              if (isConnected) return null;
+              return (
                 <Group
                   key={p?.id ?? crypto.randomUUID()}
                   // Use local offsets (offsetX/Y) so the marker center aligns
@@ -363,11 +405,11 @@ export default function SymbolPlacementTool() {
                     opacity={0}
                   />
                 </Group>
-              )
-            ))}
+              );
+            })}
           </Group>
-        ) : null
-      ))}
+        );
+      })}
     </Layer>
   );
 }
