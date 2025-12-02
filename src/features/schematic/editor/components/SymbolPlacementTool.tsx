@@ -28,6 +28,7 @@ export default function SymbolPlacementTool() {
     addPlacedSymbol,
     updatePlacedSymbol,
     removePlacedSymbol,
+
     livePinPositionsRef
     // ...symbolCtx
   } = useSymbol();

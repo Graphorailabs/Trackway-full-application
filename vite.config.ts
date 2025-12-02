@@ -11,4 +11,21 @@ export default defineConfig({
   plugins: [wasm(), topLevelAwait(), react(),  tailwindcss(), tsconfigPaths({
     projects:["tsconfig.app.json"]
   })],
+  // Improve chunking to avoid very large bundles
+  build: {
+    chunkSizeWarningLimit: 700, // kB - raise/lower as needed
+    rollupOptions: {
+      output: {
+        // Split vendor code and large libraries into separate chunks
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            if (id.includes('react') || id.includes('react-dom')) return 'react-vendor';
+            if (id.includes('konva') || id.includes('react-konva')) return 'konva-vendor';
+            if (id.includes('trackway_parser_wasm') || id.endsWith('.wasm')) return 'wasm';
+            return 'vendor';
+          }
+        }
+      }
+    }
+  }
 });
