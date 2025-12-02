@@ -2,23 +2,16 @@
 import  { useCallback, useEffect, useMemo, useState } from "react";
 import { Path, Layer, Arc } from "react-konva";
 import { useStage } from "../context/stageProvider";
+
 import { makeOrthogonalRoundedPath } from "../hooks/makeOrthogonalPath";
 import { useComponents } from "../context/ComponentContext";
 import { useTool } from "../context/ToolContext";
 import { useWires } from "../context/WireContext";
 import { useSymbol } from "../context/SymbolContext";
 
-type Wire = {
-  id: string;
-  points: {
-  x: number;
-  y: number;
-  pinId?: string; // ✅ Identifies a pin if attached
-}[];
 
-};
 
-type Point = { x: number; y: number };
+type Point = { x: number; y: number; pinId?: string };
 
 type ClosestPin = {
   comp: any;
@@ -50,6 +43,33 @@ export default function WireTool() {
 
 
 
+  // --- Reroute wires on pin move (must be inside component) ---
+  useEffect(() => {
+    function rerouteWiresOnPinMove(e: any) {
+      const { pins } = e.detail || {};
+      if (!pins) return;
+      setWires((prevWires: any[]) => {
+        return prevWires.map((wire: any) => {
+          // For every endpoint with a pinId, update to latest pin position
+          const newPoints = wire.points.map((pt: any) => {
+            if (pt.pinId) {
+              const pin = pins.find((p: any) => p.id === pt.pinId);
+              if (pin) return { ...pt, x: pin.x, y: pin.y };
+            }
+            return pt;
+          });
+          // Reroute with Manhattan path for smoothness
+          if (newPoints.length === 2) {
+            const routed = manhattanRoutePolyline(newPoints);
+            return { ...wire, points: routed };
+          }
+          return { ...wire, points: newPoints };
+        });
+      });
+    }
+    window.addEventListener('symbol-pin-moved', rerouteWiresOnPinMove);
+    return () => window.removeEventListener('symbol-pin-moved', rerouteWiresOnPinMove);
+  }, [setWires]);
 
  function toWorldCoords(stage: any, state: any){
      const pointer = stage.getPointerPosition();
@@ -172,51 +192,67 @@ useEffect(() => {
     if (!pos) return;
 
     let worldPos = screenToWorld(pos);
+    let pinId: string | undefined = undefined;
     const target = getClosestPin(worldPos);
 
     // ✅ Snap wire endpoint exactly onto pin center
     if (target) {
       worldPos = { x: target.pin.x, y: target.pin.y };
+      pinId = target.pin.id;
 
       // If the pin belongs to a placed symbol, update via symbol context
       const sym = (placedSymbols || []).find((s: any) => s.id === target.comp?.id);
       if (sym) {
-        const updatedPins = (sym.pins || []).map((p: any) => (p.id === target.pin.id ? { ...p, connected: true } : p));
+        const updatedPins = (sym.pins || []).map((p: any) =>
+          (p.id === target.pin.id ? { ...p, connected: true } : p)
+        );
         updatePlacedSymbol(sym.id, { pins: updatedPins });
       } else {
         // Otherwise assume it's a component pin and mutate (legacy behavior)
         target.pin.connected = true;
       }
 
+      // Also update all wires that connect to this pinId to mark the endpoint as connected
+      setWires((prevWires: any[]) =>
+        prevWires.map((wire: any) => ({
+          ...wire,
+          points: wire.points.map((pt: any) =>
+            pt.pinId === target.pin.id ? { ...pt, connected: true } : pt
+          ),
+        }))
+      );
+
       updateWirePinPosition(target.pin.id, worldPos.x, worldPos.y);
     }
 
-
     setDrawing((d) => {
-      if (!d) return { worldPoints: [worldPos, worldPos] };
+      if (!d) return { worldPoints: [{ ...worldPos, pinId }, { ...worldPos, pinId }] };
 
       const pts = [...d.worldPoints];
       const last = pts[pts.length - 2];
 
+      let newPoint = { ...worldPos, pinId };
       if (last && last.x !== worldPos.x && last.y !== worldPos.y) {
-        pts.splice(pts.length - 1, 1, { x: worldPos.x, y: last.y }, worldPos);
+        pts.splice(pts.length - 1, 1, { x: worldPos.x, y: last.y }, newPoint);
       } else {
-        pts.splice(pts.length - 1, 1, worldPos);
+        pts.splice(pts.length - 1, 1, newPoint);
       }
 
-      return { worldPoints: [...pts, worldPos] };
+      return { worldPoints: [...pts, newPoint] };
     });
   };
+
 
     const finalize = () => {
       if (!drawing) return;
 
-      const finalWorld = drawing.worldPoints.map(snapWorld);
+      // Keep pinId on points if present
+      const finalWorld = drawing.worldPoints.map((pt) => ({ ...snapWorld(pt), pinId: pt.pinId }));
 
       if (finalWorld.length >= 2) {
         setWires((w) => [...w, {
           id: Date.now().toString(),
-          points: finalWorld  // ✅ PURE WORLD SPACE
+          points: finalWorld  // ✅ PURE WORLD SPACE, with pinId if attached
         }]);
       }
 
@@ -292,38 +328,61 @@ function insertHumpOnWireSegment(
 }
 
 
-const processedWires = useMemo(() => {
-  const result: (Wire & { humps: Point[] })[] = [];
 
+// Helper to get live pin position by pinId
+function getLivePinPosition(pinId: string): Point | null {
+  // Search placedSymbols first
+  for (const sym of placedSymbols || []) {
+    for (const pin of sym.pins || []) {
+      if (pin.id === pinId) return { x: pin.x, y: pin.y };
+    }
+  }
+  // Search components
+  for (const comp of components || []) {
+    for (const pin of comp.pins || []) {
+      if (pin.id === pinId) return { x: pin.x, y: pin.y };
+    }
+  }
+  return null;
+}
+
+
+function getProcessedWires() {
+  const result: Array<{ id: string; points: Point[]; humps: Point[] }> = [];
   wires.forEach((w1, i) => {
-    const newPts = [...w1.points];
+    // For each point, if pinId is present, use live position
+    const newPts: Point[] = w1.points.map((pt) => {
+      if (pt.pinId) {
+        const live = getLivePinPosition(pt.pinId);
+        if (live) return { ...pt, ...live };
+      }
+      return pt;
+    });
     const humps: Point[] = [];
-
     wires.forEach((w2, j) => {
       if (i === j) return;
-
-      for (let a = 0; a < w1.points.length - 1; a++) {
+      for (let a = 0; a < newPts.length - 1; a++) {
         for (let b = 0; b < w2.points.length - 1; b++) {
+          // Only insert humps for true wire-to-wire crossings, not at endpoints
+          // Avoid cutting the wire at the very start or end (pin connection)
+          if (a === 0 || a + 1 === newPts.length - 1) continue;
+          if (b === 0 || b + 1 === w2.points.length - 1) continue;
           const cross = segmentIntersection(
-            w1.points[a], w1.points[a + 1],
+            newPts[a], newPts[a + 1],
             w2.points[b], w2.points[b + 1]
           );
           if (!cross) continue;
-
           const { clippedPoints, humpCenter } =
-            insertHumpOnWireSegment(w1.points.slice(a, a+2), cross);
-
-          newPts.splice(a, 2, ...clippedPoints); // ✅ Replace segment
+            insertHumpOnWireSegment(newPts.slice(a, a+2), cross);
+          newPts.splice(a, 2, ...clippedPoints);
           humps.push(humpCenter);
         }
       }
     });
-
     result.push({ ...w1, points: newPts, humps });
   });
-
   return result;
-}, [wires]);
+}
 
 
 // ----------------------
@@ -524,7 +583,7 @@ const compressOrthogonal = (pts: Point[]) => {
     >
       {/* ✅ Final wires */}
 
-    {processedWires.map(w => {
+    {getProcessedWires().map(w => {
         const routed = manhattanRoutePolyline(w.points);
         return (
           <Path
@@ -540,8 +599,8 @@ const compressOrthogonal = (pts: Point[]) => {
       })}
 
   {/* ✅ Draw hump arcs on top */}
-  {processedWires.flatMap(w =>
-    w.humps.map((p, i) => (
+  {getProcessedWires().flatMap(w =>
+    w.humps.map((p: Point, i: number) => (
       <Arc
         key={`${w.id}-hump-${i}`}
         x={p.x}
