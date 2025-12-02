@@ -28,7 +28,9 @@ export default function SymbolPlacementTool() {
     addPlacedSymbol,
     updatePlacedSymbol,
     removePlacedSymbol,
-    livePinPositionsRef,
+
+    livePinPositionsRef
+    // ...symbolCtx
   } = useSymbol();
 
    const liveDragPositions = useRef<{ [id: string]: { x: number; y: number } }>({});
