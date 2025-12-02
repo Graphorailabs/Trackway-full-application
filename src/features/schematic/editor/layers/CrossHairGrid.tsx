@@ -119,5 +119,5 @@ function CrossHairGrid() {
   }, [originX, originY, viewW, viewH, screenMinor, screenMajor]);
 }
 
-// ✅ Prevent unnecessary React re-renders
+
 export default React.memo(CrossHairGrid);
