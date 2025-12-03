@@ -1,5 +1,10 @@
 import type { LocalPackageManager, FootprintMetadata, FootprintPackage } from "../types";
-import JSZip from "jszip";
+
+// Lazy-load JSZip to avoid bundling/init-order issues in production builds
+async function loadJSZip() {
+  const mod = await import("jszip");
+  return (mod as any).default ?? mod;
+}
 
 // Local manager that stores categories and individual footprints in IndexedDB.
 // - `categories` store contains one record per category (id = category name)
@@ -121,6 +126,7 @@ export class LocalFootprintManager implements LocalPackageManager {
   // the footprint metadata in IndexedDB. Returns the first created FootprintMetadata
   // (so callers that append a single item still get a visible result).
   async installFromZip(buffer: ArrayBuffer, category: string): Promise<FootprintMetadata> {
+    const JSZip = await loadJSZip();
     const zip = await JSZip.loadAsync(buffer);
 
     // Attempt to find metadata file inside the zip

@@ -2,17 +2,23 @@ import type { ProjectID, ProjectRecord, ProjectFileMap } from "@/types/project";
 import { getMediaStorage } from "@/storage/providers/MediaStorageProvider";
 import { createProjectZip, createProjectJson } from "@/services/ProjectService";
 import type { StorageEstimate, MediaStorageCapabilities } from "@/storage/MediaStorage";
-import JSZip from "jszip";
+// Lazy-load JSZip to avoid bundling/init-order issues in production builds
+async function loadJSZip() {
+  const mod = await import("jszip");
+  // support both ESM default and CJS interop
+  return (mod as any).default ?? mod;
+}
 
 /* ------------------------------ helpers ----------------------------------- */
 
 async function unzipToFileMap(blob: Blob): Promise<ProjectFileMap> {
+  const JSZip = await loadJSZip();
   const zip = await JSZip.loadAsync(blob);
   const files: ProjectFileMap = {};
-  const entries = Object.values(zip.files);
+  const entries = Object.values(zip.files) as any[];
 
   await Promise.all(
-    entries.map(async (entry) => {
+    entries.map(async (entry: any) => {
       if (entry.dir) return;
       const text = await entry.async("string");
       const path = entry.name.replace(/^[./]+/, "");

@@ -69,7 +69,11 @@ function bytesOfString(s: string): number {
   return new Blob([s]).size;
 }
 
-import JSZip from "jszip";
+// Lazy-load JSZip to avoid bundling/init-order issues in production builds
+async function loadJSZip() {
+  const mod = await import("jszip");
+  return (mod as any).default ?? mod;
+}
 
 // Import helpers
 function stripTopFolder(path: string): string {
@@ -80,10 +84,12 @@ function stripTopFolder(path: string): string {
 
 async function unzipToFileMap(blob: Blob): Promise<Record<string, string>> {
   try {
+    const JSZip = await loadJSZip();
     const zip = await JSZip.loadAsync(blob);
     const files: Record<string, string> = {};
+    const entries = Object.values(zip.files) as any[];
     await Promise.all(
-      Object.values(zip.files).map(async (entry) => {
+      entries.map(async (entry: any) => {
         if (entry.dir) return;
         const base = entry.name.replace(/^[./]+/, "");
         if (base.toLowerCase() === "project.json") return;
@@ -188,6 +194,7 @@ export class WebStorage implements MediaStorage {
     if (!proj) throw new Error("Project not found");
 
     try {
+      const JSZip = await loadJSZip();
       const zip = new JSZip();
 
       zip.file(
@@ -208,7 +215,7 @@ export class WebStorage implements MediaStorage {
 
       return await zip.generateAsync({ type: "blob" });
     } catch {
-      // Fallback to JSON if jszip not present
+      // Fallback to JSON if jszip not present or dynamic import fails
       return this.exportProjectAsJSON(id);
     }
   }
