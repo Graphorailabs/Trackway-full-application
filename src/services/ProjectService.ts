@@ -2,7 +2,12 @@ import { API_BASE_URL, ENDPOINTS } from "@/constants";
 import { ApiService } from "./ApiService";
 import { useMutation, type UseMutationOptions } from "@tanstack/react-query";
 import * as parser from "trackway-parser-wasm";
-import JSZip from "jszip";
+
+// Lazy-load JSZip to avoid bundling/init-order issues in production builds
+async function loadJSZip() {
+  const mod = await import("jszip");
+  return (mod as any).default ?? mod;
+}
 
 function normalizeProjectName(name: string): string {
   const trimmed = (name ?? "").trim();
@@ -49,6 +54,7 @@ export async function createProjectZip(name: string) {
     [`${fileStem}.kicad_pcb`]: pcbSexpr,
   };
 
+  const JSZip = await loadJSZip();
   const zip = new JSZip();
   Object.entries(files).forEach(([path, content]) => {
     zip.file(path, content.endsWith("\n") ? content : `${content}\n`);
