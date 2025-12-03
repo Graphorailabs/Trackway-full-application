@@ -35,6 +35,8 @@ export default function SymbolPlacementTool() {
 
    const liveDragPositions = useRef<{ [id: string]: { x: number; y: number } }>({});
   const [mousePos, setMousePos] = useState<{ x: number; y: number } | null>(null);
+  // debounce timer for live dispatches to avoid flooding the router
+  const dispatchTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     console.log("SymbolPlacementTool mounted", { tool: (undefined as any) });
@@ -172,6 +174,8 @@ export default function SymbolPlacementTool() {
         y: absY,
         connected: false,
         wireId: null,
+        // approximate visual thickness for this pin (used to size wires)
+        pinThickness: (pd.length || 1) * 1.2,
       } as any;
     });
 
@@ -283,6 +287,19 @@ export default function SymbolPlacementTool() {
       });
       livePinPositionsRef.current[id] = livePins;
     }
+    // Debounce dispatch and only send pins for the symbol being dragged
+    if (dispatchTimerRef.current) window.clearTimeout(dispatchTimerRef.current);
+    dispatchTimerRef.current = window.setTimeout(() => {
+      const sym = placedSymbols.find((p: any) => p.id === id);
+      if (!sym) return;
+      const liveForSym = livePinPositionsRef.current[id] || {};
+      const pinsPayload = (sym.pins || []).map((p: any) => {
+        const live = liveForSym[p.id];
+        return { id: p.id, x: live ? live.x : p.x, y: live ? live.y : p.y };
+      });
+      // Live-moving event (debounced) — used by WireTool to draw preview routes
+      window.dispatchEvent(new CustomEvent('symbol-pin-moving', { detail: { pins: pinsPayload, symbolId: id } }));
+    }, 60);
   };
 
   const handleDragEnd = (_: any, id: string) => {
@@ -298,17 +315,21 @@ export default function SymbolPlacementTool() {
       return { ...p, x: px, y: py };
     });
     updatePlacedSymbol(id, { position: { x: pos.x, y: pos.y }, pins: updatedPins });
-    // Clean up
-    delete liveDragPositions.current[id];
-    delete livePinPositionsRef.current[id];
-    // Optionally reroute wires here as well
+    // Optionally reroute wires here as well — dispatch final drag event
     const allPins = placedSymbols.flatMap((sym: any) => {
       if (sym.id === id) {
         return updatedPins;
       }
       return sym.pins || [];
     });
-    window.dispatchEvent(new CustomEvent('symbol-pin-moved', { detail: { pins: allPins } }));
+
+    // Dispatch final drag-end with pins for the dragged symbol first, so
+    // listeners can finalize routing before we clear live refs.
+    window.dispatchEvent(new CustomEvent('symbol-drag-end', { detail: { pins: allPins, symbolId: id } }));
+
+    // Clean up
+    delete liveDragPositions.current[id];
+    delete livePinPositionsRef.current[id];
   };
 
   const ghostPos = mousePos && gridStep ? { x: Math.round(mousePos.x / gridStep) * gridStep, y: Math.round(mousePos.y / gridStep) * gridStep } : null;

@@ -36,39 +36,105 @@ export default function WireTool() {
   const baseStroke = 1;
 
   const { wires, setWires } = useWires();
+  const [previewRoutes, setPreviewRoutes] = useState<Record<string, Point[]>>({});
   const [drawing, setDrawing] = useState<{ worldPoints: Point[] } | null>(null);
   const { components } = useComponents();
-  const { placedSymbols, updatePlacedSymbol } = useSymbol();
+  const { placedSymbols, updatePlacedSymbol, livePinPositionsRef } = useSymbol();
   const { updateWirePinPosition } = useWires();
 
 
 
   // --- Reroute wires on pin move (must be inside component) ---
   useEffect(() => {
-    function rerouteWiresOnPinMove(e: any) {
+    // Live-moving preview: compute preview Manhattan routes for wires
+    // connected to the moved pins. We do not mutate stored wires here.
+    function onSymbolPinMoving(e: any) {
       const { pins } = e.detail || {};
-      if (!pins) return;
-      setWires((prevWires: any[]) => {
-        return prevWires.map((wire: any) => {
-          // For every endpoint with a pinId, update to latest pin position
-          const newPoints = wire.points.map((pt: any) => {
-            if (pt.pinId) {
-              const pin = pins.find((p: any) => p.id === pt.pinId);
-              if (pin) return { ...pt, x: pin.x, y: pin.y };
+      if (!Array.isArray(pins)) return;
+      const movedIds = new Set((pins || []).map((p: any) => p.id));
+
+      setPreviewRoutes((prev) => {
+        const next = { ...prev };
+        (wires || []).forEach((wire: any) => {
+          const affected = (wire.points || []).some((pt: any) => pt?.pinId && movedIds.has(pt.pinId));
+          if (!affected) return;
+
+          const livePts = (wire.points || []).map((pt: any) => {
+            if (pt && pt.pinId) {
+              const live = pins.find((p: any) => p.id === pt.pinId);
+              if (live) return { x: live.x, y: live.y, pinId: pt.pinId };
             }
-            return pt;
+            return { x: pt.x, y: pt.y, pinId: pt.pinId };
           });
-          // Reroute with Manhattan path for smoothness
-          if (newPoints.length === 2) {
-            const routed = manhattanRoutePolyline(newPoints);
-            return { ...wire, points: routed };
+
+          try {
+            const routed = manhattanRoutePolyline(livePts);
+            const cleaned = removeSmallSegments(compressOrthogonal(routed));
+            next[wire.id] = cleaned;
+          } catch (err) {
+            console.error('preview route failed', err);
           }
-          return { ...wire, points: newPoints };
         });
+        return next;
       });
     }
-    window.addEventListener('symbol-pin-moved', rerouteWiresOnPinMove);
-    return () => window.removeEventListener('symbol-pin-moved', rerouteWiresOnPinMove);
+
+    // Finalize on drag end: compute final routed polylines and persist
+    function onSymbolDragEnd(e: any) {
+      const { pins } = e.detail || {};
+      if (!Array.isArray(pins)) return;
+      const movedIds = new Set((pins || []).map((p: any) => p.id));
+
+      setWires((prev) => {
+        return (prev || []).map((wire: any) => {
+          const affected = (wire.points || []).some((pt: any) => pt?.pinId && movedIds.has(pt.pinId));
+          if (!affected) return wire;
+
+          const livePts = (wire.points || []).map((pt: any) => {
+            if (pt && pt.pinId) {
+              const live = pins.find((p: any) => p.id === pt.pinId);
+              if (live) return { x: live.x, y: live.y, pinId: pt.pinId };
+            }
+            return { x: pt.x, y: pt.y, pinId: pt.pinId };
+          });
+
+          try {
+            const routed = manhattanRoutePolyline(livePts);
+            const cleanedRaw = removeSmallSegments(compressOrthogonal(routed));
+            // ensure endpoints keep pinId if original had them
+            const newPoints = cleanedRaw.map((p: any) => ({ x: p.x, y: p.y, pinId: p.pinId ?? undefined }));
+            const orig = wire.points || [];
+            if (orig[0]?.pinId) newPoints[0].pinId = orig[0].pinId;
+            if (orig[orig.length - 1]?.pinId) newPoints[newPoints.length - 1].pinId = orig[orig.length - 1].pinId;
+            return { ...wire, points: newPoints };
+          } catch (err) {
+            console.error('final route failed', err);
+            return wire;
+          }
+        });
+      });
+
+      // clear previews for moved wires
+      setPreviewRoutes((prev) => {
+        const next = { ...prev };
+        Object.keys(next).forEach((wid) => {
+          const wire = wires.find((w: any) => w.id === wid);
+          if (!wire) delete next[wid];
+          else {
+            const affected = (wire.points || []).some((pt: any) => pt?.pinId && movedIds.has(pt.pinId));
+            if (affected) delete next[wid];
+          }
+        });
+        return next;
+      });
+    }
+
+    window.addEventListener('symbol-pin-moving', onSymbolPinMoving);
+    window.addEventListener('symbol-drag-end', onSymbolDragEnd);
+    return () => {
+      window.removeEventListener('symbol-pin-moving', onSymbolPinMoving);
+      window.removeEventListener('symbol-drag-end', onSymbolDragEnd);
+    };
   }, [setWires]);
 
  function toWorldCoords(stage: any, state: any){
@@ -247,14 +313,17 @@ useEffect(() => {
       if (!drawing) return;
 
       // Keep pinId on points if present
-      const finalWorld = drawing.worldPoints.map((pt) => ({ ...snapWorld(pt), pinId: pt.pinId }));
+        let finalWorld = drawing.worldPoints.map((pt) => ({ ...snapWorld(pt), pinId: pt.pinId }));
 
-      if (finalWorld.length >= 2) {
-        setWires((w) => [...w, {
-          id: Date.now().toString(),
-          points: finalWorld  // ✅ PURE WORLD SPACE, with pinId if attached
-        }]);
-      }
+        // Clean up tiny jogs and compress orthogonal segments before saving
+        if (finalWorld.length >= 2) {
+          // Clean and ensure each point has a `pinId` property (may be undefined)
+          const cleaned = removeSmallSegments(compressOrthogonal(finalWorld)).map((p: any) => ({ x: p.x, y: p.y, pinId: p.pinId ?? undefined }));
+          setWires((w) => [...w, {
+            id: Date.now().toString(),
+            points: cleaned  // ✅ PURE WORLD SPACE, with pinId if attached
+          }]);
+        }
 
       setDrawing(null);
     };
@@ -332,6 +401,12 @@ function insertHumpOnWireSegment(
 // Helper to get live pin position by pinId
 function getLivePinPosition(pinId: string): Point | null {
   // Search placedSymbols first
+  // Check live drag positions first
+  for (const symId of Object.keys(livePinPositionsRef.current || {})) {
+    const pinsForSym = livePinPositionsRef.current[symId] || {};
+    if (pinsForSym[pinId]) return { x: pinsForSym[pinId].x, y: pinsForSym[pinId].y };
+  }
+
   for (const sym of placedSymbols || []) {
     for (const pin of sym.pins || []) {
       if (pin.id === pinId) return { x: pin.x, y: pin.y };
@@ -348,40 +423,54 @@ function getLivePinPosition(pinId: string): Point | null {
 
 
 function getProcessedWires() {
-  const result: Array<{ id: string; points: Point[]; humps: Point[] }> = [];
-  wires.forEach((w1, i) => {
-    // For each point, if pinId is present, use live position
-    const newPts: Point[] = w1.points.map((pt) => {
-      if (pt.pinId) {
-        const live = getLivePinPosition(pt.pinId);
-        if (live) return { ...pt, ...live };
-      }
-      return pt;
-    });
-    const humps: Point[] = [];
-    wires.forEach((w2, j) => {
-      if (i === j) return;
-      for (let a = 0; a < newPts.length - 1; a++) {
-        for (let b = 0; b < w2.points.length - 1; b++) {
-          // Only insert humps for true wire-to-wire crossings, not at endpoints
-          // Avoid cutting the wire at the very start or end (pin connection)
-          if (a === 0 || a + 1 === newPts.length - 1) continue;
-          if (b === 0 || b + 1 === w2.points.length - 1) continue;
-          const cross = segmentIntersection(
-            newPts[a], newPts[a + 1],
-            w2.points[b], w2.points[b + 1]
-          );
-          if (!cross) continue;
-          const { clippedPoints, humpCenter } =
-            insertHumpOnWireSegment(newPts.slice(a, a+2), cross);
-          newPts.splice(a, 2, ...clippedPoints);
-          humps.push(humpCenter);
+  try {
+    const result: Array<{ id: string; points: Point[]; humps: Point[] }> = [];
+    wires.forEach((w1, i) => {
+      // defensive guards
+      if (!w1 || !Array.isArray(w1.points) || w1.points.length === 0) return;
+
+      // For each point, if pinId is present, use live position
+      const newPts: Point[] = w1.points.map((pt) => {
+        if (pt && pt.pinId) {
+          const live = getLivePinPosition(pt.pinId);
+          if (live) return { ...pt, ...live };
         }
-      }
+        return pt;
+      });
+      const humps: Point[] = [];
+      wires.forEach((w2, j) => {
+        if (i === j) return;
+        if (!w2 || !Array.isArray(w2.points) || w2.points.length < 2) return;
+        for (let a = 0; a < newPts.length - 1; a++) {
+          for (let b = 0; b < w2.points.length - 1; b++) {
+            // Only insert humps for true wire-to-wire crossings, not at endpoints
+            // Avoid cutting the wire at the very start or end (pin connection)
+            if (a === 0 || a + 1 === newPts.length - 1) continue;
+            if (b === 0 || b + 1 === w2.points.length - 1) continue;
+            const segA1 = newPts[a];
+            const segA2 = newPts[a + 1];
+            const segB1 = w2.points[b];
+            const segB2 = w2.points[b + 1];
+            if (!segA1 || !segA2 || !segB1 || !segB2) continue;
+            const cross = segmentIntersection(segA1, segA2, segB1, segB2);
+            if (!cross) continue;
+            const { clippedPoints, humpCenter } = insertHumpOnWireSegment(newPts.slice(a, a + 2), cross);
+            newPts.splice(a, 2, ...clippedPoints);
+            humps.push(humpCenter);
+          }
+        }
+      });
+      // compress & remove tiny segments from processed points so display is clean
+      const cleanedRaw = removeSmallSegments(compressOrthogonal(newPts));
+      // Ensure each point has a `pinId` key (possibly undefined) to satisfy types
+      const cleaned = cleanedRaw.map((p: any) => ({ x: p.x, y: p.y, pinId: p.pinId ?? undefined }));
+      result.push({ ...w1, points: cleaned, humps });
     });
-    result.push({ ...w1, points: newPts, humps });
-  });
-  return result;
+    return result;
+  } catch (err) {
+    console.error("getProcessedWires failed:", err);
+    return [];
+  }
 }
 
 
@@ -561,15 +650,45 @@ const compressOrthogonal = (pts: Point[]) => {
   return out;
 };
 
+// Remove very small consecutive segments (world units) that create tiny jogs
+const removeSmallSegments = (pts: Point[], minLen = 4) => {
+  if (!pts || pts.length < 2) return pts;
+  const out: Point[] = [pts[0]];
+  for (let i = 1; i < pts.length; i++) {
+    const p = pts[i];
+    const prev = out[out.length - 1];
+    const dx = Math.abs(p.x - prev.x);
+    const dy = Math.abs(p.y - prev.y);
+    const len = Math.hypot(dx, dy);
+    // If this segment is too short, skip adding this point (merge with prev)
+    if (len < minLen) {
+      // Instead of pushing p, replace prev with p to keep topology
+      out[out.length - 1] = p;
+      continue;
+    }
+    out.push(p);
+  }
+
+  // After removal, also compress colinear again
+  return compressOrthogonal(out);
+};
+
 
   // ✨ Smooth live preview
   const previewPath = useMemo(() => {
     if (!drawing) return "";
-    const snapped = drawing.worldPoints.map(snapWorld);
-    const poly = buildPolyline(snapped);
-    // Route each consecutive segment with Manhattan router to avoid obstacles
-    const routed = manhattanRoutePolyline(poly);
-    return makeOrthogonalRoundedPath(routed, 6);
+    // drawing.worldPoints are already in WORLD coordinates. For an accurate
+    // preview that follows the cursor correctly at any zoom level we must
+    // route in WORLD space (not screen space). Feed snapped world points
+    // directly to the Manhattan router and then build the path from the
+    // resulting WORLD coordinates.
+    const snappedWorld = drawing.worldPoints.map((p) => snapWorld(p));
+    const routedWorld = manhattanRoutePolyline(snappedWorld);
+    // When live-dragging symbols, prefer sharp 90° corners (radius=0)
+    // so the wire remains perpendicular and doesn't draw rounded loops.
+    const liveDragging = Object.keys(livePinPositionsRef.current || {}).length > 0;
+    const previewRadius = liveDragging ? 0 : 6;
+    return makeOrthogonalRoundedPath(routedWorld, previewRadius);
   }, [drawing, snapWorld, buildPolyline]);
 
 
@@ -584,19 +703,68 @@ const compressOrthogonal = (pts: Point[]) => {
       {/* ✅ Final wires */}
 
     {getProcessedWires().map(w => {
-        const routed = manhattanRoutePolyline(w.points);
+      const routed = manhattanRoutePolyline(w.points);
+        // Determine stroke width based on connected pin thickness (if any)
+        let maxPinThickness = 0;
+        (w.points || []).forEach((pt: any) => {
+          if (pt.pinId) {
+            // find pin object to read pinThickness
+            for (const sym of placedSymbols || []) {
+              const p = (sym.pins || []).find((pp: any) => pp.id === pt.pinId);
+              if (p && p.pinThickness) maxPinThickness = Math.max(maxPinThickness, p.pinThickness);
+            }
+          }
+        });
+        const pixelStroke = Math.max(baseStroke, maxPinThickness ? (maxPinThickness / scale) : 0);
+
+        // If any symbol is being dragged (live positions exist), render
+        // wires with sharp 90° corners to keep them perpendicular during drag.
+        const liveDragging = Object.keys(livePinPositionsRef.current || {}).length > 0;
+        const cornerRadius = liveDragging ? 0 : 6;
+
         return (
           <Path
             key={w.id}
-            data={makeOrthogonalRoundedPath(routed, 6)}
+            data={makeOrthogonalRoundedPath(routed, cornerRadius)}
             stroke="#29AF0F"
-            strokeWidth={Math.max(baseStroke / scale, 0.5)}
+            strokeWidth={Math.max(pixelStroke, 0.5)}
             lineCap="round"
             lineJoin="round"
             listening={false}
           />
-        )
+        );
       })}
+
+    {/* Live preview routes for wires connected to the symbol being dragged */}
+    {Object.entries(previewRoutes).map(([wid, pts]) => {
+      const liveDragging = Object.keys(livePinPositionsRef.current || {}).length > 0;
+      const r = liveDragging ? 0 : 6;
+      // compute stroke similar to processed wires
+      let maxPinThickness = 0;
+      const wire = wires.find((w: any) => w.id === wid);
+      (wire?.points || []).forEach((pt: any) => {
+        if (pt?.pinId) {
+          for (const sym of placedSymbols || []) {
+            const p = (sym.pins || []).find((pp: any) => pp.id === pt.pinId);
+            if (p && p.pinThickness) maxPinThickness = Math.max(maxPinThickness, p.pinThickness);
+          }
+        }
+      });
+      const pixelStroke = Math.max(baseStroke, maxPinThickness ? (maxPinThickness / scale) : 0);
+      return (
+        <Path
+          key={`preview-${wid}`}
+          data={makeOrthogonalRoundedPath(pts, r)}
+          stroke="#2a9908ff"
+          strokeWidth={Math.max(pixelStroke, 0.5)}
+          lineCap="round"
+          lineJoin="round"
+          opacity={0.6}
+          dash={[8 / scale, 6 / scale]}
+          listening={false}
+        />
+      );
+    })}
 
   {/* ✅ Draw hump arcs on top */}
   {getProcessedWires().flatMap(w =>
@@ -623,7 +791,25 @@ const compressOrthogonal = (pts: Point[]) => {
         <Path
           data={previewPath}
           stroke="#2a9908ff"  // bright green but we reduce visibility with low opacity
-          strokeWidth={Math.max(baseStroke / scale, 1)}
+          // Match preview stroke width to processed wire logic:
+          // compute max connected pin thickness (if any) and derive pixel stroke
+          strokeWidth={(() => {
+            try {
+              let maxPinThickness = 0;
+              (drawing.worldPoints || []).forEach((pt: any) => {
+                if (pt && pt.pinId) {
+                  for (const sym of placedSymbols || []) {
+                    const p = (sym.pins || []).find((pp: any) => pp.id === pt.pinId);
+                    if (p && p.pinThickness) maxPinThickness = Math.max(maxPinThickness, p.pinThickness);
+                  }
+                }
+              });
+              const pixelStroke = Math.max(baseStroke, maxPinThickness ? (maxPinThickness / scale) : 0);
+              return Math.max(pixelStroke, 0.5);
+            } catch (err) {
+              return Math.max(baseStroke / scale, 1);
+            }
+          })()}
           opacity={0.25} // ✅ faint watermark look
           lineCap="round"
           lineJoin="round"
