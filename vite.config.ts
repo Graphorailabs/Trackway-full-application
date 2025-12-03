@@ -19,7 +19,8 @@ export default defineConfig({
         // Split vendor code and large libraries into separate chunks
         manualChunks(id) {
           if (id.includes('node_modules')) {
-            if (id.includes('react') || id.includes('react-dom')) return 'react-vendor';
+            // Keep react/react-dom in the main vendor chunk to avoid circular
+            // initialization issues between separate vendor chunks (TDZ errors).
             if (id.includes('konva') || id.includes('react-konva')) return 'konva-vendor';
             if (id.includes('trackway_parser_wasm') || id.endsWith('.wasm')) return 'wasm';
             return 'vendor';
