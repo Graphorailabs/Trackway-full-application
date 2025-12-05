@@ -21,6 +21,30 @@ export function schematicJsonToValue(input: string): any;
  */
 export function schematicSexprToValue(input: string): any;
 /**
+ * Run ERC on a schematic S-expression and return the `ErcReport` as a JS object.
+ */
+export function ercRunFromSexpr(input: string): any;
+/**
+ * Run ERC from a JS `KicadSch` value and return `ErcReport` as JS object.
+ */
+export function ercRunFromValue(value: any): any;
+/**
+ * Build minimal SchematicModel from a S-expression and return as JS object.
+ */
+export function ercBuildModelFromSexpr(input: string): any;
+/**
+ * Convert an `ErcReport` Rust JSON string to a JS object.
+ */
+export function ercReportJsonToValue(input: string): any;
+/**
+ * Convert an `ErcReport` JS object to a JSON string.
+ */
+export function ercReportValueToJson(value: any, pretty: boolean): string;
+/**
+ * Convert an `ErcReport` Rust JSON string to pretty/raw JSON string (identity helper).
+ */
+export function ercReportJsonToJson(input: string, pretty: boolean): string;
+/**
  * Render a schematic JavaScript object (matching `KicadSch`) to JSON text.
  */
 export function schematicValueToJson(value: any, pretty: boolean): string;
@@ -206,6 +230,14 @@ export interface FootprintLibrary {
     generator_version?: string;
     footprint: Footprint;
     extra?: string[];
+}
+
+export interface SchematicModel {
+    nets: NetInfo[];
+}
+
+export interface ErcReport {
+    issues: ErcIssue[];
 }
 
 export interface SymbolProperty {
@@ -432,6 +464,845 @@ export interface Symbol {
     unit_name?: string;
 }
 
+export type Property = [string, string];
+
+/**
+ * Representation of the `(pcbplotparams ...)` block within a setup section.
+ */
+export interface PcbPlotParams {
+    layerselection: string;
+    disableapertmacros: boolean;
+    usegerberextensions: boolean;
+    usegerberattributes: boolean;
+    usegerberadvancedattributes: boolean;
+    creategerberjobfile: boolean;
+    svguseinch: boolean;
+    svgprecision: number;
+    excludeedgelayer: boolean;
+    plotframeref: boolean;
+    viasonmask: boolean;
+    mode: PlotMode;
+    useauxorigin: boolean;
+    hpglpennumber: number;
+    hpglpenspeed: number;
+    hpglpendiameter: number;
+    dxfpolygonmode: boolean;
+    dxfimperialunits: boolean;
+    dxfusepcbnewfont: boolean;
+    psnegative: boolean;
+    psa4output: boolean;
+    plotreference: boolean;
+    plotvalue: boolean;
+    plotinvisibletext: boolean;
+    sketchpadsonfab: boolean;
+    subtractmaskfromsilk: boolean;
+    outputformat: PlotOutputFormat;
+    mirror: boolean;
+    drillshape: PlotDrillShape;
+    scaleselection: number;
+    outputdirectory: string;
+    extra?: string[];
+}
+
+export type PlotDrillShape = string;
+
+export type PlotOutputFormat = string;
+
+export type PlotMode = string;
+
+export interface Image {
+    at: ImageAt;
+    scale?: number;
+    layer?: string;
+    uuid: Uuid;
+    data: string;
+    extra?: string[];
+}
+
+export interface ImageAt {
+    x: number;
+    y: number;
+    angle?: number;
+}
+
+/**
+ * KiCad PCB `general` section. Currently only models the thickness token and
+ * preserves any additional, as-yet unsupported forms.
+ */
+export interface General {
+    thickness?: number;
+    extra?: string[];
+}
+
+export interface ZoneFill {
+    filled?: boolean;
+    mode?: ZoneFillMode;
+    thermal_gap?: number;
+    thermal_bridge_width?: number;
+    smoothing?: ZoneFillSmoothing;
+    radius?: number;
+    island_removal_mode?: ZoneIslandRemovalMode;
+    island_area_min?: number;
+    hatch_thickness?: number;
+    hatch_gap?: number;
+    hatch_orientation?: number;
+    hatch_smoothing_level?: ZoneFillHatchSmoothingLevel;
+    hatch_smoothing_value?: number;
+    hatch_border_algorithm?: ZoneHatchBorderAlgorithm;
+    hatch_min_hole_area?: number;
+    extra?: string[];
+}
+
+export type ZoneHatchBorderAlgorithm = "zone_minimum_thickness" | "hatch_thickness";
+
+export type ZoneFillHatchSmoothingLevel = "none" | "fillet" | "arc_minimum" | "arc_maximum";
+
+export type ZoneIslandRemovalMode = "always_remove" | "never_remove" | "minimum_area";
+
+export type ZoneFillSmoothing = "chamfer" | "fillet";
+
+export type ZoneFillMode = "solid" | "hatched";
+
+/**
+ * (bus (pts ...) (stroke ...) (uuid \"...\"))
+ */
+export interface Bus {
+    pts: Pts;
+    stroke: Stroke;
+    uuid: Uuid;
+}
+
+/**
+ * (wire (pts ...) (stroke ...) (uuid \"...\"))
+ */
+export interface Wire {
+    pts: Pts;
+    stroke: Stroke;
+    uuid: Uuid;
+}
+
+/**
+ * (label \"TEXT\" (at x y r)? (effects ...)? (uuid ...)?)
+ */
+export interface LocalLabel {
+    "": string;
+    at: Xyr;
+    effects: TextEffects;
+    uuid: Uuid;
+}
+
+export interface FootprintPolygon {
+    pts: Pts;
+    layer: CanonicalLayer;
+    width?: number;
+    stroke?: Stroke;
+    fill?: boolean;
+    locked?: boolean;
+    tstamp?: string;
+    uuid: Uuid;
+    extra?: string[];
+}
+
+export interface FootprintDimension {
+    locked?: boolean;
+    dimension_type: FootprintDimensionType;
+    layer: CanonicalLayer;
+    uuid: Uuid;
+    pts: Pts;
+    height?: number;
+    orientation?: number;
+    leader_length?: number;
+    gr_text?: GraphicText;
+    format?: DimensionFormat;
+    style: DimensionStyle;
+    extra?: string[];
+}
+
+export interface DimensionStyle {
+    thickness: number;
+    arrow_length: number;
+    text_position_mode: DimensionTextPositionMode;
+    arrow_direction?: DimensionArrowDirection;
+    extension_height?: number;
+    text_frame?: DimensionTextFrame;
+    extension_offset?: number;
+    keep_text_aligned?: boolean;
+    extra?: string[];
+}
+
+export type DimensionTextFrame = "none" | "rectangle" | "circle" | "rounded_rectangle";
+
+export type DimensionArrowDirection = "outward" | "inward";
+
+export type DimensionTextPositionMode = "outside" | "inline" | "manual";
+
+export interface DimensionFormat {
+    prefix?: string;
+    suffix?: string;
+    units: DimensionUnits;
+    units_format: DimensionUnitsFormat;
+    precision: DimensionPrecision;
+    override_value?: string;
+    suppress_zeros?: boolean;
+    extra?: string[];
+}
+
+export type DimensionPrecision = "digits_0" | "digits_1" | "digits_2" | "digits_3" | "digits_4" | "digits_5" | "scaled_hundredths" | "scaled_thousandths" | "scaled_ten_thousandths" | "scaled_hundred_thousandths";
+
+export type DimensionUnitsFormat = "none" | "bare" | "parentheses";
+
+export type DimensionUnits = "inches" | "mils" | "millimeters" | "automatic";
+
+export type FootprintDimensionType = string;
+
+export interface FootprintAttributes {
+    kind?: FootprintAttrKind;
+    board_only?: boolean;
+    exclude_from_pos_files?: boolean;
+    exclude_from_bom?: boolean;
+    allow_missing_courtyard?: boolean;
+    dnp?: boolean;
+    extra?: string[];
+}
+
+export type FootprintAttrKind = string;
+
+export interface GraphicCurve {
+    pts: Pts;
+    layer: CanonicalLayer;
+    width: number;
+    uuid: Uuid;
+    locked?: boolean;
+    tstamp?: string;
+    extra?: string[];
+}
+
+export type Track = { kind: "segment"; data: TrackSegment } | { kind: "via"; data: TrackVia } | { kind: "arc"; data: TrackArc } | { kind: "unknown"; data: UnknownTrack };
+
+export interface TrackArc {
+    start: Xy;
+    mid: Xy;
+    end: Xy;
+    width: number;
+    layer: CanonicalLayer;
+    locked?: boolean;
+    net: number;
+    tstamp?: string;
+    uuid?: Uuid;
+    status?: number;
+    extra?: string[];
+}
+
+/**
+ * Simple coordinate pair used by setup origin tokens.
+ */
+export interface Coordinate {
+    x: number;
+    y: number;
+}
+
+export type PadChamferCorner = string;
+
+export type PadShape = string;
+
+export type PadType = string;
+
+export interface CustomPadPrimitives {
+    graphics?: PadPrimitive[];
+    width?: number;
+    fill?: boolean;
+    extra?: string[];
+}
+
+export interface CustomPadOptions {
+    clearance?: PadCustomClearance;
+    anchor?: PadCustomAnchor;
+    extra?: string[];
+}
+
+export type PadPrimitive = string;
+
+export type PadCustomAnchor = string;
+
+export type PadCustomClearance = string;
+
+export interface Zone {
+    net: number;
+    net_name?: string;
+    layer: CanonicalLayer;
+    uuid?: Uuid;
+    name?: string;
+    hatch?: ZoneHatch;
+    priority?: number;
+    connect_pads?: ZoneConnectPads;
+    min_thickness: number;
+    filled_areas_thickness?: boolean;
+    keepout?: ZoneKeepout;
+    fill?: ZoneFill;
+    polygon: Xy[];
+    filled_polygons?: ZoneFilledPolygon[];
+    fill_segments?: ZoneFillSegments[];
+    extra?: string[];
+}
+
+export interface ZoneFillSegments {
+    layer: CanonicalLayer;
+    points: Xy[];
+    extra?: string[];
+}
+
+export interface ZoneFilledPolygon {
+    layer: CanonicalLayer;
+    points: Xy[];
+    extra?: string[];
+}
+
+export interface GraphicRect {
+    start: Xy;
+    end: Xy;
+    layer: CanonicalLayer;
+    width: number;
+    fill?: boolean;
+    uuid: Uuid;
+    locked?: boolean;
+    tstamp?: string;
+    extra?: string[];
+}
+
+export interface GraphicPolygon {
+    pts: Pts;
+    layer: CanonicalLayer;
+    width: number;
+    fill?: boolean;
+    uuid: Uuid;
+    locked?: boolean;
+    tstamp?: string;
+    extra?: string[];
+}
+
+/**
+ * (no_connect (at x y) (uuid \"...\"))
+ */
+export interface NoConnect {
+    /**
+     * POSITION_IDENTIFIER — XY only (no rotation)
+     */
+    at: Xy;
+    /**
+     * UNIQUE_IDENTIFIER — required
+     */
+    uuid: Uuid;
+}
+
+export interface FootprintLine {
+    start: Xy;
+    end: Xy;
+    layer: CanonicalLayer;
+    width?: number;
+    stroke?: Stroke;
+    locked?: boolean;
+    tstamp?: string;
+    uuid?: Uuid;
+    extra?: string[];
+}
+
+export interface FootprintCircle {
+    center: Xy;
+    end: Xy;
+    layer: CanonicalLayer;
+    width?: number;
+    stroke?: Stroke;
+    fill?: boolean;
+    locked?: boolean;
+    tstamp?: string;
+    uuid?: Uuid;
+    extra?: string[];
+}
+
+export interface Footprint {
+    library_link?: string;
+    version?: number;
+    generator?: string;
+    generator_version?: string;
+    locked?: boolean;
+    placed?: boolean;
+    layer: CanonicalLayer;
+    tedit?: string;
+    uuid?: Uuid;
+    at?: GraphicAt;
+    descr?: string;
+    tags?: string;
+    properties?: FootprintProperty[];
+    path?: string;
+    autoplace_cost90?: number;
+    autoplace_cost180?: number;
+    solder_mask_margin?: number;
+    solder_paste_margin?: number;
+    solder_paste_ratio?: number;
+    clearance?: number;
+    zone_connect?: FootprintZoneConnect;
+    thermal_width?: number;
+    thermal_gap?: number;
+    attributes?: FootprintAttributes;
+    private_layers?: CanonicalLayer[];
+    net_tie_pad_groups?: string[][];
+    graphics?: FootprintGraphic[];
+    pads?: FootprintPad[];
+    zones?: Zone[];
+    groups?: Group[];
+    models?: FootprintModel[];
+    extra?: string[];
+}
+
+export interface ZoneKeepout {
+    tracks?: ZoneKeepoutSetting;
+    vias?: ZoneKeepoutSetting;
+    pads?: ZoneKeepoutSetting;
+    copperpour?: ZoneKeepoutSetting;
+    footprints?: ZoneKeepoutSetting;
+    extra?: string[];
+}
+
+export type ZoneKeepoutSetting = "allowed" | "not_allowed";
+
+export type PageLabel = string;
+
+export interface RootPath {
+    "": string;
+    page?: PageLabel;
+}
+
+/**
+ * Definition of a single net entry within the `(net ...)` section.
+ */
+export interface Net {
+    ordinal: number;
+    name: string;
+}
+
+/**
+ * Container for all layer definitions defined by the board.
+ */
+export type Layers = Layer[];
+
+/**
+ * Definition of a single PCB layer entry inside the `(layers ...)` section.
+ */
+export interface Layer {
+    ordinal: number;
+    canonical_name: CanonicalLayer;
+    layer_type: LayerType;
+    user_name?: string;
+}
+
+export type LayerType = string;
+
+export type CanonicalLayer = string;
+
+export interface PadNet {
+    number: number;
+    name: string;
+}
+
+export interface PadDrill {
+    shape?: PadDrillShape;
+    diameter: number;
+    width?: number;
+    offset?: Xy;
+}
+
+export type PadDrillShape = string;
+
+export interface ZoneHatch {
+    style: ZoneHatchStyle;
+    pitch: number;
+}
+
+export type ZoneHatchStyle = "none" | "edge" | "full";
+
+export interface GraphicAt {
+    x: number;
+    y: number;
+    angle?: number;
+}
+
+/**
+ * Reference to an existing UUID stored as a bare string in the PCB file.
+ */
+export type UuidRef = string;
+
+export interface KicadSch {
+    version: number;
+    generator: string;
+    generator_version?: string;
+    uuid: Uuid;
+    paper?: Paper;
+    title_block?: TitleBlock;
+    lib_symbols?: LibSymbols;
+    sheet?: Sheet[];
+    junction?: Junction[];
+    no_connect?: NoConnect[];
+    bus_entry?: BusEntry[];
+    wire?: Wire[];
+    bus?: Bus[];
+    polyline?: Polyline[];
+    text?: GraphText[];
+    label?: LocalLabel[];
+    global_label?: GlobalLabel[];
+    symbol?: SchematicSymbol[];
+    path?: RootPath;
+}
+
+/**
+ * Root of a KiCad PCB file. Currently models the header, page, layers, and general
+ * sections per the KiCad board file format
+ * <https://dev-docs.kicad.org/en/file-formats/sexpr-pcb/index.html>.
+ */
+export interface Pcb {
+    version: number;
+    generator: string;
+    generator_version?: string;
+    page: Paper;
+    layers: Layers;
+    setup: Setup;
+    properties?: Property[];
+    nets?: Net[];
+    graphics?: PcbGraphicItem[];
+    images?: Image[];
+    footprints?: Footprint[];
+    tracks?: Track[];
+    zones?: Zone[];
+    groups?: Group[];
+    general?: General;
+}
+
+export interface FootprintModelRotation {
+    x: number;
+    y: number;
+    z: number;
+}
+
+export interface FootprintModelScale {
+    x: number;
+    y: number;
+    z: number;
+}
+
+export interface FootprintModelTranslation {
+    x: number;
+    y: number;
+    z: number;
+}
+
+export interface FootprintModel {
+    path: string;
+    translation?: FootprintModelTranslation;
+    scale?: FootprintModelScale;
+    rotation?: FootprintModelRotation;
+    extra?: string[];
+}
+
+export interface FootprintTextBox {
+    locked?: boolean;
+    text: string;
+    start?: Xy;
+    end?: Xy;
+    pts?: Pts;
+    angle?: number;
+    layer: CanonicalLayer;
+    uuid: Uuid;
+    effects: TextEffects;
+    stroke?: Stroke;
+    render_cache?: string;
+    extra?: string[];
+}
+
+export interface FootprintCurve {
+    pts: Pts;
+    layer: CanonicalLayer;
+    width?: number;
+    stroke?: Stroke;
+    locked?: boolean;
+    tstamp?: string;
+    uuid: Uuid;
+    extra?: string[];
+}
+
+/**
+ * `(polyline ...)`
+ */
+export interface Polyline {
+    /**
+     * Coordinate point list: `(pts (xy ...) (xy ...) ...)`
+     */
+    pts: Pts;
+    /**
+     * How the line is drawn.
+     */
+    stroke: Stroke;
+    uuid: Uuid;
+}
+
+export type VersionIn = number | string | string;
+
+export interface Pts {
+    /**
+     * one or more `(xy X Y)` entries
+     */
+    xy?: Xy[];
+}
+
+/**
+ * Shared shape vocabulary for labels and sheet pins.
+ */
+export type LabelPinShape = "input" | "output" | "bidirectional" | "tri_state" | "passive";
+
+/**
+ * Valid fill types per KiCad spec.
+ */
+export type FillType = "none" | "outline" | "background";
+
+/**
+ * (fill (type none|outline|background))
+ */
+export interface Fill {
+    /**
+     * (type none|outline|background)
+     */
+    type: FillType;
+}
+
+/**
+ * (color R G B A)
+ */
+export type Rgba = [number, number, number, number];
+
+/**
+ * Valid stroke styles per KiCad spec.
+ */
+export type StrokeType = "dash" | "dash_dot" | "dash_dot_dot" | "dot" | "default" | "solid";
+
+/**
+ * (stroke (width WIDTH) (type TYPE) (color R G B A)?)
+ */
+export interface Stroke {
+    /**
+     * (width WIDTH)
+     */
+    width: number;
+    /**
+     * (type TYPE) — dash | dash_dot | dash_dot_dot | dot | default | solid
+     */
+    type: StrokeType;
+    /**
+     * (color R G B A) — 0..255 each (optional in KiCad)
+     */
+    color?: Rgba;
+}
+
+/**
+ * Presence-only flag → renders as a bare symbol head (e.g., `(bold)`, `(italic)`, `(hide)`)
+ */
+export type Flag = null;
+
+/**
+ * (justify [left|right] [top|bottom] [mirror])
+ * Model as presence flags; default (when absent) is centered & not mirrored.
+ */
+export interface Justify {
+    left?: boolean;
+    right?: boolean;
+    top?: boolean;
+    bottom?: boolean;
+    mirror?: boolean;
+}
+
+/**
+ * Required font size: (size HEIGHT WIDTH)
+ */
+export type FontSize = [number, number];
+
+/**
+ * Optional font face: (face \"NAME\")
+ */
+export type FontFace = string;
+
+/**
+ * (font (face NAME)? (size H W) (thickness T)? [bold] [italic] (line_spacing R)?)
+ */
+export interface Font {
+    /**
+     * (face FACE_NAME) — TTF family name or \"KiCad Font\" (v7+). Optional.
+     */
+    face?: FontFace;
+    /**
+     * (size HEIGHT WIDTH) — required
+     */
+    size: FontSize;
+    /**
+     * (thickness THICKNESS) — optional line thickness
+     */
+    thickness?: number;
+    /**
+     * [bold] — presence flag
+     */
+    bold?: boolean;
+    italic?: boolean;
+    /**
+     * (line_spacing RATIO) — optional; not yet supported by KiCad but in grammar
+     */
+    line_spacing?: number;
+}
+
+/**
+ * (effects (font ...) (justify ...) [hide])
+ */
+export interface TextEffects {
+    font?: Font;
+    justify?: Justify;
+    hide?: boolean;
+}
+
+/**
+ * Simple wrapper to match `(uuid <string>)`
+ */
+export type Uuid = string;
+
+export type Xyr = [number, number, number];
+
+/**
+ * Tuple structs match KiCad’s positional lists nicely.
+ * (size w h)  (at x y r)
+ */
+export type Xy = [number, number];
+
+/**
+ * Represents a KiCad symbol library file (.kicad_sym)
+ * (kicad_symbol_lib (version YYYYMMDD) (generator \"name\") SYMBOL_DEFINITION... )
+ */
+export interface KicadSymbolLib {
+    /**
+     * version as a YYYYMMDD integer (e.g. 20250114)
+     */
+    version: number;
+    /**
+     * generator string (e.g. \"kicad_symbol_editor\" or your generator name)
+     */
+    generator: string;
+    /**
+     * the symbols defined in this library (0..n)
+     */
+    symbol?: Symbol[];
+}
+
+export interface SymbolInstancePath {
+    path: string;
+    reference?: string;
+    unit?: number;
+}
+
+export interface SymbolInstanceProject {
+    project: string;
+    path?: SymbolInstancePath[];
+}
+
+export interface SymbolInstances {
+    project?: SymbolInstanceProject[];
+}
+
+/**
+ * (pin \"NUMBER\" (uuid <uuid>))
+ */
+export interface InstancePin {
+    number: string;
+    uuid?: Uuid;
+}
+
+/**
+ * Represents a symbol instance on a schematic page:
+ * (symbol \"LIBRARY_IDENTIFIER\" (at x y r) (unit N) (in_bom yes|no) (on_board yes|no)
+ *  (uuid \"...\") (property ...) (pin \"1\" (uuid ...)) (instances ...))
+ */
+export interface SchematicSymbol {
+    lib_id: string;
+    at: Xyr;
+    unit?: number;
+    in_bom?: boolean;
+    on_board?: boolean;
+    uuid?: Uuid;
+    properties?: SymbolProperty[];
+    pins?: InstancePin[];
+    instances?: SymbolInstances;
+}
+
+export interface TrackVia {
+    via_type?: ViaType;
+    at: Xy;
+    size: number;
+    drill: number;
+    layers: string[];
+    locked?: boolean;
+    remove_unused_layers?: boolean;
+    keep_end_layers?: boolean;
+    free?: boolean;
+    net: number;
+    tstamp?: string;
+    uuid?: Uuid;
+    status?: number;
+    extra?: string[];
+}
+
+export type ViaType = string;
+
+export type PadProperty = string;
+
+export interface GraphicCircle {
+    center: Xy;
+    end: Xy;
+    layer: CanonicalLayer;
+    width: number;
+    fill?: boolean;
+    uuid: Uuid;
+    locked?: boolean;
+    tstamp?: string;
+    extra?: string[];
+}
+
+export interface GraphicArc {
+    start: Xy;
+    mid: Xy;
+    end: Xy;
+    layer: CanonicalLayer;
+    width: number;
+    uuid: Uuid;
+    locked?: boolean;
+    tstamp?: string;
+    extra?: string[];
+}
+
+export interface UnknownTrack {
+    sexpr: string;
+}
+
+export interface Group {
+    name?: string;
+    id: UuidRef;
+    members?: UuidRef[];
+    extra?: string[];
+}
+
+/**
+ * Represents a single KiCad footprint library file (`.kicad_mod`).
+ * Encapsulates the optional header metadata along with the parsed footprint body.
+ */
+export interface FootprintLibrary {
+    version?: number;
+    generator?: string;
+    generator_version?: string;
+    footprint: Footprint;
+    extra?: string[];
+}
+
 /**
  * Supports both `(comment \"text\")` and `(comment <idx> \"text\")`.
  */
@@ -577,278 +1448,6 @@ export interface GlobalLabel {
     property?: Property[];
 }
 
-export interface FootprintProperty {
-    name: string;
-    value: string;
-    at?: GraphicAt;
-    layer?: CanonicalLayer;
-    unlocked?: boolean;
-    hide?: boolean;
-    effects?: TextEffects;
-    uuid?: Uuid;
-}
-
-export type Property = [string, string];
-
-export interface PadNet {
-    number: number;
-    name: string;
-}
-
-export interface FootprintLine {
-    start: Xy;
-    end: Xy;
-    layer: CanonicalLayer;
-    width?: number;
-    stroke?: Stroke;
-    locked?: boolean;
-    tstamp?: string;
-    uuid?: Uuid;
-    extra?: string[];
-}
-
-export interface FootprintCircle {
-    center: Xy;
-    end: Xy;
-    layer: CanonicalLayer;
-    width?: number;
-    stroke?: Stroke;
-    fill?: boolean;
-    locked?: boolean;
-    tstamp?: string;
-    uuid?: Uuid;
-    extra?: string[];
-}
-
-export interface Footprint {
-    library_link?: string;
-    version?: number;
-    generator?: string;
-    generator_version?: string;
-    locked?: boolean;
-    placed?: boolean;
-    layer: CanonicalLayer;
-    tedit?: string;
-    uuid?: Uuid;
-    at?: GraphicAt;
-    descr?: string;
-    tags?: string;
-    properties?: FootprintProperty[];
-    path?: string;
-    autoplace_cost90?: number;
-    autoplace_cost180?: number;
-    solder_mask_margin?: number;
-    solder_paste_margin?: number;
-    solder_paste_ratio?: number;
-    clearance?: number;
-    zone_connect?: FootprintZoneConnect;
-    thermal_width?: number;
-    thermal_gap?: number;
-    attributes?: FootprintAttributes;
-    private_layers?: CanonicalLayer[];
-    net_tie_pad_groups?: string[][];
-    graphics?: FootprintGraphic[];
-    pads?: FootprintPad[];
-    zones?: Zone[];
-    groups?: Group[];
-    models?: FootprintModel[];
-    extra?: string[];
-}
-
-/**
- * `(polyline ...)`
- */
-export interface Polyline {
-    /**
-     * Coordinate point list: `(pts (xy ...) (xy ...) ...)`
-     */
-    pts: Pts;
-    /**
-     * How the line is drawn.
-     */
-    stroke: Stroke;
-    uuid: Uuid;
-}
-
-export interface UnknownTrack {
-    sexpr: string;
-}
-
-export interface Group {
-    name?: string;
-    id: UuidRef;
-    members?: UuidRef[];
-    extra?: string[];
-}
-
-/**
- * Represents a single KiCad footprint library file (`.kicad_mod`).
- * Encapsulates the optional header metadata along with the parsed footprint body.
- */
-export interface FootprintLibrary {
-    version?: number;
-    generator?: string;
-    generator_version?: string;
-    footprint: Footprint;
-    extra?: string[];
-}
-
-/**
- * (bus (pts ...) (stroke ...) (uuid \"...\"))
- */
-export interface Bus {
-    pts: Pts;
-    stroke: Stroke;
-    uuid: Uuid;
-}
-
-/**
- * (wire (pts ...) (stroke ...) (uuid \"...\"))
- */
-export interface Wire {
-    pts: Pts;
-    stroke: Stroke;
-    uuid: Uuid;
-}
-
-export interface TrackArc {
-    start: Xy;
-    mid: Xy;
-    end: Xy;
-    width: number;
-    layer: CanonicalLayer;
-    locked?: boolean;
-    net: number;
-    tstamp?: string;
-    uuid?: Uuid;
-    status?: number;
-    extra?: string[];
-}
-
-export type FootprintZoneConnect = "none" | "thermal_relief" | "solid";
-
-export type PadProperty = string;
-
-export interface PadDrill {
-    shape?: PadDrillShape;
-    diameter: number;
-    width?: number;
-    offset?: Xy;
-}
-
-export type PadDrillShape = string;
-
-export interface Zone {
-    net: number;
-    net_name?: string;
-    layer: CanonicalLayer;
-    uuid?: Uuid;
-    name?: string;
-    hatch?: ZoneHatch;
-    priority?: number;
-    connect_pads?: ZoneConnectPads;
-    min_thickness: number;
-    filled_areas_thickness?: boolean;
-    keepout?: ZoneKeepout;
-    fill?: ZoneFill;
-    polygon: Xy[];
-    filled_polygons?: ZoneFilledPolygon[];
-    fill_segments?: ZoneFillSegments[];
-    extra?: string[];
-}
-
-export interface ZoneFillSegments {
-    layer: CanonicalLayer;
-    points: Xy[];
-    extra?: string[];
-}
-
-export interface ZoneFilledPolygon {
-    layer: CanonicalLayer;
-    points: Xy[];
-    extra?: string[];
-}
-
-export interface GraphicPolygon {
-    pts: Pts;
-    layer: CanonicalLayer;
-    width: number;
-    fill?: boolean;
-    uuid: Uuid;
-    locked?: boolean;
-    tstamp?: string;
-    extra?: string[];
-}
-
-export interface GraphicCurve {
-    pts: Pts;
-    layer: CanonicalLayer;
-    width: number;
-    uuid: Uuid;
-    locked?: boolean;
-    tstamp?: string;
-    extra?: string[];
-}
-
-/**
- * Represents a KiCad symbol library file (.kicad_sym)
- * (kicad_symbol_lib (version YYYYMMDD) (generator \"name\") SYMBOL_DEFINITION... )
- */
-export interface KicadSymbolLib {
-    /**
-     * version as a YYYYMMDD integer (e.g. 20250114)
-     */
-    version: number;
-    /**
-     * generator string (e.g. \"kicad_symbol_editor\" or your generator name)
-     */
-    generator: string;
-    /**
-     * the symbols defined in this library (0..n)
-     */
-    symbol?: Symbol[];
-}
-
-export interface SymbolInstancePath {
-    path: string;
-    reference?: string;
-    unit?: number;
-}
-
-export interface SymbolInstanceProject {
-    project: string;
-    path?: SymbolInstancePath[];
-}
-
-export interface SymbolInstances {
-    project?: SymbolInstanceProject[];
-}
-
-/**
- * (pin \"NUMBER\" (uuid <uuid>))
- */
-export interface InstancePin {
-    number: string;
-    uuid?: Uuid;
-}
-
-/**
- * Represents a symbol instance on a schematic page:
- * (symbol \"LIBRARY_IDENTIFIER\" (at x y r) (unit N) (in_bom yes|no) (on_board yes|no)
- *  (uuid \"...\") (property ...) (pin \"1\" (uuid ...)) (instances ...))
- */
-export interface SchematicSymbol {
-    lib_id: string;
-    at: Xyr;
-    unit?: number;
-    in_bom?: boolean;
-    on_board?: boolean;
-    uuid?: Uuid;
-    properties?: SymbolProperty[];
-    pins?: InstancePin[];
-    instances?: SymbolInstances;
-}
-
 /**
  * (bus_entry (at x y) (size dx dy) (stroke ...) (uuid \"...\"))
  */
@@ -871,57 +1470,17 @@ export interface BusEntry {
     uuid: Uuid;
 }
 
-export interface TrackVia {
-    via_type?: ViaType;
-    at: Xy;
-    size: number;
-    drill: number;
-    layers: string[];
-    locked?: boolean;
-    remove_unused_layers?: boolean;
-    keep_end_layers?: boolean;
-    free?: boolean;
-    net: number;
-    tstamp?: string;
+export type FootprintZoneConnect = "none" | "thermal_relief" | "solid";
+
+export interface FootprintProperty {
+    name: string;
+    value: string;
+    at?: GraphicAt;
+    layer?: CanonicalLayer;
+    unlocked?: boolean;
+    hide?: boolean;
+    effects?: TextEffects;
     uuid?: Uuid;
-    status?: number;
-    extra?: string[];
-}
-
-export type ViaType = string;
-
-export interface GraphicCircle {
-    center: Xy;
-    end: Xy;
-    layer: CanonicalLayer;
-    width: number;
-    fill?: boolean;
-    uuid: Uuid;
-    locked?: boolean;
-    tstamp?: string;
-    extra?: string[];
-}
-
-export interface KicadSch {
-    version: number;
-    generator: string;
-    generator_version?: string;
-    uuid: Uuid;
-    paper?: Paper;
-    title_block?: TitleBlock;
-    lib_symbols?: LibSymbols;
-    sheet?: Sheet[];
-    junction?: Junction[];
-    no_connect?: NoConnect[];
-    bus_entry?: BusEntry[];
-    wire?: Wire[];
-    bus?: Bus[];
-    polyline?: Polyline[];
-    text?: GraphText[];
-    label?: LocalLabel[];
-    global_label?: GlobalLabel[];
-    symbol?: SchematicSymbol[];
-    path?: RootPath;
 }
 
 /**
@@ -946,61 +1505,97 @@ export interface Junction {
     uuid: Uuid;
 }
 
-/**
- * Root of a KiCad PCB file. Currently models the header, page, layers, and general
- * sections per the KiCad board file format
- * <https://dev-docs.kicad.org/en/file-formats/sexpr-pcb/index.html>.
- */
-export interface Pcb {
-    version: number;
-    generator: string;
-    generator_version?: string;
-    page: Paper;
-    layers: Layers;
-    setup: Setup;
-    properties?: Property[];
-    nets?: Net[];
-    graphics?: PcbGraphicItem[];
-    images?: Image[];
-    footprints?: Footprint[];
-    tracks?: Track[];
-    zones?: Zone[];
-    groups?: Group[];
-    general?: General;
-}
-
-export interface Image {
-    at: ImageAt;
-    scale?: number;
-    layer?: string;
-    uuid: Uuid;
-    data: string;
-    extra?: string[];
-}
-
-export interface ImageAt {
-    x: number;
-    y: number;
-    angle?: number;
-}
-
-export interface GraphicArc {
-    start: Xy;
-    mid: Xy;
-    end: Xy;
-    layer: CanonicalLayer;
-    width: number;
-    uuid: Uuid;
-    locked?: boolean;
-    tstamp?: string;
-    extra?: string[];
-}
-
 export interface GraphText {
     "": string;
     at: Xyr;
     effects: TextEffects;
     uuid: Uuid;
+}
+
+export interface FootprintText {
+    kind: FootprintTextKind;
+    text: string;
+    at: GraphicAt;
+    layer: CanonicalLayer;
+    unlocked?: boolean;
+    hide?: boolean;
+    effects: TextEffects;
+    tstamp?: string;
+    uuid?: Uuid;
+    extra?: string[];
+}
+
+export type FootprintTextKind = string;
+
+export interface FootprintPad {
+    number: string;
+    pad_type: PadType;
+    shape: PadShape;
+    at: GraphicAt;
+    locked?: boolean;
+    size: Xy;
+    drill?: PadDrill;
+    layers: string[];
+    properties?: PadProperty[];
+    remove_unused_layers?: boolean;
+    keep_end_layers?: boolean;
+    roundrect_rratio?: number;
+    chamfer_ratio?: number;
+    chamfer?: PadChamferCorner[];
+    net?: PadNet;
+    tstamp?: string;
+    pinfunction?: string;
+    pintype?: string;
+    die_length?: number;
+    solder_mask_margin?: number;
+    solder_paste_margin?: number;
+    solder_paste_margin_ratio?: number;
+    clearance?: number;
+    zone_connect?: FootprintZoneConnect;
+    thermal_width?: number;
+    thermal_gap?: number;
+    custom_options?: CustomPadOptions;
+    custom_primitives?: CustomPadPrimitives;
+    uuid?: Uuid;
+    extra?: string[];
+}
+
+export interface FootprintArc {
+    start: Xy;
+    mid: Xy;
+    end: Xy;
+    layer: CanonicalLayer;
+    width?: number;
+    stroke?: Stroke;
+    locked?: boolean;
+    tstamp?: string;
+    uuid: Uuid;
+    extra?: string[];
+}
+
+export interface GraphicText {
+    text: string;
+    at: GraphicAt;
+    layer: CanonicalLayer;
+    knockout?: boolean;
+    locked?: boolean;
+    uuid: Uuid;
+    effects: TextEffects;
+    tstamp?: string;
+    extra?: string[];
+}
+
+export interface TrackSegment {
+    start: Xy;
+    end: Xy;
+    width: number;
+    layer: CanonicalLayer;
+    locked?: boolean;
+    net: number;
+    tstamp?: string;
+    uuid?: Uuid;
+    status?: number;
+    extra?: string[];
 }
 
 /**
@@ -1056,349 +1651,6 @@ export interface Setup {
     extra?: string[];
 }
 
-/**
- * Definition of a single net entry within the `(net ...)` section.
- */
-export interface Net {
-    ordinal: number;
-    name: string;
-}
-
-export interface FootprintTextBox {
-    locked?: boolean;
-    text: string;
-    start?: Xy;
-    end?: Xy;
-    pts?: Pts;
-    angle?: number;
-    layer: CanonicalLayer;
-    uuid: Uuid;
-    effects: TextEffects;
-    stroke?: Stroke;
-    render_cache?: string;
-    extra?: string[];
-}
-
-export interface FootprintArc {
-    start: Xy;
-    mid: Xy;
-    end: Xy;
-    layer: CanonicalLayer;
-    width?: number;
-    stroke?: Stroke;
-    locked?: boolean;
-    tstamp?: string;
-    uuid: Uuid;
-    extra?: string[];
-}
-
-export interface FootprintAttributes {
-    kind?: FootprintAttrKind;
-    board_only?: boolean;
-    exclude_from_pos_files?: boolean;
-    exclude_from_bom?: boolean;
-    allow_missing_courtyard?: boolean;
-    dnp?: boolean;
-    extra?: string[];
-}
-
-export type FootprintAttrKind = string;
-
-/**
- * Reference to an existing UUID stored as a bare string in the PCB file.
- */
-export type UuidRef = string;
-
-/**
- * (label \"TEXT\" (at x y r)? (effects ...)? (uuid ...)?)
- */
-export interface LocalLabel {
-    "": string;
-    at: Xyr;
-    effects: TextEffects;
-    uuid: Uuid;
-}
-
-export type VersionIn = number | string | string;
-
-export interface Pts {
-    /**
-     * one or more `(xy X Y)` entries
-     */
-    xy?: Xy[];
-}
-
-/**
- * Shared shape vocabulary for labels and sheet pins.
- */
-export type LabelPinShape = "input" | "output" | "bidirectional" | "tri_state" | "passive";
-
-/**
- * Valid fill types per KiCad spec.
- */
-export type FillType = "none" | "outline" | "background";
-
-/**
- * (fill (type none|outline|background))
- */
-export interface Fill {
-    /**
-     * (type none|outline|background)
-     */
-    type: FillType;
-}
-
-/**
- * (color R G B A)
- */
-export type Rgba = [number, number, number, number];
-
-/**
- * Valid stroke styles per KiCad spec.
- */
-export type StrokeType = "dash" | "dash_dot" | "dash_dot_dot" | "dot" | "default" | "solid";
-
-/**
- * (stroke (width WIDTH) (type TYPE) (color R G B A)?)
- */
-export interface Stroke {
-    /**
-     * (width WIDTH)
-     */
-    width: number;
-    /**
-     * (type TYPE) — dash | dash_dot | dash_dot_dot | dot | default | solid
-     */
-    type: StrokeType;
-    /**
-     * (color R G B A) — 0..255 each (optional in KiCad)
-     */
-    color?: Rgba;
-}
-
-/**
- * Presence-only flag → renders as a bare symbol head (e.g., `(bold)`, `(italic)`, `(hide)`)
- */
-export type Flag = null;
-
-/**
- * (justify [left|right] [top|bottom] [mirror])
- * Model as presence flags; default (when absent) is centered & not mirrored.
- */
-export interface Justify {
-    left?: boolean;
-    right?: boolean;
-    top?: boolean;
-    bottom?: boolean;
-    mirror?: boolean;
-}
-
-/**
- * Required font size: (size HEIGHT WIDTH)
- */
-export type FontSize = [number, number];
-
-/**
- * Optional font face: (face \"NAME\")
- */
-export type FontFace = string;
-
-/**
- * (font (face NAME)? (size H W) (thickness T)? [bold] [italic] (line_spacing R)?)
- */
-export interface Font {
-    /**
-     * (face FACE_NAME) — TTF family name or \"KiCad Font\" (v7+). Optional.
-     */
-    face?: FontFace;
-    /**
-     * (size HEIGHT WIDTH) — required
-     */
-    size: FontSize;
-    /**
-     * (thickness THICKNESS) — optional line thickness
-     */
-    thickness?: number;
-    /**
-     * [bold] — presence flag
-     */
-    bold?: boolean;
-    italic?: boolean;
-    /**
-     * (line_spacing RATIO) — optional; not yet supported by KiCad but in grammar
-     */
-    line_spacing?: number;
-}
-
-/**
- * (effects (font ...) (justify ...) [hide])
- */
-export interface TextEffects {
-    font?: Font;
-    justify?: Justify;
-    hide?: boolean;
-}
-
-/**
- * Simple wrapper to match `(uuid <string>)`
- */
-export type Uuid = string;
-
-export type Xyr = [number, number, number];
-
-/**
- * Tuple structs match KiCad’s positional lists nicely.
- * (size w h)  (at x y r)
- */
-export type Xy = [number, number];
-
-/**
- * Container for all layer definitions defined by the board.
- */
-export type Layers = Layer[];
-
-/**
- * Definition of a single PCB layer entry inside the `(layers ...)` section.
- */
-export interface Layer {
-    ordinal: number;
-    canonical_name: CanonicalLayer;
-    layer_type: LayerType;
-    user_name?: string;
-}
-
-export type LayerType = string;
-
-export type CanonicalLayer = string;
-
-export interface FootprintPolygon {
-    pts: Pts;
-    layer: CanonicalLayer;
-    width?: number;
-    stroke?: Stroke;
-    fill?: boolean;
-    locked?: boolean;
-    tstamp?: string;
-    uuid: Uuid;
-    extra?: string[];
-}
-
-export interface FootprintDimension {
-    locked?: boolean;
-    dimension_type: FootprintDimensionType;
-    layer: CanonicalLayer;
-    uuid: Uuid;
-    pts: Pts;
-    height?: number;
-    orientation?: number;
-    leader_length?: number;
-    gr_text?: GraphicText;
-    format?: DimensionFormat;
-    style: DimensionStyle;
-    extra?: string[];
-}
-
-export interface DimensionStyle {
-    thickness: number;
-    arrow_length: number;
-    text_position_mode: DimensionTextPositionMode;
-    arrow_direction?: DimensionArrowDirection;
-    extension_height?: number;
-    text_frame?: DimensionTextFrame;
-    extension_offset?: number;
-    keep_text_aligned?: boolean;
-    extra?: string[];
-}
-
-export type DimensionTextFrame = "none" | "rectangle" | "circle" | "rounded_rectangle";
-
-export type DimensionArrowDirection = "outward" | "inward";
-
-export type DimensionTextPositionMode = "outside" | "inline" | "manual";
-
-export interface DimensionFormat {
-    prefix?: string;
-    suffix?: string;
-    units: DimensionUnits;
-    units_format: DimensionUnitsFormat;
-    precision: DimensionPrecision;
-    override_value?: string;
-    suppress_zeros?: boolean;
-    extra?: string[];
-}
-
-export type DimensionPrecision = "digits_0" | "digits_1" | "digits_2" | "digits_3" | "digits_4" | "digits_5" | "scaled_hundredths" | "scaled_thousandths" | "scaled_ten_thousandths" | "scaled_hundred_thousandths";
-
-export type DimensionUnitsFormat = "none" | "bare" | "parentheses";
-
-export type DimensionUnits = "inches" | "mils" | "millimeters" | "automatic";
-
-export type FootprintDimensionType = string;
-
-export interface FootprintCurve {
-    pts: Pts;
-    layer: CanonicalLayer;
-    width?: number;
-    stroke?: Stroke;
-    locked?: boolean;
-    tstamp?: string;
-    uuid: Uuid;
-    extra?: string[];
-}
-
-export type PageLabel = string;
-
-export interface RootPath {
-    "": string;
-    page?: PageLabel;
-}
-
-export interface TrackSegment {
-    start: Xy;
-    end: Xy;
-    width: number;
-    layer: CanonicalLayer;
-    locked?: boolean;
-    net: number;
-    tstamp?: string;
-    uuid?: Uuid;
-    status?: number;
-    extra?: string[];
-}
-
-export interface FootprintPad {
-    number: string;
-    pad_type: PadType;
-    shape: PadShape;
-    at: GraphicAt;
-    locked?: boolean;
-    size: Xy;
-    drill?: PadDrill;
-    layers: string[];
-    properties?: PadProperty[];
-    remove_unused_layers?: boolean;
-    keep_end_layers?: boolean;
-    roundrect_rratio?: number;
-    chamfer_ratio?: number;
-    chamfer?: PadChamferCorner[];
-    net?: PadNet;
-    tstamp?: string;
-    pinfunction?: string;
-    pintype?: string;
-    die_length?: number;
-    solder_mask_margin?: number;
-    solder_paste_margin?: number;
-    solder_paste_margin_ratio?: number;
-    clearance?: number;
-    zone_connect?: FootprintZoneConnect;
-    thermal_width?: number;
-    thermal_gap?: number;
-    custom_options?: CustomPadOptions;
-    custom_primitives?: CustomPadPrimitives;
-    uuid?: Uuid;
-    extra?: string[];
-}
-
 export interface FootprintRect {
     start: Xy;
     end: Xy;
@@ -1412,130 +1664,13 @@ export interface FootprintRect {
     extra?: string[];
 }
 
-export interface ZoneHatch {
-    style: ZoneHatchStyle;
-    pitch: number;
-}
-
-export type ZoneHatchStyle = "none" | "edge" | "full";
-
-export interface GraphicAt {
-    x: number;
-    y: number;
-    angle?: number;
-}
-
-export type FootprintGraphic = { kind: "text"; data: FootprintText } | { kind: "line"; data: FootprintLine } | { kind: "rect"; data: FootprintRect } | { kind: "circle"; data: FootprintCircle } | { kind: "arc"; data: FootprintArc } | { kind: "polygon"; data: FootprintPolygon } | { kind: "curve"; data: FootprintCurve } | { kind: "text_box"; data: FootprintTextBox } | { kind: "dimension"; data: FootprintDimension };
-
-export type PcbGraphicItem = { kind: "text"; data: GraphicText } | { kind: "line"; data: GraphicLine } | { kind: "rect"; data: GraphicRect } | { kind: "circle"; data: GraphicCircle } | { kind: "arc"; data: GraphicArc } | { kind: "polygon"; data: GraphicPolygon } | { kind: "curve"; data: GraphicCurve };
-
-export type Track = { kind: "segment"; data: TrackSegment } | { kind: "via"; data: TrackVia } | { kind: "arc"; data: TrackArc } | { kind: "unknown"; data: UnknownTrack };
-
-/**
- * Simple coordinate pair used by setup origin tokens.
- */
-export interface Coordinate {
-    x: number;
-    y: number;
-}
-
-/**
- * Representation of the `(pcbplotparams ...)` block within a setup section.
- */
-export interface PcbPlotParams {
-    layerselection: string;
-    disableapertmacros: boolean;
-    usegerberextensions: boolean;
-    usegerberattributes: boolean;
-    usegerberadvancedattributes: boolean;
-    creategerberjobfile: boolean;
-    svguseinch: boolean;
-    svgprecision: number;
-    excludeedgelayer: boolean;
-    plotframeref: boolean;
-    viasonmask: boolean;
-    mode: PlotMode;
-    useauxorigin: boolean;
-    hpglpennumber: number;
-    hpglpenspeed: number;
-    hpglpendiameter: number;
-    dxfpolygonmode: boolean;
-    dxfimperialunits: boolean;
-    dxfusepcbnewfont: boolean;
-    psnegative: boolean;
-    psa4output: boolean;
-    plotreference: boolean;
-    plotvalue: boolean;
-    plotinvisibletext: boolean;
-    sketchpadsonfab: boolean;
-    subtractmaskfromsilk: boolean;
-    outputformat: PlotOutputFormat;
-    mirror: boolean;
-    drillshape: PlotDrillShape;
-    scaleselection: number;
-    outputdirectory: string;
+export interface ZoneConnectPads {
+    connection?: ZoneConnectPadsConnection;
+    clearance: number;
     extra?: string[];
 }
 
-export type PlotDrillShape = string;
-
-export type PlotOutputFormat = string;
-
-export type PlotMode = string;
-
-/**
- * KiCad PCB `general` section. Currently only models the thickness token and
- * preserves any additional, as-yet unsupported forms.
- */
-export interface General {
-    thickness?: number;
-    extra?: string[];
-}
-
-export interface CustomPadPrimitives {
-    graphics?: PadPrimitive[];
-    width?: number;
-    fill?: boolean;
-    extra?: string[];
-}
-
-export interface CustomPadOptions {
-    clearance?: PadCustomClearance;
-    anchor?: PadCustomAnchor;
-    extra?: string[];
-}
-
-export type PadPrimitive = string;
-
-export type PadCustomAnchor = string;
-
-export type PadCustomClearance = string;
-
-export interface FootprintModelRotation {
-    x: number;
-    y: number;
-    z: number;
-}
-
-export interface FootprintModelScale {
-    x: number;
-    y: number;
-    z: number;
-}
-
-export interface FootprintModelTranslation {
-    x: number;
-    y: number;
-    z: number;
-}
-
-export interface FootprintModel {
-    path: string;
-    translation?: FootprintModelTranslation;
-    scale?: FootprintModelScale;
-    rotation?: FootprintModelRotation;
-    extra?: string[];
-}
+export type ZoneConnectPadsConnection = "thru_hole_only" | "full" | "no";
 
 export interface GraphicLine {
     start: Xy;
@@ -1549,110 +1684,62 @@ export interface GraphicLine {
     extra?: string[];
 }
 
-/**
- * (no_connect (at x y) (uuid \"...\"))
- */
-export interface NoConnect {
-    /**
-     * POSITION_IDENTIFIER — XY only (no rotation)
-     */
-    at: Xy;
-    /**
-     * UNIQUE_IDENTIFIER — required
-     */
-    uuid: Uuid;
+export type ErcRuleConfig = Record<ErcIssueCode, ErcRuleConfigEntry>;
+
+export interface ErcRuleConfigEntry {
+    enabled: boolean;
+    severity_override: ErcSeverity | null;
 }
 
-export interface FootprintText {
-    kind: FootprintTextKind;
-    text: string;
-    at: GraphicAt;
-    layer: CanonicalLayer;
-    unlocked?: boolean;
-    hide?: boolean;
-    effects: TextEffects;
-    tstamp?: string;
-    uuid?: Uuid;
-    extra?: string[];
+export interface ErcReport {
+    issues: ErcIssue[];
 }
 
-export type FootprintTextKind = string;
-
-export type PadChamferCorner = string;
-
-export type PadShape = string;
-
-export type PadType = string;
-
-export interface ZoneKeepout {
-    tracks?: ZoneKeepoutSetting;
-    vias?: ZoneKeepoutSetting;
-    pads?: ZoneKeepoutSetting;
-    copperpour?: ZoneKeepoutSetting;
-    footprints?: ZoneKeepoutSetting;
-    extra?: string[];
+export interface ErcIssue {
+    code: ErcIssueCode;
+    severity: ErcSeverity;
+    message: string;
+    net_id: string | null;
+    net_name: string | null;
+    pins: PinInstance[];
+    location_hints: LocationInfo[];
 }
 
-export type ZoneKeepoutSetting = "allowed" | "not_allowed";
+export type ErcIssueCode = "UNCONNECTED_PIN" | "UNCONNECTED_NET" | "PIN_TYPE_CONFLICT" | "SHORTED_POWER_OUTPUTS" | "POWER_INPUT_NOT_DRIVEN" | "INPUT_NOT_DRIVEN" | "MULTIPLE_NET_LABELS" | "NC_PIN_CONNECTED" | "GLOBAL_LABEL_UNUSED" | "OTHER";
 
-export interface ZoneFill {
-    filled?: boolean;
-    mode?: ZoneFillMode;
-    thermal_gap?: number;
-    thermal_bridge_width?: number;
-    smoothing?: ZoneFillSmoothing;
-    radius?: number;
-    island_removal_mode?: ZoneIslandRemovalMode;
-    island_area_min?: number;
-    hatch_thickness?: number;
-    hatch_gap?: number;
-    hatch_orientation?: number;
-    hatch_smoothing_level?: ZoneFillHatchSmoothingLevel;
-    hatch_smoothing_value?: number;
-    hatch_border_algorithm?: ZoneHatchBorderAlgorithm;
-    hatch_min_hole_area?: number;
-    extra?: string[];
+export type ErcSeverity = "ERROR" | "WARNING" | "INFO";
+
+export interface SchematicModel {
+    nets: NetInfo[];
 }
 
-export type ZoneHatchBorderAlgorithm = "zone_minimum_thickness" | "hatch_thickness";
-
-export type ZoneFillHatchSmoothingLevel = "none" | "fillet" | "arc_minimum" | "arc_maximum";
-
-export type ZoneIslandRemovalMode = "always_remove" | "never_remove" | "minimum_area";
-
-export type ZoneFillSmoothing = "chamfer" | "fillet";
-
-export type ZoneFillMode = "solid" | "hatched";
-
-export interface ZoneConnectPads {
-    connection?: ZoneConnectPadsConnection;
-    clearance: number;
-    extra?: string[];
+export interface NetInfo {
+    id: string;
+    name: string | null;
+    pins: PinInstance[];
+    labels: string[];
 }
 
-export type ZoneConnectPadsConnection = "thru_hole_only" | "full" | "no";
-
-export interface GraphicText {
-    text: string;
-    at: GraphicAt;
-    layer: CanonicalLayer;
-    knockout?: boolean;
-    locked?: boolean;
-    uuid: Uuid;
-    effects: TextEffects;
-    tstamp?: string;
-    extra?: string[];
+export interface PinInstance {
+    id: string;
+    ref: string;
+    pin_number: string;
+    type: PinType;
+    net_id: string | null;
+    has_no_connect_flag: boolean;
+    is_power_flag: boolean;
+    location: LocationInfo;
 }
 
-export interface GraphicRect {
-    start: Xy;
-    end: Xy;
-    layer: CanonicalLayer;
-    width: number;
-    fill?: boolean;
-    uuid: Uuid;
-    locked?: boolean;
-    tstamp?: string;
-    extra?: string[];
+export interface LocationInfo {
+    sheet: string | null;
+    x: number;
+    y: number;
 }
+
+export type PinType = "INPUT" | "OUTPUT" | "BIDIR" | "PASSIVE" | "TRISTATE" | "POWER_IN" | "POWER_OUT" | "OPEN_COLLECTOR" | "OPEN_DRAIN" | "NC";
+
+export type FootprintGraphic = { kind: "text"; data: FootprintText } | { kind: "line"; data: FootprintLine } | { kind: "rect"; data: FootprintRect } | { kind: "circle"; data: FootprintCircle } | { kind: "arc"; data: FootprintArc } | { kind: "polygon"; data: FootprintPolygon } | { kind: "curve"; data: FootprintCurve } | { kind: "text_box"; data: FootprintTextBox } | { kind: "dimension"; data: FootprintDimension };
+
+export type PcbGraphicItem = { kind: "text"; data: GraphicText } | { kind: "line"; data: GraphicLine } | { kind: "rect"; data: GraphicRect } | { kind: "circle"; data: GraphicCircle } | { kind: "arc"; data: GraphicArc } | { kind: "polygon"; data: GraphicPolygon } | { kind: "curve"; data: GraphicCurve };
 

@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, type PropsWithChildren } from "react";
+import { createContext, useContext, useState, useCallback, type PropsWithChildren } from "react";
 import type { Pt } from "../components/layers/routing/octilinearRouter";
 
 interface RoutingContextValue {
@@ -28,16 +28,16 @@ export function RoutingProvider({ children }: PropsWithChildren) {
   const [previewIncompatibleWithPad, setPreviewIncompatibleWithPad] = useState<boolean>(false);
   const [currentTraceLayer, setCurrentTraceLayer] = useState<string | null>(null);
 
-  const toggleCurrentTraceLayer = () => {
+  const toggleCurrentTraceLayer = useCallback(() => {
     setCurrentTraceLayer((cur) => {
       if (!cur) return cur;
       return cur === "F.Cu" ? "B.Cu" : "F.Cu";
     });
-  };
+  }, []);
 
-  const resetCurrentTraceLayer = (layer?: string | null) => {
+  const resetCurrentTraceLayer = useCallback((layer?: string | null) => {
     setCurrentTraceLayer(layer ?? null);
-  };
+  }, []);
 
   return (
     <RoutingContext.Provider value={{ previewTracks, setPreviewTracks, previewIncompatibleWithPad, setPreviewIncompatibleWithPad, currentTraceLayer, setCurrentTraceLayer, toggleCurrentTraceLayer, resetCurrentTraceLayer }}>

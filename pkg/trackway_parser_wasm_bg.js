@@ -292,6 +292,116 @@ export function schematicSexprToValue(input) {
 }
 
 /**
+ * Run ERC on a schematic S-expression and return the `ErcReport` as a JS object.
+ * @param {string} input
+ * @returns {any}
+ */
+export function ercRunFromSexpr(input) {
+    const ptr0 = passStringToWasm0(input, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.ercRunFromSexpr(ptr0, len0);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
+}
+
+/**
+ * Run ERC from a JS `KicadSch` value and return `ErcReport` as JS object.
+ * @param {any} value
+ * @returns {any}
+ */
+export function ercRunFromValue(value) {
+    const ret = wasm.ercRunFromValue(value);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
+}
+
+/**
+ * Build minimal SchematicModel from a S-expression and return as JS object.
+ * @param {string} input
+ * @returns {any}
+ */
+export function ercBuildModelFromSexpr(input) {
+    const ptr0 = passStringToWasm0(input, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.ercBuildModelFromSexpr(ptr0, len0);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
+}
+
+/**
+ * Convert an `ErcReport` Rust JSON string to a JS object.
+ * @param {string} input
+ * @returns {any}
+ */
+export function ercReportJsonToValue(input) {
+    const ptr0 = passStringToWasm0(input, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.ercReportJsonToValue(ptr0, len0);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
+}
+
+/**
+ * Convert an `ErcReport` JS object to a JSON string.
+ * @param {any} value
+ * @param {boolean} pretty
+ * @returns {string}
+ */
+export function ercReportValueToJson(value, pretty) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ret = wasm.ercReportValueToJson(value, pretty);
+        var ptr1 = ret[0];
+        var len1 = ret[1];
+        if (ret[3]) {
+            ptr1 = 0; len1 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred2_0 = ptr1;
+        deferred2_1 = len1;
+        return getStringFromWasm0(ptr1, len1);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
+}
+
+/**
+ * Convert an `ErcReport` Rust JSON string to pretty/raw JSON string (identity helper).
+ * @param {string} input
+ * @param {boolean} pretty
+ * @returns {string}
+ */
+export function ercReportJsonToJson(input, pretty) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(input, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.ercReportJsonToJson(ptr0, len0, pretty);
+        var ptr2 = ret[0];
+        var len2 = ret[1];
+        if (ret[3]) {
+            ptr2 = 0; len2 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred3_0 = ptr2;
+        deferred3_1 = len2;
+        return getStringFromWasm0(ptr2, len2);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+}
+
+/**
  * Render a schematic JavaScript object (matching `KicadSch`) to JSON text.
  * @param {any} value
  * @param {boolean} pretty

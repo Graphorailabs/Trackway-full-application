@@ -36,6 +36,15 @@ import {
   type KicadSymbolLib,
   type Pcb,
   type FootprintLibrary,
+  // ERC exports
+  ercRunFromSexpr,
+  ercRunFromValue,
+  ercBuildModelFromSexpr,
+  ercReportValueToJson,
+  ercReportJsonToValue,
+  ercReportJsonToJson,
+  type SchematicModel,
+  type ErcReport,
 } from "trackway-parser-wasm";
 
 type PrettyOptions = { pretty?: boolean };
@@ -199,4 +208,32 @@ export class TrackwayParser {
   exportTypes(): string {
     return exportTsDefinitions();
   }
+
+  /** ERC helpers (Electrical Rules Check) */
+  readonly erc = {
+    /** Run ERC from schematic S-expression, returns an ErcReport object */
+    runFromSexpr(input: string): ErcReport {
+      return ercRunFromSexpr(input) as ErcReport;
+    },
+    /** Run ERC from a JS KicadSch-shaped value */
+    runFromValue(value: KicadSch): ErcReport {
+      return ercRunFromValue(value as unknown as any) as ErcReport;
+    },
+    /** Build the minimal SchematicModel from S-expression */
+    buildModelFromSexpr(input: string): SchematicModel {
+      return ercBuildModelFromSexpr(input) as SchematicModel;
+    },
+    /** Serialize an ErcReport JS value to JSON */
+    reportValueToJson(value: ErcReport, pretty?: boolean): string {
+      return ercReportValueToJson(value as unknown as any, Boolean(pretty));
+    },
+    /** Parse an ErcReport JSON string into a JS value */
+    reportJsonToValue(json: string): ErcReport {
+      return ercReportJsonToValue(json) as ErcReport;
+    },
+    /** Re-format ErcReport JSON string (identity/pretty) */
+    reportJsonToJson(json: string, pretty?: boolean): string {
+      return ercReportJsonToJson(json, Boolean(pretty));
+    },
+  };
 }

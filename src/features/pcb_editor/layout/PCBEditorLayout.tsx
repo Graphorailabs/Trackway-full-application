@@ -22,12 +22,14 @@ import ViaHoverProvider from "@/features/pcb_editor/contexts/ViaHoverContext";
 import { useFootprintManagers } from "@/features/footprint_manager/FootprintManagerContext";
 import { ShapeSelectionModal } from "../components/shapes/ShapeSelectionModal";
 import { RoutingProvider } from "@/features/pcb_editor/contexts/RoutingContext";
+import { Modal as ViewerModal, Viewer3D, CubeIcon } from "@/features/3dviewer/components";
 
 export function PCBEditorLayout() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [layersModalOpen, setLayersModalOpen] = useState(false);
   const [shapeModalOpen, setShapeModalOpen] = useState(false);
   const [footprintModalOpen, setFootprintModalOpen] = useState(false);
+  const [viewerOpen, setViewerOpen] = useState(false);
   const [toast, setToast] = useState<ToastState | null>(null);
 
   const handleSaveSuccess = useCallback(() => {
@@ -78,6 +80,14 @@ export function PCBEditorLayout() {
             className="!flex !h-7 !w-7 !items-center !justify-center !rounded-full !border-white/20 !bg-white/5 !p-0"
           >
             <Settings className="h-3 w-3" />
+          </ToolbarItem>
+          <ToolbarItem
+            label="3D Viewer"
+            aria-label="Open 3D viewer"
+            onClick={() => setViewerOpen(true)}
+            className="!flex !h-7 !w-7 !items-center !justify-center !rounded-full !border-white/20 !bg-white/5 !p-0"
+          >
+            <CubeIcon className="h-3 w-3" />
           </ToolbarItem>
           {SHOW_PCB_DEBUG ? (
             <ToolbarItem
@@ -335,6 +345,11 @@ export function PCBEditorLayout() {
                   <LayerVisibilityModal open={layersModalOpen} onClose={() => setLayersModalOpen(false)} />
                   <ShapeSelectionModal open={shapeModalOpen} onClose={() => setShapeModalOpen(false)} />
                   <FootprintModalController open={footprintModalOpen} setOpen={setFootprintModalOpen} />
+                  <ViewerModal isOpen={viewerOpen} onClose={() => setViewerOpen(false)} title="3D Viewer" fullScreen={false}>
+                    <div className="w-full h-[480px] md:h-[640px]">
+                      <Viewer3D />
+                    </div>
+                  </ViewerModal>
                   
                   <StatusToast toast={toast} />
                 </div>

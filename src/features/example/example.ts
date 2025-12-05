@@ -38,6 +38,15 @@ import {
   type KicadSymbolLib,
   type FootprintLibrary,
   type Pcb,
+  // ERC
+  ercRunFromSexpr,
+  ercRunFromValue,
+  ercBuildModelFromSexpr,
+  ercReportValueToJson,
+  ercReportJsonToValue,
+  ercReportJsonToJson,
+  type SchematicModel,
+  type ErcReport,
 } from "trackway-parser-wasm";
 
 function main(): void {
@@ -198,6 +207,24 @@ function main(): void {
   // If you need to emit the declarations manually (e.g., to a file), use exportTypes().
   const declarations = exportTypes();
   console.log("Generated TypeScript declarations:\n", declarations);
+
+  // --- ERC examples ------------------------------------------------------
+  const ercSexpr = schematicValueToSexpr(minimalSchematicValue, true);
+  // Run ERC from S-expression
+  const ercReport: ErcReport = ercRunFromSexpr(ercSexpr);
+  console.log("ERC report:", ercReport);
+
+  // Build model from sexpr
+  const model: SchematicModel = ercBuildModelFromSexpr(ercSexpr);
+  console.log("Built SchematicModel:", model);
+
+  // Convert report to JSON
+  const reportJson = ercReportValueToJson(ercReport, true);
+  console.log("ErcReport JSON:\n", reportJson);
+
+  // Parse JSON back to value
+  const parsedReport: ErcReport = ercReportJsonToValue(reportJson);
+  console.log("Parsed ErcReport from JSON:", parsedReport);
 }
 
 main();
