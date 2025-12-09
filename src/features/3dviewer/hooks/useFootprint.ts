@@ -1,126 +1,54 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
+import type { Footprint, FootprintGraphic, FootprintPad, GraphicAt } from "trackway-parser-wasm";
 import { FOOTPRINT_PREVIEW_FLIP_ARC_POINTS as DEFAULT_FLIP_ARC_POINTS } from "@/features/footprint_manager/constants";
+import {
+  FOOTPRINT_BBOX_PADDING,
+  FOOTPRINT_CANVAS_DIMENSION_MAX,
+  FOOTPRINT_CANVAS_DIMENSION_MIN,
+  FOOTPRINT_CANVAS_PPU_MAX,
+  FOOTPRINT_CANVAS_PPU_MIN,
+  FOOTPRINT_CANVAS_TEXTURE_MAX_PX,
+  FOOTPRINT_GRAPHIC_FILL_COLOR,
+  FOOTPRINT_GRAPHIC_STROKE_COLOR,
+  FOOTPRINT_LINE_WIDTH_MIN,
+  FOOTPRINT_LINE_WIDTH_SCALE,
+  FOOTPRINT_PAD_FILL_COLOR,
+  FOOTPRINT_PAD_ROUNDING_RATIO,
+  FOOTPRINT_PAD_STROKE_COLOR,
+  FOOTPRINT_SHADOW_COLOR,
+  FOOTPRINT_SHADOW_GLOW_SCALE,
+  FOOTPRINT_SHADOW_MIN_BLUR,
+  FOOTPRINT_ZERO_AT,
+} from "@/features/3dviewer/constants";
+import {
+  type FootprintPoint,
+  extractLayerName,
+  extendBoundsWithGraphic,
+  getArcPolyline,
+  getPadCenter,
+  getPadDrillValue,
+  getPadShapeName,
+  getPadSize,
+  parsePoint,
+  pointsFromAny,
+} from "./useFootprint.helpers";
 
-function toNumber(v: any, fallback = 0) {
-  if (typeof v === "number") return v;
-  if (Array.isArray(v) && typeof v[0] === "number") return v[0];
-  return fallback;
-}
+export default function useFootprint(fp?: Footprint | null) {
+  const at: GraphicAt = fp?.at ?? FOOTPRINT_ZERO_AT;
+  const x = at.x ?? 0;
+  const y = at.y ?? 0;
 
-type Point = { x: number; y: number };
+  const canonicalLayer = useMemo(() => extractLayerName(fp?.layer), [fp]);
 
-function mod2pi(value: number) {
-  const twoPi = Math.PI * 2;
-  let v = value % twoPi;
-  if (v < 0) v += twoPi;
-  return v;
-}
+  const graphics = useMemo<FootprintGraphic[]>(() => {
+    if (!Array.isArray(fp?.graphics)) return [];
+    return fp.graphics.filter((g): g is FootprintGraphic => Boolean(g));
+  }, [fp]);
 
-function circumcenter(ax: number, ay: number, bx: number, by: number, cx: number, cy: number) {
-  const d = 2 * (ax * (by - cy) + bx * (cy - ay) + cx * (ay - by));
-  if (Math.abs(d) < 1e-9) return null;
-  const ax2ay2 = ax * ax + ay * ay;
-  const bx2by2 = bx * bx + by * by;
-  const cx2cy2 = cx * cx + cy * cy;
-  const ux = (ax2ay2 * (by - cy) + bx2by2 * (cy - ay) + cx2cy2 * (ay - by)) / d;
-  const uy = (ax2ay2 * (cx - bx) + bx2by2 * (ax - cx) + cx2cy2 * (bx - ax)) / d;
-  return { x: ux, y: uy };
-}
+  const pads: FootprintPad[] = fp?.pads ?? [];
 
-function parsePoint(raw: any): Point | null {
-  if (!raw && raw !== 0) return null;
-  if (Array.isArray(raw)) {
-    const [x, y] = raw;
-    const nx = Number(x);
-    const ny = Number(y);
-    if (Number.isFinite(nx) && Number.isFinite(ny)) return { x: nx, y: ny };
-    return null;
-  }
-  if (typeof raw === "object") {
-    const nx = Number(raw.x ?? (Array.isArray(raw.xy) ? raw.xy[0] : undefined));
-    const ny = Number(raw.y ?? (Array.isArray(raw.xy) ? raw.xy[1] : undefined));
-    if (Number.isFinite(nx) && Number.isFinite(ny)) return { x: nx, y: ny };
-  }
-  return null;
-}
-
-function buildArcPolyline(start: Point | null, mid: Point | null, end: Point | null, flipStartEndWhenMidIsCenter: boolean): Point[] | null {
-  if (!start || !end) return null;
-  let sx = start.x;
-  let sy = start.y;
-  let ex = end.x;
-  let ey = end.y;
-  const mx = mid?.x ?? null;
-  const my = mid?.y ?? null;
-
-  let cx: number | null = null;
-  let cy: number | null = null;
-  let midUsedAsCenter = false;
-
-  if (mx !== null && my !== null) {
-    const cc = circumcenter(sx, sy, mx, my, ex, ey);
-    if (cc) {
-      cx = cc.x;
-      cy = cc.y;
-    } else {
-      cx = mx;
-      cy = my;
-      midUsedAsCenter = true;
-      if (flipStartEndWhenMidIsCenter) {
-        const tmpX = sx;
-        const tmpY = sy;
-        sx = ex;
-        sy = ey;
-        ex = tmpX;
-        ey = tmpY;
-      }
-    }
-  }
-
-  if (cx === null || cy === null) {
-    return [start, end];
-  }
-
-  const radius = Math.hypot(sx - cx, sy - cy);
-  if (!isFinite(radius) || radius <= 1e-6) {
-    return [start, end];
-  }
-
-  const startAngle = Math.atan2(sy - cy, sx - cx);
-  const endAngle = Math.atan2(ey - cy, ex - cx);
-  const midAngle = midUsedAsCenter || mx === null || my === null ? null : Math.atan2(my - cy, mx - cx);
-
-  let delta = mod2pi(endAngle - startAngle);
-  if (!midUsedAsCenter && midAngle !== null) {
-    const ccwToMid = mod2pi(midAngle - startAngle);
-    if (ccwToMid > delta + 1e-9) {
-      delta -= Math.PI * 2;
-    }
-  } else if (midUsedAsCenter) {
-    if (delta > Math.PI) delta -= Math.PI * 2;
-  }
-
-  if (Math.abs(delta) < 1e-6) {
-    return [start, end];
-  }
-
-  const segments = Math.max(8, Math.ceil(Math.abs(delta) / (Math.PI / 24)));
-  const points: Point[] = [];
-  for (let i = 0; i <= segments; i++) {
-    const t = i / segments;
-    const angle = startAngle + delta * t;
-    points.push({ x: cx + Math.cos(angle) * radius, y: cy + Math.sin(angle) * radius });
-  }
-  return points;
-}
-
-export default function useFootprint(fp: any) {
-  const at = fp?.at ?? {};
-  const x = (at.x ?? 0) as number;
-  const y = (at.y ?? 0) as number;
-
-  const isFlipped = useMemo(() => {
+  const hasBackIndicators = useMemo(() => {
     if (!fp) return false;
     const checkLayer = (layer: any) => {
       if (!layer) return false;
@@ -128,21 +56,27 @@ export default function useFootprint(fp: any) {
       if (typeof layer === "object" && typeof layer.canonical_name === "string") return layer.canonical_name.startsWith("B.");
       return false;
     };
-    if (Array.isArray(fp.pads)) {
-      for (const p of fp.pads) {
+    if (pads.length) {
+      for (const p of pads) {
         if (Array.isArray(p.layers) && p.layers.some(checkLayer)) return true;
-        if (Array.isArray(p.data?.layers) && p.data.layers.some(checkLayer)) return true;
       }
     }
-    if (Array.isArray(fp.graphics)) {
-      for (const g of fp.graphics) {
-        if (checkLayer(g.layer)) return true;
-        if (Array.isArray(g.layers) && g.layers.some(checkLayer)) return true;
+    if (graphics.length) {
+      for (const g of graphics) {
+        if (checkLayer(g.data.layer)) return true;
       }
     }
-    if (Array.isArray(fp.layers) && fp.layers.some(checkLayer)) return true;
     return false;
-  }, [fp]);
+  }, [fp, graphics]);
+
+  const isBackSide = useMemo(() => {
+    if (canonicalLayer) {
+      const upper = canonicalLayer.toUpperCase();
+      if (upper.startsWith("B.")) return true;
+      if (upper.startsWith("F.")) return false;
+    }
+    return hasBackIndicators;
+  }, [canonicalLayer, hasBackIndicators]);
 
   const bbox = useMemo(() => {
     let minx = Infinity,
@@ -159,55 +93,17 @@ export default function useFootprint(fp: any) {
       maxx = Math.max(maxx, px);
       maxy = Math.max(maxy, py);
     };
-    if (Array.isArray(fp.pads)) {
-      for (const p of fp.pads) {
-        const atx = toNumber(p.at?.x ?? p.at ?? p.x, 0);
-        const aty = toNumber(p.at?.y ?? (Array.isArray(p.at) ? p.at[1] : undefined) ?? p.y, 0);
-        const sz = p.size ?? p.data?.size ?? p.data?.shape ?? null;
-        const half = Array.isArray(sz) && typeof sz[0] === "number" ? Math.max(sz[0], sz[1] ?? sz[0]) / 2 : 1;
-        addPoint(atx - half, aty - half);
-        addPoint(atx + half, aty + half);
+    if (pads.length) {
+      for (const p of pads) {
+        const center = getPadCenter(p);
+        const [padWidth, padHeight] = getPadSize(p);
+        const half = Math.max(padWidth, padHeight) / 2;
+        addPoint(center.x - half, center.y - half);
+        addPoint(center.x + half, center.y + half);
       }
     }
-    if (Array.isArray(fp.graphics)) {
-      for (const g of fp.graphics) {
-        const hasArcPoints = (arr: any) => Array.isArray(arr) && arr.length === 3 && Array.isArray(arr[0]) && Array.isArray(arr[1]) && Array.isArray(arr[2]);
-        const pointsTriplet = hasArcPoints(g?.data?.points) ? g.data.points : null;
-        const hasExplicitTriplet = Array.isArray(g?.start) && Array.isArray(g?.mid) && Array.isArray(g?.end);
-        const hasDataTriplet = Array.isArray(g?.data?.start) && Array.isArray(g?.data?.mid) && Array.isArray(g?.data?.end);
-        if (g.kind === "arc" || pointsTriplet || hasExplicitTriplet || hasDataTriplet) {
-          const start = parsePoint(g.start ?? g.data?.start ?? pointsTriplet?.[0]);
-          const mid = parsePoint(g.mid ?? g.data?.mid ?? pointsTriplet?.[1]);
-          const end = parsePoint(g.end ?? g.data?.end ?? pointsTriplet?.[2]);
-          const polyline = buildArcPolyline(start, mid, end, flipArcPointsForBbox);
-          if (polyline) {
-            polyline.forEach((pt) => addPoint(pt.x, pt.y));
-            continue;
-          }
-        }
-        if (Array.isArray(g.start) && typeof g.start[0] === "number") addPoint(g.start[0], g.start[1]);
-        if (Array.isArray(g.end) && typeof g.end[0] === "number") addPoint(g.end[0], g.end[1]);
-        if (Array.isArray(g.data?.start) && typeof g.data.start[0] === "number") addPoint(g.data.start[0], g.data.start[1]);
-        if (Array.isArray(g.data?.end) && typeof g.data.end[0] === "number") addPoint(g.data.end[0], g.data.end[1]);
-        if (g.data && g.data.start && typeof g.data.start.x === 'number') addPoint(g.data.start.x, g.data.start.y);
-        if (g.data && g.data.end && typeof g.data.end.x === 'number') addPoint(g.data.end.x, g.data.end.y);
-        if (Array.isArray(g.pts)) {
-          for (const pt of g.pts) {
-            if (Array.isArray(pt)) addPoint(pt[0], pt[1]);
-            else if (pt && typeof pt.x === "number") addPoint(pt.x, pt.y);
-          }
-        }
-        if (g.data && g.data.pts && Array.isArray(g.data.pts.xy)) {
-          for (const pt of g.data.pts.xy) {
-            if (Array.isArray(pt)) addPoint(pt[0], pt[1]);
-          }
-        }
-        if (Array.isArray(g.at) && typeof g.at[0] === 'number') addPoint(g.at[0], g.at[1]);
-        if (g.at && typeof g.at.x === 'number') addPoint(g.at.x, g.at.y);
-        if (typeof g.x === 'number') addPoint(g.x, g.y ?? 0);
-        if (Array.isArray(g.center) && typeof g.center[0] === "number") addPoint(g.center[0], g.center[1]);
-        if (g.data && Array.isArray(g.data.center) && typeof g.data.center[0] === 'number') addPoint(g.data.center[0], g.data.center[1]);
-      }
+    if (graphics.length) {
+      graphics.forEach((graphic) => extendBoundsWithGraphic(graphic, addPoint, flipArcPointsForBbox));
     }
     if (!isFinite(minx)) {
       minx = -5;
@@ -215,16 +111,20 @@ export default function useFootprint(fp: any) {
       maxx = 5;
       maxy = 5;
     }
-    const pad = 1;
-    return { minx: minx - pad, miny: miny - pad, maxx: maxx + pad, maxy: maxy + pad };
-  }, [fp]);
+    return {
+      minx: minx - FOOTPRINT_BBOX_PADDING,
+      miny: miny - FOOTPRINT_BBOX_PADDING,
+      maxx: maxx + FOOTPRINT_BBOX_PADDING,
+      maxy: maxy + FOOTPRINT_BBOX_PADDING,
+    };
+  }, [fp, graphics]);
 
   const widthUnits = Math.max(0.0001, bbox.maxx - bbox.minx);
   const heightUnits = Math.max(0.0001, bbox.maxy - bbox.miny);
   const bboxCenterX = bbox.minx + widthUnits / 2;
   const bboxCenterY = bbox.miny + heightUnits / 2;
 
-  const rawAngle = at?.angle ?? 0;
+  const rawAngle = at.angle ?? 0;
   const angleRad = Math.abs(rawAngle) > Math.PI * 2 ? ((rawAngle as number) * Math.PI) / 180 : (rawAngle as number);
 
   const textureRef = useRef<THREE.CanvasTexture | null>(null);
@@ -233,10 +133,19 @@ export default function useFootprint(fp: any) {
   useEffect(() => {
     const wUnits = widthUnits;
     const hUnits = heightUnits;
-    const maxPx = 1024;
-    const pxPerUnit = Math.max(16, Math.min(maxPx / Math.max(wUnits, hUnits), 256));
-    const cw = Math.max(32, Math.min(2048, Math.ceil(wUnits * pxPerUnit)));
-    const ch = Math.max(32, Math.min(2048, Math.ceil(hUnits * pxPerUnit)));
+    const maxPx = FOOTPRINT_CANVAS_TEXTURE_MAX_PX;
+    const pxPerUnit = Math.max(
+      FOOTPRINT_CANVAS_PPU_MIN,
+      Math.min(maxPx / Math.max(wUnits, hUnits), FOOTPRINT_CANVAS_PPU_MAX),
+    );
+    const cw = Math.max(
+      FOOTPRINT_CANVAS_DIMENSION_MIN,
+      Math.min(FOOTPRINT_CANVAS_DIMENSION_MAX, Math.ceil(wUnits * pxPerUnit)),
+    );
+    const ch = Math.max(
+      FOOTPRINT_CANVAS_DIMENSION_MIN,
+      Math.min(FOOTPRINT_CANVAS_DIMENSION_MAX, Math.ceil(hUnits * pxPerUnit)),
+    );
 
     const canvas = document.createElement("canvas");
     canvas.width = cw;
@@ -245,48 +154,72 @@ export default function useFootprint(fp: any) {
     if (!ctx) return;
     ctx.clearRect(0, 0, cw, ch);
 
-    const toCanvasX = (vx: number) => Math.round((vx - bbox.minx) * (cw / wUnits));
-    const toCanvasY = (vy: number) => Math.round(ch - (vy - bbox.miny) * (ch / hUnits));
+    const pxScaleX = cw / wUnits;
+    const pxScaleY = ch / hUnits;
+    const toCanvasX = (vx: number) => Math.round((vx - bbox.minx) * pxScaleX);
+    const toCanvasY = (vy: number) => Math.round(ch - (vy - bbox.miny) * pxScaleY);
+    const maxUnitToPx = Math.max(pxScaleX, pxScaleY);
 
     const flipArcPoints = typeof window !== "undefined" && typeof (window as any).FOOTPRINT_PREVIEW_FLIP_ARC_POINTS === "boolean"
       ? Boolean((window as any).FOOTPRINT_PREVIEW_FLIP_ARC_POINTS)
       : DEFAULT_FLIP_ARC_POINTS;
 
-    ctx.lineWidth = Math.max(1, Math.round(Math.min(cw, ch) * 0.002));
-    ctx.strokeStyle = "#fff";
-    ctx.fillStyle = "#fff";
-    if (Array.isArray(fp.pads)) {
-      for (const p of fp.pads) {
-        const atx = toNumber(p.at?.x ?? p.at ?? p.x, 0);
-        const aty = toNumber(p.at?.y ?? (Array.isArray(p.at) ? p.at[1] : undefined) ?? p.y, 0);
-        const sizeArr = Array.isArray(p.size) ? p.size : Array.isArray(p.data?.size) ? p.data.size : typeof p.size === 'number' ? [p.size, p.size] : [1, 1];
-        const wUnitsPad = Number(sizeArr[0] ?? 1) || 1;
-        const hUnitsPad = Number(sizeArr[1] ?? wUnitsPad) || wUnitsPad;
-        const shape = (p.shape ?? p.data?.shape ?? "rect") as string;
+    const glow = Math.max(
+      FOOTPRINT_SHADOW_MIN_BLUR,
+      Math.round(Math.min(cw, ch) * FOOTPRINT_SHADOW_GLOW_SCALE),
+    );
+    ctx.lineWidth = Math.max(
+      FOOTPRINT_LINE_WIDTH_MIN,
+      Math.round(Math.min(cw, ch) * FOOTPRINT_LINE_WIDTH_SCALE),
+    );
+    ctx.strokeStyle = FOOTPRINT_GRAPHIC_STROKE_COLOR;
+    ctx.fillStyle = FOOTPRINT_GRAPHIC_FILL_COLOR;
+    ctx.shadowColor = FOOTPRINT_SHADOW_COLOR;
+    ctx.shadowBlur = glow;
+    if (pads.length) {
+      for (const p of pads) {
+        ctx.save();
+        ctx.strokeStyle = FOOTPRINT_PAD_STROKE_COLOR;
+        ctx.fillStyle = FOOTPRINT_PAD_FILL_COLOR;
+        const center = getPadCenter(p);
+        const [wUnitsPad, hUnitsPad] = getPadSize(p);
+        const shape = getPadShapeName(p);
+        const padTypeStr = String(p.pad_type ?? "").toLowerCase();
+        const drillVal = getPadDrillValue(p);
+        const drillDiameter = (() => {
+          if (drillVal === null || typeof drillVal === "undefined") return null;
+          if (typeof drillVal === "number") return drillVal;
+          if (typeof drillVal === "object") {
+            const drillObj = drillVal as Record<string, any>;
+            if (typeof drillObj.diameter === "number") return drillObj.diameter;
+            if (typeof drillObj.r === "number") return drillObj.r * 2;
+            if (typeof drillObj.size === "number") return drillObj.size;
+            if (typeof drillObj.x === "number" && typeof drillObj.y === "number") return Math.max(drillObj.x, drillObj.y);
+          }
+          return null;
+        })();
+        const hasDrill = drillDiameter !== null;
+        const isThroughHole = hasDrill || (padTypeStr && padTypeStr !== "smd");
+        const showHole = isThroughHole;
 
-        const cx = toCanvasX(atx);
-        const cy = toCanvasY(aty);
+        // drilled/through-hole pads now have dedicated 3D meshes, so skip painting them
+        if (showHole) {
+          ctx.restore();
+          continue;
+        }
+
+        const cx = toCanvasX(center.x);
+        const cy = toCanvasY(center.y);
         const pw = Math.max(1, Math.round(wUnitsPad * (cw / wUnits)));
         const ph = Math.max(1, Math.round(hUnitsPad * (ch / hUnits)));
 
-        if (shape === "circle" || shape === "round" || (Math.abs(pw - ph) <= 1)) {
+        const normalizedShape = shape.toLowerCase();
+        if (normalizedShape === "circle" || normalizedShape === "round" || Math.abs(pw - ph) <= 1) {
           const rpx = Math.max(1, Math.round(Math.max(pw, ph) / 2));
           ctx.beginPath();
           ctx.arc(cx, cy, rpx, 0, Math.PI * 2);
           ctx.fill();
-          // draw drill hole if present
-          const drill = p.drill?.diameter ?? p.data?.drill?.diameter ?? p.drill?.r;
-          if (drill && !p.pad_type?.toString().toLowerCase().includes("np")) {
-            const dr = Number(drill) / 2;
-            const drPx = Math.max(1, Math.round(dr * (cw / wUnits)));
-            ctx.beginPath();
-            ctx.fillStyle = "#0000";
-            ctx.globalCompositeOperation = "destination-out";
-            ctx.arc(cx, cy, drPx, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.globalCompositeOperation = "source-over";
-            ctx.fillStyle = "#fff";
-          }
+          ctx.stroke();
         } else {
           // rectangle/oval
           const rx = Math.max(1, Math.round(pw));
@@ -294,7 +227,7 @@ export default function useFootprint(fp: any) {
           const left = cx - rx / 2;
           const top = cy - ry / 2;
           // if pad looks like an oblong (rounded), draw rounded rect
-          const radius = Math.min(rx, ry) * 0.2;
+          const radius = Math.min(rx, ry) * FOOTPRINT_PAD_ROUNDING_RATIO;
           // rounded rect path
           ctx.beginPath();
           ctx.moveTo(left + radius, top);
@@ -308,126 +241,126 @@ export default function useFootprint(fp: any) {
           ctx.quadraticCurveTo(left, top, left + radius, top);
           ctx.closePath();
           ctx.fill();
-          // drill
-          const drill = p.drill?.diameter ?? p.data?.drill?.diameter ?? p.drill?.r;
-          if (drill && !p.pad_type?.toString().toLowerCase().includes("np")) {
-            const dr = Number(drill) / 2;
-            const drillPx = Math.max(1, Math.round(dr * (cw / wUnits)));
-            ctx.beginPath();
-            ctx.globalCompositeOperation = "destination-out";
-            ctx.arc(cx, cy, drillPx, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.globalCompositeOperation = "source-over";
-            ctx.fillStyle = "#fff";
-          }
+          ctx.stroke();
         }
+        ctx.restore();
       }
     }
 
-    if (Array.isArray(fp.graphics)) {
-      for (const g of fp.graphics) {
-        ctx.beginPath();
+    // Reset styles for non-pad graphics so they stay white
+    ctx.globalCompositeOperation = "source-over";
+    ctx.strokeStyle = FOOTPRINT_GRAPHIC_STROKE_COLOR;
+    ctx.fillStyle = FOOTPRINT_GRAPHIC_FILL_COLOR;
 
-        // arcs: either explicit (kind==='arc') with start/mid/end or data.mid
-        const hasArcPoints = (arr: any) => Array.isArray(arr) && arr.length === 3 && Array.isArray(arr[0]) && Array.isArray(arr[1]) && Array.isArray(arr[2]);
-        const pointsTriplet = hasArcPoints(g.data?.points) ? g.data.points : null;
-        const hasExplicitTriplet = Array.isArray(g.start) && Array.isArray(g.mid) && Array.isArray(g.end);
-        const hasDataTriplet = Array.isArray(g.data?.start) && Array.isArray(g.data?.mid) && Array.isArray(g.data?.end);
-        if (g.kind === "arc" || pointsTriplet || hasExplicitTriplet || hasDataTriplet) {
-          const start = parsePoint(g.start ?? g.data?.start ?? pointsTriplet?.[0]);
-          const mid = parsePoint(g.mid ?? g.data?.mid ?? pointsTriplet?.[1]);
-          const end = parsePoint(g.end ?? g.data?.end ?? pointsTriplet?.[2]);
-          const polyline = buildArcPolyline(start, mid, end, flipArcPoints);
+    if (graphics.length) {
+      const drawPolyline = (points: FootprintPoint[], closePath = false) => {
+        if (points.length < 2) return false;
+        ctx.beginPath();
+        ctx.moveTo(toCanvasX(points[0].x), toCanvasY(points[0].y));
+        for (let i = 1; i < points.length; i++) {
+          ctx.lineTo(toCanvasX(points[i].x), toCanvasY(points[i].y));
+        }
+        if (closePath) ctx.closePath();
+        ctx.stroke();
+        return true;
+      };
+
+      const drawDot = (point: FootprintPoint | null, radiusScale = 0.003) => {
+        if (!point) return;
+        const ccx = toCanvasX(point.x);
+        const ccy = toCanvasY(point.y);
+        ctx.beginPath();
+        ctx.arc(ccx, ccy, Math.max(1, Math.round(Math.min(cw, ch) * radiusScale)), 0, Math.PI * 2);
+        ctx.fill();
+      };
+
+      const rectFromPoints = (
+        start: FootprintPoint | null,
+        end: FootprintPoint | null,
+      ): FootprintPoint[] | null => {
+        if (!start || !end) return null;
+        const left = Math.min(start.x, end.x);
+        const right = Math.max(start.x, end.x);
+        const top = Math.min(start.y, end.y);
+        const bottom = Math.max(start.y, end.y);
+        return [
+          { x: left, y: top },
+          { x: right, y: top },
+          { x: right, y: bottom },
+          { x: left, y: bottom },
+        ];
+      };
+
+      for (const g of graphics) {
+        if (g.kind === "arc") {
+          const polyline = getArcPolyline(g.data, flipArcPoints);
           if (polyline && polyline.length >= 2) {
+            drawPolyline(polyline);
+            continue;
+          }
+        } else if (g.kind === "line") {
+          const start = parsePoint(g.data.start);
+          const end = parsePoint(g.data.end);
+          if (start && end) {
             ctx.beginPath();
-            ctx.moveTo(toCanvasX(polyline[0].x), toCanvasY(polyline[0].y));
-            for (let i = 1; i < polyline.length; i++) {
-              ctx.lineTo(toCanvasX(polyline[i].x), toCanvasY(polyline[i].y));
-            }
+            ctx.moveTo(toCanvasX(start.x), toCanvasY(start.y));
+            ctx.lineTo(toCanvasX(end.x), toCanvasY(end.y));
             ctx.stroke();
             continue;
           }
-        }
-
-        // line: start/end may be on g or g.data
-        const start = Array.isArray(g.start) && typeof g.start[0] === 'number' ? g.start : Array.isArray(g.data?.start) ? g.data.start : null;
-        const end = Array.isArray(g.end) && typeof g.end[0] === 'number' ? g.end : Array.isArray(g.data?.end) ? g.data.end : null;
-        if (start && end) {
-          const sx = toCanvasX(start[0]);
-          const sy = toCanvasY(start[1]);
-          const ex = toCanvasX(end[0]);
-          const ey = toCanvasY(end[1]);
-          ctx.beginPath();
-          ctx.moveTo(sx, sy);
-          ctx.lineTo(ex, ey);
-          ctx.stroke();
-          continue;
-        }
-
-        // polygon/pts: try several shapes
-        const pts = Array.isArray(g.pts) && g.pts.length ? g.pts : Array.isArray(g.data?.pts?.xy) ? g.data.pts.xy : null;
-        if (pts && pts.length) {
-          const first = pts[0];
-          const fx = Array.isArray(first) ? first[0] : first.x;
-          const fy = Array.isArray(first) ? first[1] : first.y;
-          ctx.beginPath();
-          ctx.moveTo(toCanvasX(fx), toCanvasY(fy));
-          for (let i = 1; i < pts.length; i++) {
-            const pt = pts[i];
-            const px = Array.isArray(pt) ? pt[0] : pt.x;
-            const py = Array.isArray(pt) ? pt[1] : pt.y;
-            ctx.lineTo(toCanvasX(px), toCanvasY(py));
+        } else if (g.kind === "polygon") {
+          const pts = pointsFromAny(g.data.pts);
+          if (pts.length && drawPolyline(pts, true)) continue;
+        } else if (g.kind === "rect") {
+          const start = parsePoint(g.data.start);
+          const end = parsePoint(g.data.end);
+          const rectPoints = rectFromPoints(start, end);
+          if (rectPoints && drawPolyline(rectPoints, true)) continue;
+        } else if (g.kind === "circle") {
+          const center = parsePoint(g.data.center);
+          const edge = parsePoint(g.data.end);
+          if (center && edge) {
+            const radius = Math.hypot(edge.x - center.x, edge.y - center.y);
+            if (radius > 0) {
+              ctx.beginPath();
+              ctx.arc(toCanvasX(center.x), toCanvasY(center.y), Math.max(1, Math.round(radius * maxUnitToPx)), 0, Math.PI * 2);
+              ctx.stroke();
+              continue;
+            }
           }
-          if (g.closed || g.kind === 'polygon') ctx.closePath();
-          ctx.stroke();
-          continue;
-        }
-
-        // circle: center + radius may be in different places (or center+end)
-        const center = Array.isArray(g.center) ? g.center : Array.isArray(g.data?.center) ? g.data.center : null;
-        let radius: number | null = typeof g.data?.radius === 'number' ? g.data.radius : typeof g.r === 'number' ? g.r : typeof g.radius === 'number' ? g.radius : null;
-        // if radius not directly available, try computing it from center+end
-        const endPt = Array.isArray(g.end) ? g.end : Array.isArray(g.data?.end) ? g.data.end : null;
-        if (center && (radius === null || !isFinite(radius)) && endPt) {
-          const dx = endPt[0] - center[0];
-          const dy = endPt[1] - center[1];
-          const rcalc = Math.hypot(dx, dy);
-          if (isFinite(rcalc) && rcalc > 0) radius = rcalc;
-        }
-        if (center && typeof radius === 'number') {
-          const ccx = toCanvasX(center[0]);
-          const ccy = toCanvasY(center[1]);
-          const pr = Math.max(1, Math.round(radius * (cw / wUnits)));
-          ctx.beginPath();
-          ctx.arc(ccx, ccy, pr, 0, Math.PI * 2);
-          ctx.stroke();
-          continue;
-        }
-
-        // fallback: single point graphics (at or x/y) -> small dot
-        let pxVal: number | null = null;
-        let pyVal: number | null = null;
-        if (Array.isArray(g.at) && typeof g.at[0] === 'number') {
-          pxVal = g.at[0];
-          pyVal = g.at[1];
-        } else if (g.at && typeof g.at.x === 'number') {
-          pxVal = g.at.x;
-          pyVal = g.at.y;
-        } else if (typeof g.x === 'number') {
-          pxVal = g.x;
-          pyVal = g.y ?? 0;
-        }
-        if (pxVal !== null && pyVal !== null) {
-          const ccx = toCanvasX(pxVal);
-          const ccy = toCanvasY(pyVal);
-          ctx.beginPath();
-          ctx.arc(ccx, ccy, Math.max(1, Math.round(Math.min(cw, ch) * 0.003)), 0, Math.PI * 2);
-          ctx.fill();
+        } else if (g.kind === "curve") {
+          const pts = pointsFromAny(g.data.pts);
+          if (pts.length && drawPolyline(pts)) continue;
+        } else if (g.kind === "text") {
+          const anchor = parsePoint(g.data.at);
+          if (anchor) {
+            drawDot(anchor);
+            continue;
+          }
+        } else if (g.kind === "text_box") {
+          const pts = pointsFromAny(g.data.pts);
+          if (pts.length && drawPolyline(pts, true)) continue;
+          const start = parsePoint(g.data.start);
+          const end = parsePoint(g.data.end);
+          const rectPoints = rectFromPoints(start, end);
+          if (rectPoints && drawPolyline(rectPoints, true)) continue;
+        } else if (g.kind === "dimension") {
+          const pts = pointsFromAny(g.data.pts);
+          if (pts.length && drawPolyline(pts)) {
+            const textPoint = parsePoint(g.data.gr_text?.at);
+            if (textPoint) drawDot(textPoint, 0.004);
+            continue;
+          }
         }
       }
     }
 
     const tex = new THREE.CanvasTexture(canvas);
+    if (isBackSide) {
+      tex.wrapS = THREE.MirroredRepeatWrapping;
+      tex.repeat.x = -1;
+      tex.offset.x = 1;
+    }
     tex.flipY = true;
     tex.needsUpdate = true;
 
@@ -444,7 +377,7 @@ export default function useFootprint(fp: any) {
       }
       setTexture(null);
     };
-  }, [fp, bbox, widthUnits, heightUnits]);
+  }, [fp, bbox, widthUnits, heightUnits, isBackSide, graphics]);
 
   return {
     texture,
@@ -455,6 +388,7 @@ export default function useFootprint(fp: any) {
     x,
     y,
     angleRad,
-    isFlipped,
+    isBackSide,
+    layerName: canonicalLayer,
   };
 }

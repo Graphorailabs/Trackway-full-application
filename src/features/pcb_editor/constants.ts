@@ -234,4 +234,4 @@ export const ENABLE_PAD_CENTER_DEBUG = false;
 export const ENABLE_PAD_NUMBER_DEBUG = false;
 // Debug toggle: when true, show a `Log PCB` button in the top toolbar which
 // will `console.log` the current PCB state for debugging purposes.
-export const ENABLE_PCB_DEBUG_LOG_BUTTON = false;
+export const ENABLE_PCB_DEBUG_LOG_BUTTON = true;

@@ -27,6 +27,13 @@ const normalizeAngle = (deg: number) => {
 
 const clone = (v: any) => JSON.parse(JSON.stringify(v));
 
+const coerceLayerName = (layer: any): string | undefined => {
+    const mapped = mapLayer(layer);
+    if (typeof mapped === "string") return mapped;
+    if (mapped && typeof mapped === "object" && typeof mapped.canonical_name === "string") return mapped.canonical_name as string;
+    return undefined;
+};
+
 // Flip a footprint instance: swap F<->B layers, mirror local Y positions,
 // invert rotations so the footprint remains visually consistent on the
 // opposite side. We keep the global `at.x`/`at.y` (placement) unchanged so
@@ -34,6 +41,9 @@ const clone = (v: any) => JSON.parse(JSON.stringify(v));
 export function flipFootprint(fp: any) {
     if (!fp) return fp;
     const next = clone(fp);
+
+    const flippedLayer = coerceLayerName(next.layer);
+    if (flippedLayer) next.layer = flippedLayer;
 
     // Invert the instance rotation (degrees -> degrees). fp.at.angle may be
     // stored in radians elsewhere in the editor; the rest of code uses radians

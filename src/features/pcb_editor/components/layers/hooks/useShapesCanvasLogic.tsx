@@ -85,7 +85,7 @@ export function useShapesCanvasLogic() {
     // If a footprint preview is active, place it at the clicked world position
     if (preview?.active && preview?.footprint) {
       const placeAt = computeSnapped(worldPos);
-      placeFootprint(preview.footprint as any, { x: placeAt.x, y: placeAt.y, angle: preview.angle ?? 0 });
+      placeFootprint(preview.footprint as any, { x: placeAt.x, y: placeAt.y, angle: preview.angle ?? 0 }, selectedLayerId);
       clearPreview();
       return;
     }
