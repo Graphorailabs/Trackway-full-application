@@ -2,7 +2,8 @@ import * as THREE from "three";
 import useVias from "../hooks/useVias";
 
 export default function ViaRenderer({ pcb }: { pcb: any }) {
-  const { visibleVias, boardDepth } = useVias(pcb);
+  const { visibleVias, boardDepth, boardBounds } = useVias(pcb);
+  const flipY = (y: number) => (boardBounds ? boardBounds.minY + boardBounds.maxY - y : y);
 
   return (
     <group name="vias">
@@ -15,7 +16,7 @@ export default function ViaRenderer({ pcb }: { pcb: any }) {
         const barrelHeight = boardDepth;
 
         // position group at world XY and z=0 (board bottom)
-        const pos = [at[0], at[1], 0] as [number, number, number];
+        const pos = [at[0], flipY(at[1]), 0] as [number, number, number];
 
         return (
           <group key={v.uuid || `via-${i}`} position={pos}>

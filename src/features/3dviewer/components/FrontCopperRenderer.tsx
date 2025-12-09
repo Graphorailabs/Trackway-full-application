@@ -2,16 +2,17 @@ import * as THREE from "three";
 import useFrontCopper from "../hooks/useFrontCopper";
 
 export default function FrontCopperRenderer({ pcb }: { pcb: any }) {
-  const { visibleSegments, boardDepth, copperThickness } = useFrontCopper(pcb);
+  const { visibleSegments, boardDepth, copperThickness, boardBounds } = useFrontCopper(pcb);
 
   // position trace center so the trace top aligns with board top (match via pad top)
   const traceCenterZ = boardDepth - copperThickness / 2 + 0.001;
+  const flipY = (y: number) => (boardBounds ? boardBounds.minY + boardBounds.maxY - y : y);
 
   return (
     <group name="front-copper">
       {visibleSegments.map((s: any, i: number) => {
-        const sx = s.start[0], sy = s.start[1];
-        const ex = s.end[0], ey = s.end[1];
+        const sx = s.start[0], sy = flipY(s.start[1]);
+        const ex = s.end[0], ey = flipY(s.end[1]);
         const mx = (sx + ex) / 2, my = (sy + ey) / 2;
 
         const dir = new THREE.Vector3(ex - sx, ey - sy, 0);

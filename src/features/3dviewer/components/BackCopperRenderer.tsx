@@ -2,16 +2,17 @@ import * as THREE from "three";
 import useBackCopper from "../hooks/useBackCopper";
 
 export default function BackCopperRenderer({ pcb }: { pcb: any }) {
-  const { visibleSegments, copperThickness } = useBackCopper(pcb);
+  const { visibleSegments, copperThickness, boardBounds } = useBackCopper(pcb);
 
   // position trace center so trace top sits at z=0.001 (just above board bottom)
   const traceCenterZ = 0.001 - copperThickness / 2;
+  const flipY = (y: number) => (boardBounds ? boardBounds.minY + boardBounds.maxY - y : y);
 
   return (
     <group name="back-copper">
       {visibleSegments.map((s: any, i: number) => {
-        const sx = s.start[0], sy = s.start[1];
-        const ex = s.end[0], ey = s.end[1];
+        const sx = s.start[0], sy = flipY(s.start[1]);
+        const ex = s.end[0], ey = flipY(s.end[1]);
         const mx = (sx + ex) / 2, my = (sy + ey) / 2;
 
         const dir = new THREE.Vector3(ex - sx, ey - sy, 0);

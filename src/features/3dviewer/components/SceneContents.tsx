@@ -7,13 +7,26 @@ import EdgeCutsRenderer from "./EdgeCutsRenderer";
 import FrontCopperRenderer from "./FrontCopperRenderer";
 import ViaRenderer from "./ViaRenderer";
 import BackCopperRenderer from "./BackCopperRenderer";
+import useEdgeCuts, { computeBoardBounds } from "../hooks/useEdgeCuts";
 
-export default function SceneContents({ pcb }: { pcb: any }) {
+type SceneContentsProps = {
+  pcb: any;
+  showAxes?: boolean;
+};
+
+export default function SceneContents({ pcb, showAxes = true }: SceneContentsProps) {
   const { camera, gl, scene } = useThree();
   const controlsRef = useRef<any>(null);
   const ray = useRef(new THREE.Raycaster());
 
   const footprints = useMemo(() => pcb?.footprints ?? [], [pcb]);
+  const edgeCutShapes = useEdgeCuts(pcb);
+  const boardBounds = useMemo(() => computeBoardBounds(edgeCutShapes, pcb ?? undefined), [edgeCutShapes, pcb]);
+  const axesHelper = useMemo(() => {
+    const helper = new THREE.AxesHelper(20);
+    helper.raycast = () => null; // keep helper out of wheel-zoom intersection math
+    return helper;
+  }, []);
 
   useEffect(() => {
     const el = gl.domElement;
@@ -67,9 +80,10 @@ export default function SceneContents({ pcb }: { pcb: any }) {
       <FrontCopperRenderer pcb={pcb} />
       <ViaRenderer pcb={pcb} />
       {footprints.map((fp: any, idx: number) => (
-        <FootprintMesh key={fp.uuid ?? idx} fp={fp} idx={idx} />
+        <FootprintMesh key={fp.uuid ?? idx} fp={fp} idx={idx} boardBounds={boardBounds ?? undefined} />
       ))}
 
+      {showAxes && <primitive object={axesHelper} />}
       <OrbitControls ref={controlsRef} />
     </>
   );

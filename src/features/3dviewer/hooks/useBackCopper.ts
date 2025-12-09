@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import useEdgeCuts from "./useEdgeCuts";
+import useEdgeCuts, { computeBoardBounds, type BoardBounds } from "./useEdgeCuts";
 import type { Pcb, Track, TrackSegment } from "../../../../pkg/trackway_parser_wasm";
 
 type Poly = Array<[number, number]>;
@@ -33,6 +33,7 @@ function pointInShapeCollections(pt: [number, number], shapes: { outer: Poly; ho
 
 export default function useBackCopper(pcb: Pcb | null | undefined) {
   const shapes = useEdgeCuts(pcb);
+  const boardBounds = useMemo<BoardBounds | null>(() => computeBoardBounds(shapes, pcb ?? undefined), [shapes, pcb]);
 
   // configuration constants (kept here so renderer stays thin)
   const boardDepth = 1;
@@ -51,5 +52,5 @@ export default function useBackCopper(pcb: Pcb | null | undefined) {
     });
   }, [pcb, shapes]);
 
-  return { shapes, visibleSegments, boardDepth, copperThickness };
+  return { shapes, visibleSegments, boardDepth, copperThickness, boardBounds };
 }

@@ -1,13 +1,27 @@
-import React from "react";
+import * as THREE from "three";
+import useFootprint from "../hooks/useFootprint";
+import type { BoardBounds } from "../hooks/useEdgeCuts";
 
-export default function FootprintMesh({ fp, idx }: { fp: any; idx: number }) {
-  const x = (fp?.at?.x ?? 0) as number;
-  const y = (fp?.at?.y ?? 0) as number;
-  const z = 0 + (idx % 5) * 0.001;
+type FootprintMeshProps = {
+  fp: any;
+  idx: number;
+  boardBounds?: BoardBounds;
+};
+
+export default function FootprintMesh({ fp, idx, boardBounds }: FootprintMeshProps) {
+  const { texture, widthUnits, heightUnits, bboxCenterX, bboxCenterY, x, y, angleRad, isFlipped } = useFootprint(fp);
+
+  const flipY = (value: number) => (boardBounds ? boardBounds.minY + boardBounds.maxY - value : value);
+  const z = isFlipped ? -0.001 - (idx % 5) * 0.0001 : 1 + 0.001 + (idx % 5) * 0.0001;
+  const groupPosition: [number, number, number] = [x, flipY(y), z];
+  const groupScale: [number, number, number] = isFlipped ? [-1, -1, 1] : [1, -1, 1];
+
   return (
-    <mesh position={[x, y, z]}>
-      <boxGeometry args={[0.5, 0.5, 0.1]} />
-      <meshStandardMaterial color={fp?.placed ? "#34D399" : "#F97316"} />
-    </mesh>
+    <group position={groupPosition} rotation={[0, 0, -angleRad]} scale={groupScale}>
+      <mesh position={[bboxCenterX, bboxCenterY, 0]} renderOrder={900}>
+        <planeGeometry args={[Math.max(0.0001, widthUnits), Math.max(0.0001, heightUnits)]} />
+        <meshBasicMaterial map={texture ?? undefined} side={THREE.DoubleSide} transparent depthTest color={0xffffff} />
+      </mesh>
+    </group>
   );
 }

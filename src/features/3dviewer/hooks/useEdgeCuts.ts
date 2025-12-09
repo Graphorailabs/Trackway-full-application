@@ -1,7 +1,23 @@
 import { useMemo } from "react";
-import type { PcbGraphicItem } from "trackway-parser-wasm";
+import type { PcbGraphicItem, Pcb } from "trackway-parser-wasm";
 
-type Poly = Array<[number, number]>;
+export type Poly = Array<[number, number]>;
+
+export type BoardBounds = {
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+  centerX: number;
+  centerY: number;
+};
+
+type LegacyBoardInfo = {
+  width?: number;
+  height?: number;
+};
+
+type PcbWithLegacyBoard = Pcb & { board?: LegacyBoardInfo | null };
 
 function flattenToPoints(candidate: PcbGraphicItem | any): Poly | null {
   if (!candidate) return null;
@@ -108,7 +124,7 @@ function pointInPoly(pt: [number, number], poly: Poly) {
   return inside;
 }
 
-export default function useEdgeCuts(pcb: any) {
+export default function useEdgeCuts(pcb: Pcb | null | undefined) {
   return useMemo(() => {
     if (!pcb || !Array.isArray(pcb.graphics)) return [] as any[];
     const candidates = pcb.graphics.filter((g: any) => {
@@ -175,4 +191,54 @@ export default function useEdgeCuts(pcb: any) {
     try { console.debug("useEdgeCuts parsed shapes", { count: result.length }); } catch (e) {}
     return result;
   }, [pcb]);
+}
+
+export function computeBoardBounds(shapes: { outer: Poly; holes: Poly[] }[], pcb?: Pcb | null) {
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minY = Infinity;
+  let maxY = -Infinity;
+
+  const collect = (points: Poly | undefined) => {
+    if (!points) return;
+    for (const [x, y] of points) {
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    }
+  };
+
+  for (const shape of shapes) {
+    collect(shape.outer);
+    if (Array.isArray(shape.holes)) {
+      for (const hole of shape.holes) collect(hole);
+    }
+  }
+
+  if (!isFinite(minX) || !isFinite(maxX) || !isFinite(minY) || !isFinite(maxY)) {
+    const legacyBoard = (pcb as PcbWithLegacyBoard | null)?.board ?? null;
+    const width = legacyBoard?.width;
+    const height = legacyBoard?.height;
+    if (typeof width === "number" && typeof height === "number") {
+      return {
+        minX: 0,
+        maxX: width,
+        minY: 0,
+        maxY: height,
+        centerX: width / 2,
+        centerY: height / 2,
+      } satisfies BoardBounds;
+    }
+    return null;
+  }
+
+  return {
+    minX,
+    maxX,
+    minY,
+    maxY,
+    centerX: (minX + maxX) / 2,
+    centerY: (minY + maxY) / 2,
+  } satisfies BoardBounds;
 }

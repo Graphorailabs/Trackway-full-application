@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import useEdgeCuts from "./useEdgeCuts";
+import useEdgeCuts, { computeBoardBounds, type BoardBounds } from "./useEdgeCuts";
 import type { Pcb, Track, TrackVia } from "../../../../pkg/trackway_parser_wasm";
 
 type Poly = Array<[number, number]>;
@@ -33,6 +33,7 @@ function pointInShapeCollections(pt: [number, number], shapes: { outer: Poly; ho
 
 export default function useVias(pcb: Pcb | null | undefined) {
   const shapes = useEdgeCuts(pcb);
+  const boardBounds = useMemo<BoardBounds | null>(() => computeBoardBounds(shapes, pcb ?? undefined), [shapes, pcb]);
 
   // Keep these constants here (renderer will consume)
   const boardDepth = 1;
@@ -55,5 +56,5 @@ export default function useVias(pcb: Pcb | null | undefined) {
       .filter((v) => pointInShapeCollections([v.at[0], v.at[1]], shapes));
   }, [rawVias, shapes]);
 
-  return { visibleVias, boardDepth, padThickness, barrelExtra };
+  return { visibleVias, boardDepth, padThickness, barrelExtra, boardBounds };
 }
