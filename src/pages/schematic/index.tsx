@@ -4,6 +4,7 @@ import { ToolProvider } from "../../features/schematic/editor/context/ToolContex
 import { SchematicCanvas } from "../../features/schematic/editor/sch_canva";
 import { WireProvider } from "@/features/schematic/editor/context/WireContext";
 import RightBar from "@/features/schematic/editor/components/RightBar";
+import { KicadSchProvider } from "@/features/schematic/editor/context/KicadSchContext";
 
 export default function SchematicPage() {
   return (
@@ -19,26 +20,28 @@ export default function SchematicPage() {
 
           {/* Main content: left vertical toolbar, library, center canvas, right inspector */}
           <div className="flex-1 flex min-h-0">
-            {/* Left-most vertical toolbar */}
-            <aside className="w-14 border-r bg-gray-50 p-2 flex flex-col items-center">
-              {/* Container ensures vertical stacking; adjust spacing as needed */}
-              <div className="flex flex-col items-center space-y-2 w-full">
-                <Toolbar />
-              </div>
-            </aside>
-
-            {/* Library / Properties (kept as a panel next to toolbar) */}
-            {/* <aside className="w-64 border-r bg-gray-50 p-3 overflow-auto">Left — Library / Properties</aside> */}
-
             <WireProvider>
-              <main className="flex-1 p-3 min-h-0 overflow-auto bg-white">
-                <div className="w-full h-full border rounded-sm bg-white">
-                  <SchematicCanvas />
-                </div>
-              </main>
-              <aside className="w-72 p-0 overflow-auto">
-                <RightBar />
-              </aside>
+              <KicadSchProvider>
+                {/* Left-most vertical toolbar */}
+                <aside className="w-14 border-r bg-gray-50 p-2 flex flex-col items-center">
+                  {/* Container ensures vertical stacking; adjust spacing as needed */}
+                  <div className="flex flex-col items-center space-y-2 w-full">
+                    <Toolbar />
+                  </div>
+                </aside>
+
+                {/* Library / Properties (kept as a panel next to toolbar) */}
+                {/* <aside className="w-64 border-r bg-gray-50 p-3 overflow-auto">Left — Library / Properties</aside> */}
+
+                <main className="flex-1 p-3 min-h-0 overflow-auto bg-white">
+                  <div className="w-full h-full border rounded-sm bg-white">
+                    <SchematicCanvas />
+                  </div>
+                </main>
+                <aside className="w-72 p-0 overflow-auto">
+                  <RightBar />
+                </aside>
+              </KicadSchProvider>
             </WireProvider>
           </div>
 
