@@ -12,6 +12,7 @@ import { LuMousePointer2, LuSpline } from "react-icons/lu";
 // import { IoIosArrowDown } from "react-icons/io";
 import { LoadSymbol } from "./LoadSymbol";
 import { useSymbol } from "../context/SymbolContext";
+import {ErcChecker} from "./ErcChecker";
 
 export default function Toolbar() {
   const { tool, setTool, setSelectedComponent } = useTool();
@@ -77,7 +78,12 @@ export default function Toolbar() {
           {selectedSymbol.id}
         </div>
       )}
+
+      <div className="w-10 h-10 flex items-center justify-center">
+        <ErcChecker />
+      </div>
       
+      {/* Erc checker */}
 
       {/* COMPONENT / SYMBOL SELECT DROPDOWN */}
       {/* <div className="relative">
@@ -139,6 +145,8 @@ export default function Toolbar() {
 
 {/*        
       </div> */}
+
+   
     </div>
   );
 }

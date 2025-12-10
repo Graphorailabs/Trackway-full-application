@@ -243,7 +243,6 @@ export const LoadSymbol = () => {
 
 // function extractPinsFromSymbol(unit: any) {
 //   if (!unit?.pins) return [];
-
 //   return unit.pins.map((p: any) => ({
 //     id: p.number[""] ,
 //     x: p.at[0],
