@@ -2,20 +2,34 @@ import { useEffect, useState } from "react";
 import type { ChangeEvent } from "react";
 import { useFootprintManagers } from "../FootprintManagerContext";
 import { useSearch } from "./useSearch";
-import type { FootprintMetadata } from "../types";
+import type { Footprint3DModelMetadata, FootprintMetadata } from "../types";
 
 export function useFootprintManager(open: boolean) {
-  const { cloud, local } = useFootprintManagers();
+  const { cloud, local, models } = useFootprintManagers();
   const { search, setSearch, debouncedSearch, tokenMatch } = useSearch("");
 
   const [categories, setCategories] = useState<string[]>([]);
   const [expandedCloud, setExpandedCloud] = useState<Record<string, boolean>>({});
   const [cloudItems, setCloudItems] = useState<Record<string, FootprintMetadata[]>>({});
   const [installed, setInstalled] = useState<FootprintMetadata[]>([]);
+  const [installedModels, setInstalledModels] = useState<Footprint3DModelMetadata[]>([]);
   const [viewMode, setViewMode] = useState<"cloud" | "installed">("cloud");
   const [expandedLocal, setExpandedLocal] = useState<Record<string, boolean>>({});
-  const [selected, setSelected] = useState<FootprintMetadata | null>(null);
+  const [expandedModelLocal, setExpandedModelLocal] = useState<Record<string, boolean>>({});
+  const [selected, setSelectedFootprintState] = useState<FootprintMetadata | null>(null);
+  const [selectedModel, setSelectedModelState] = useState<Footprint3DModelMetadata | null>(null);
   const [loadingCategories, setLoadingCategories] = useState<Record<string, boolean>>({});
+  const hasModelManager = !!models;
+
+  const selectFootprint = (meta: FootprintMetadata | null) => {
+    setSelectedFootprintState(meta);
+    if (meta) setSelectedModelState(null);
+  };
+
+  const selectModel = (meta: Footprint3DModelMetadata | null) => {
+    setSelectedModelState(meta);
+    if (meta) setSelectedFootprintState(null);
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -32,8 +46,16 @@ export function useFootprintManager(open: boolean) {
       } catch (e) {
         console.warn("failed to load installed footprints", e);
       }
+      if (models) {
+        try {
+          const modelInstalled = await models.listInstalled();
+          setInstalledModels(modelInstalled);
+        } catch (e) {
+          console.warn("failed to load installed 3D models", e);
+        }
+      }
     })();
-  }, [open, cloud, local]);
+  }, [open, cloud, local, models]);
 
   // prefetch cloud categories when searching so we can match inside packages
   useEffect(() => {
@@ -119,7 +141,7 @@ export function useFootprintManager(open: boolean) {
         }
       }
       setInstalled((s) => s.filter((i) => (i.category || "local") !== cat));
-      if (selected && (selected.category || "local") === cat) setSelected(null);
+      if (selected && (selected.category || "local") === cat) selectFootprint(null);
     } catch (e) {
       console.error("Failed to uninstall category", cat, e);
     }
@@ -149,9 +171,63 @@ export function useFootprintManager(open: boolean) {
     try {
       await local.uninstall(id);
       setInstalled((s) => s.filter((i) => i.id !== id));
-      if (selected?.id === id) setSelected(null);
+      if (selected?.id === id) selectFootprint(null);
     } catch (e) {
       console.warn("failed to uninstall", id, e);
+    }
+  };
+
+  const refreshInstalledModels = async () => {
+    if (!models) return;
+    try {
+      const list = await models.listInstalled();
+      setInstalledModels(list);
+    } catch (e) {
+      console.warn("failed to refresh 3D models", e);
+    }
+  };
+
+  const handleInstallModelZip = async (fileBuffer: ArrayBuffer, category?: string) => {
+    if (!models) return;
+    try {
+      await models.installFromZip(fileBuffer, category || "local");
+      await refreshInstalledModels();
+    } catch (e) {
+      console.warn("failed to install 3D zip", e);
+    }
+  };
+
+  const handleInstallModelZipEvent = async (e: ChangeEvent<HTMLInputElement>) => {
+    if (!models) return;
+    const f = e.target.files?.[0];
+    if (!f) return;
+    const lower = f.name.toLowerCase();
+    let derived = "local";
+    if (lower.includes(".3dshapes")) {
+      derived = f.name.replace(/\.3dshapes.*$/i, "") || "local";
+    } else if (lower.endsWith(".zip")) {
+      derived = f.name.replace(/\.zip$/i, "") || "local";
+    }
+    const buf = await f.arrayBuffer();
+    await handleInstallModelZip(buf, derived);
+    e.target.value = "";
+  };
+
+  const handleUninstallModelCategory = async (cat: string) => {
+    if (!models) return;
+    try {
+      const toRemove = installedModels.filter((m) => (m.category || "local") === cat);
+      for (const it of toRemove) {
+        try {
+          await models.uninstall(it.id);
+        } catch (e) {
+          console.warn("failed to uninstall 3D model", it.id, e);
+        }
+      }
+      setInstalledModels((s) => s.filter((m) => (m.category || "local") !== cat));
+      if (selectedModel && (selectedModel.category || "local") === cat) selectModel(null);
+    } catch (e) {
+      console.error("Failed to uninstall 3D category", cat, e);
     }
   };
 
@@ -174,12 +250,22 @@ export function useFootprintManager(open: boolean) {
     handleUninstall,
     handleInstallZip,
     handleInstallZipEvent,
+    // models
+    hasModelManager,
+    installedModels,
+    expandedModelLocal,
+    setExpandedModelLocal,
+    handleInstallModelZip,
+    handleInstallModelZipEvent,
+    handleUninstallModelCategory,
     // UI state
     viewMode,
     setViewMode,
     expandedLocal,
     setExpandedLocal,
     selected,
-    setSelected,
+    setSelected: selectFootprint,
+    selectedModel,
+    setSelectedModel: selectModel,
   } as const;
 }

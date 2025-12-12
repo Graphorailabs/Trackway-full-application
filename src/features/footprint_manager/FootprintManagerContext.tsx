@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useMemo } from "react";
-import type { FootprintManagers, FootprintManager, LocalPackageManager } from "./types";
+import type { FootprintManagers, FootprintManager, LocalPackageManager, Local3DModelManager as Local3DModelManagerContract } from "./types";
 import { CloudFootprintManager } from "./services/CloudFootprintManager";
 import { LocalFootprintManager } from "./services/LocalFootprintManager";
+import { Local3DModelManager } from "./services/Local3DModelManager";
 
 type ContextValue = {
   managers: FootprintManagers;
@@ -19,6 +20,7 @@ export function FootprintManagerProvider({ children }: { children: React.ReactNo
   const managers = useMemo<FootprintManagers>(() => ({
     cloud: new CloudFootprintManager() as FootprintManager,
     local: new LocalFootprintManager() as LocalPackageManager,
+    models: new Local3DModelManager() as Local3DModelManagerContract,
   }), []);
 
   return <FootprintManagerContext.Provider value={{ managers }}>{children}</FootprintManagerContext.Provider>;
