@@ -8,6 +8,7 @@ type Props = {
 
 export default function ModelPreview({ meta }: Props) {
   const { supportedFormat, format, objectUrl, loading, error, info, failureMessage } = useModelPreviewResource(meta);
+  console.log("ModelPreview render", { meta, supportedFormat, format, objectUrl, loading, error });
 
   if (!meta) {
     return <div className="p-6 text-sm text-slate-400">No 3D model selected</div>;

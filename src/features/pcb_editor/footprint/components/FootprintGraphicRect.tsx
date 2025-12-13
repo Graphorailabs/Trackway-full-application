@@ -1,4 +1,5 @@
 import { Rect } from "react-konva";
+import { FOOTPRINT_GRAPHIC_MIN_HIT_PX } from "./constants";
 
 type Props = { g: any };
 
@@ -27,11 +28,12 @@ export default function FootprintGraphicRect({ g }: Props) {
   const h = Math.abs(ey - sy);
 
   const strokeWidth = Number(g.data?.stroke?.width ?? g.width ?? 0.2) || 0.2;
+  const hitStrokeWidth = Math.max(strokeWidth, FOOTPRINT_GRAPHIC_MIN_HIT_PX);
   const layer = g.data?.layer ?? g.layer;
   const stroke = layerColorFor(layer);
   const fill = g.data?.fill ? stroke : undefined;
 
   // place using model coordinates (top-left = minY). Final vertical flip
   // will be handled at the Group level so primitives remain in model space.
-  return <Rect x={x} y={y} width={w} height={h} stroke={stroke} strokeWidth={strokeWidth} fill={fill} />;
+  return <Rect x={x} y={y} width={w} height={h} stroke={stroke} strokeWidth={strokeWidth} fill={fill} hitStrokeWidth={hitStrokeWidth} />;
 }

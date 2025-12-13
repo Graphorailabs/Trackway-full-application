@@ -27,6 +27,15 @@ export default function SceneContents({ pcb, showAxes = true }: SceneContentsPro
     helper.raycast = () => null; // keep helper out of wheel-zoom intersection math
     return helper;
   }, []);
+  const orbitMouseButtons = useMemo(() => ({
+    LEFT: THREE.MOUSE.ROTATE,
+    MIDDLE: THREE.MOUSE.DOLLY,
+    RIGHT: THREE.MOUSE.PAN,
+  }), []);
+  const orbitTouches = useMemo(() => ({
+    ONE: THREE.TOUCH.ROTATE,
+    TWO: THREE.TOUCH.PAN,
+  }), []);
 
   useEffect(() => {
     const el = gl.domElement;
@@ -66,10 +75,15 @@ export default function SceneContents({ pcb, showAxes = true }: SceneContentsPro
 
       controlsRef.current.update();
     };
-    el.addEventListener("wheel", onWheel as EventListener, { passive: false });
-    return () => el.removeEventListener("wheel", onWheel as EventListener);
-  }, [gl, camera, scene]);
+    const preventContextMenu = (e: Event) => e.preventDefault();
 
+    el.addEventListener("wheel", onWheel as EventListener, { passive: false });
+    el.addEventListener("contextmenu", preventContextMenu as EventListener);
+    return () => {
+      el.removeEventListener("wheel", onWheel as EventListener);
+      el.removeEventListener("contextmenu", preventContextMenu as EventListener);
+    };
+  }, [gl, camera, scene]);
   return (
     <>
       <ambientLight intensity={0.6} />
@@ -82,9 +96,15 @@ export default function SceneContents({ pcb, showAxes = true }: SceneContentsPro
       {footprints.map((fp: any, idx: number) => (
         <FootprintMesh key={fp.uuid ?? idx} fp={fp} idx={idx} boardBounds={boardBounds ?? undefined} />
       ))}
-
       {showAxes && <primitive object={axesHelper} />}
-      <OrbitControls ref={controlsRef} />
+      <OrbitControls
+        ref={controlsRef}
+        enablePan
+        enableZoom
+        enableRotate
+        mouseButtons={orbitMouseButtons}
+        touches={orbitTouches}
+      />
     </>
   );
 }

@@ -1,21 +1,26 @@
 import { useMemo } from "react";
 import * as THREE from "three";
 import useFootprint from "../hooks/useFootprint";
+import ModelRenderer from "./ModelRenderer";
 import type { BoardBounds } from "../hooks/useEdgeCuts";
 import type { Footprint, FootprintPad } from "../../../../pkg/trackway_parser_wasm";
+import { BOARD_THICKNESS, PAD_SURFACE_EPS, SHOW_FOOTPRINT_CENTER_POINT } from "../constants";
 
 type FootprintMeshProps = {
   fp?: Footprint | null;
   idx: number;
   boardBounds?: BoardBounds;
+  onModelReady?: (worldPosition: THREE.Vector3, ctx: { footprintUuid: string | null }) => void;
 };
 
-const BOARD_THICKNESS = 1;
-const PAD_SURFACE_EPS = 0.04;
 const PAD_COLOR = 0xffdc73;
 const HOLE_COLOR = 0x111111;
 const PAD_SEGMENTS_MIN = 32;
 const HOLE_SEGMENTS = 32;
+const CENTER_MARKER_RADIUS = 0.12;
+const CENTER_MARKER_SEGMENTS = 12;
+const CENTER_MARKER_OFFSET = 0.05;
+const CENTER_MARKER_COLOR = 0x00d4ff;
 
 type PadRenderData = {
   id: string;
@@ -144,7 +149,7 @@ function buildPadShape(width: number, height: number, shapeName: string, roundRa
   return { shape, segments };
 }
 
-export default function FootprintMesh({ fp, idx, boardBounds }: FootprintMeshProps) {
+export default function FootprintMesh({ fp, idx, boardBounds, onModelReady }: FootprintMeshProps) {
   const {
     texture,
     widthUnits,
@@ -249,6 +254,31 @@ export default function FootprintMesh({ fp, idx, boardBounds }: FootprintMeshPro
             </group>
           );
         })}
+
+        {SHOW_FOOTPRINT_CENTER_POINT && (
+          <mesh
+            position={[0, 0, isBackSide ? bottomPadOffsetZ - CENTER_MARKER_OFFSET : topPadOffsetZ + CENTER_MARKER_OFFSET]}
+            renderOrder={980}
+          >
+            <sphereGeometry args={[CENTER_MARKER_RADIUS, CENTER_MARKER_SEGMENTS, CENTER_MARKER_SEGMENTS]} />
+            <meshStandardMaterial
+              color={CENTER_MARKER_COLOR}
+              emissive={CENTER_MARKER_COLOR}
+              emissiveIntensity={0.7}
+              metalness={0.2}
+              roughness={0.25}
+            />
+          </mesh>
+        )}
+
+        <ModelRenderer
+          fp={fp}
+          bboxCenterX={bboxCenterX}
+          bboxCenterY={bboxCenterY}
+          isBackSide={isBackSide}
+          idx={idx}
+          onModelReady={onModelReady}
+        />
       </group>
     </group>
   );
