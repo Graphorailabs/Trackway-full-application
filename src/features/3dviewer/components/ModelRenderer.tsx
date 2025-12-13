@@ -40,15 +40,17 @@ export default function ModelRenderer({ fp, bboxCenterX, bboxCenterY, isBackSide
 			) : null}
 			<Suspense fallback={null}>
 				<group position={[alignmentOffset[0], alignmentOffset[1], modelPositionZ]}>
-					<FootprintModelPrimitive
-						key={`${footprintUuid ?? "fp"}-${idx}-${resolvedAsset.url}`}
-						url={resolvedAsset.url}
-						format={modelFormat}
-						rotation={modelRotationRad}
-						scale={scaledModelScale}
-						doubleSided
-						onObjectReady={handlePrimitiveReady}
-					/>
+					<group scale={isBackSide ? [1, 1, 1] : [1, -1, 1]}>
+						<FootprintModelPrimitive
+							key={`${footprintUuid ?? "fp"}-${idx}-${resolvedAsset.url}`}
+							url={resolvedAsset.url}
+							format={modelFormat}
+							rotation={modelRotationRad}
+							scale={scaledModelScale}
+							doubleSided
+							onObjectReady={handlePrimitiveReady}
+						/>
+					</group>
 				</group>
 			</Suspense>
 		</group>

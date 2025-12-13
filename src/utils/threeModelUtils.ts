@@ -49,12 +49,19 @@ export function ensureReadableMaterial(material: THREE.Material, options?: Mater
   meshMaterial.side = options?.doubleSided ? THREE.DoubleSide : THREE.FrontSide;
   meshMaterial.toneMapped = true;
 
+  // We trust the loaded material properties.
+  // Overriding them causes loss of color/texture fidelity for valid models.
+  // Lighting is handled by <Environment /> in the scene.
+  
+  /*
   const hasTexture = Boolean(
     meshMaterial.map || meshMaterial.emissiveMap || meshMaterial.metalnessMap || meshMaterial.vertexColors,
   );
   const colorIsDark = meshMaterial.color.r < 0.07 && meshMaterial.color.g < 0.07 && meshMaterial.color.b < 0.07;
 
-  if (!hasTexture || colorIsDark) {
+  // Only override if the material has NO texture AND is extremely dark.
+  // Previously this was an OR, which caused textured models with black base color to be overridden.
+  if (!hasTexture && colorIsDark) {
     meshMaterial.color.copy(DEFAULT_MATERIAL_COLOR);
     meshMaterial.metalness = DEFAULT_MATERIAL_PROPS.metalness ?? meshMaterial.metalness;
     meshMaterial.roughness = DEFAULT_MATERIAL_PROPS.roughness ?? meshMaterial.roughness;
@@ -63,6 +70,7 @@ export function ensureReadableMaterial(material: THREE.Material, options?: Mater
     meshMaterial.opacity = 1;
     meshMaterial.transparent = false;
   }
+  */
 
   meshMaterial.needsUpdate = true;
   return meshMaterial;

@@ -42,7 +42,7 @@ export type UseFootprintModelPlacementResult = {
 	modelScaleMultiplier: number;
 };
 
-export function useFootprintModelPlacement({ fp, bboxCenterX, bboxCenterY, isBackSide, onModelReady }: UseFootprintModelPlacementParams): UseFootprintModelPlacementResult {
+export function useFootprintModelPlacement({ fp, bboxCenterX: _bboxCenterX, bboxCenterY: _bboxCenterY, isBackSide, onModelReady }: UseFootprintModelPlacementParams): UseFootprintModelPlacementResult {
 	const targetModel = useMemo<RenderableModel | null>(() => selectRenderableModel(fp), [fp]);
 	const resolvedAsset = useFootprintModelAsset(targetModel, fp?.library_link ?? null);
 	const groupRef = useRef<THREE.Group>(null);
@@ -61,10 +61,10 @@ export function useFootprintModelPlacement({ fp, bboxCenterX, bboxCenterY, isBac
 	const scaleY = sanitizeScale(scale.y);
 	const scaleZ = sanitizeScale(scale.z);
 	const rotationRad: [number, number, number] = [toRadians(rotation.x), toRadians(rotation.y), toRadians(rotation.z)];
-	const footprintAngleRad = toRadians(fp?.at?.angle ?? 0);
-	const footprintYRotation = isBackSide ? -footprintAngleRad : footprintAngleRad;
 	const modelExtraTilt = isBackSide ? -MODEL_EXTRA_X_TILT_RAD : MODEL_EXTRA_X_TILT_RAD;
-	const modelRotationRad: [number, number, number] = [rotationRad[0] + modelExtraTilt, rotationRad[1] + footprintYRotation, rotationRad[2]];
+	// Footprint rotation is applied by the parent FootprintMesh group (rotation around Z).
+	// Do not apply fp angle here or the model will rotate with the wrong sign.
+	const modelRotationRad: [number, number, number] = [rotationRad[0] + modelExtraTilt, rotationRad[1], rotationRad[2]];
 	const translationX = toNumber(translation?.x, MODEL_ZERO_VECTOR.x);
 	const translationY = toNumber(translation?.y, MODEL_ZERO_VECTOR.y);
 	const translationZ = toNumber(translation?.z, MODEL_ZERO_VECTOR.z);

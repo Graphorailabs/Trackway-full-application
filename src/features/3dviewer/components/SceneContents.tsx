@@ -1,6 +1,6 @@
 import { useMemo, useRef, useEffect } from "react";
 import { useThree } from "@react-three/fiber";
-import { OrbitControls } from "@react-three/drei";
+import { OrbitControls, Environment } from "@react-three/drei";
 import * as THREE from "three";
 import FootprintMesh from "./FootprintMesh";
 import EdgeCutsRenderer from "./EdgeCutsRenderer";
@@ -88,6 +88,7 @@ export default function SceneContents({ pcb, showAxes = true }: SceneContentsPro
     <>
       <ambientLight intensity={0.6} />
       <pointLight position={[10, 10, 10]} />
+      <Environment preset="city" />
 
       <EdgeCutsRenderer pcb={pcb} />
       <BackCopperRenderer pcb={pcb} />
