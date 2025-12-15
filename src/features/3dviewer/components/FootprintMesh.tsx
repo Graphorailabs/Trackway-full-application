@@ -1,5 +1,3 @@
-import React from "react";
-
 export default function FootprintMesh({ fp, idx }: { fp: any; idx: number }) {
   const x = (fp?.at?.x ?? 0) as number;
   const y = (fp?.at?.y ?? 0) as number;

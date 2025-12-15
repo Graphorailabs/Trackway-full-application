@@ -32,8 +32,11 @@ export default function SymbolPlacementTool() {
     // ...symbolCtx
   } = useSymbol();
 
+  const [selectedPinId, setSelectedPinId] = useState<string | null>(null);
+
    const liveDragPositions = useRef<{ [id: string]: { x: number; y: number } }>({});
   const [mousePos, setMousePos] = useState<{ x: number; y: number } | null>(null);
+  
   // debounce timer for live dispatches to avoid flooding the router
   const dispatchTimerRef = useRef<number | null>(null);
 
@@ -41,10 +44,130 @@ export default function SymbolPlacementTool() {
     console.log("SymbolPlacementTool mounted", { tool: (undefined as any) });
   }, []);
 
+  // Listen for pin selection events dispatched by the preview or pin hit areas
+  useEffect(() => {
+    const onSelectPin = (ev: any) => {
+      try {
+        const d = ev.detail || {};
+        if (d.pinId) {
+          setSelectedPinId(d.pinId ?? null);
+          return;
+        }
+        // If preview dispatched ownerId+pinIndex, resolve to placed pin id
+        if (d.ownerId && typeof d.pinIndex === 'number') {
+          const owner = (placedSymbols || []).find((s: any) => s.id === d.ownerId);
+          if (owner && Array.isArray(owner.pins)) {
+            // Robust mapping: reconstruct visible pins from the owner's symbolData
+            // and compute their outer endpoint offsets, then match against placed
+            // pin offsets (offsetX/offsetY). This works for older placed objects
+            // that may have different pin arrays.
+            try {
+              const units = owner.symbolData?.unit ?? owner.symbolData ?? [];
+              // flatten raw pins and filter NC same as preview
+              const rawPins: any[] = [];
+              units.forEach((u: any) => { if (Array.isArray(u.pin)) rawPins.push(...u.pin); });
+              const visibleRawPins = rawPins.filter((p) => !isPinNoConnect(p));
+
+              // compute gfxBounds in local pixels (same as preview)
+              const graphics: any[] = [];
+              units.forEach((u: any) => { if (Array.isArray(u.graphics)) graphics.push(...u.graphics); });
+              let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+              graphics.forEach((g: any) => {
+                if (!g || !g.kind) return;
+                if (g.kind === 'Rectangle') {
+                  const { start, end } = g.data;
+                  minX = Math.min(minX, start[0], end[0]);
+                  minY = Math.min(minY, start[1], end[1]);
+                  maxX = Math.max(maxX, start[0], end[0]);
+                  maxY = Math.max(maxY, start[1], end[1]);
+                } else if (g.kind === 'Polyline') {
+                  const raw = g.data?.pts?.xy || [];
+                  raw.forEach((pt: any) => { minX = Math.min(minX, pt[0]); minY = Math.min(minY, pt[1]); maxX = Math.max(maxX, pt[0]); maxY = Math.max(maxY, pt[1]); });
+                } else if (g.kind === 'Circle' || g.kind === 'circle') {
+                  const c = g.data?.center ?? g.data?.cx ?? [g.cx ?? 0, g.cy ?? 0];
+                  const cx = Array.isArray(c) ? c[0] : c.x ?? 0;
+                  const cy = Array.isArray(c) ? c[1] : c.y ?? 0;
+                  const r = Number(g.data?.radius ?? g.data?.r ?? 0);
+                  minX = Math.min(minX, cx - r);
+                  minY = Math.min(minY, cy - r);
+                  maxX = Math.max(maxX, cx + r);
+                  maxY = Math.max(maxY, cy + r);
+                }
+              });
+              const gfxBoundsLocal = (minX === Infinity) ? null : { minX, minY, maxX, maxY };
+
+              // helper to compute outer endpoint (exLocal,eyLocal) for a raw pin
+              const SCALE = 6;
+              const computeOuter = (pin: any) => {
+                const [px_raw, py_raw, rot] = pin.at;
+                const px = px_raw * SCALE;
+                const py = py_raw * SCALE;
+                const len = (pin.length || 1) * SCALE * 1;
+                let ix = px, iy = py;
+                if (gfxBoundsLocal) {
+                  if (rot === 0) { ix = gfxBoundsLocal.minX; iy = py; }
+                  else if (rot === 180) { ix = gfxBoundsLocal.maxX; iy = py; }
+                  else if (rot === 90) { ix = px; iy = gfxBoundsLocal.maxY; }
+                  else if (rot === 270) { ix = px; iy = gfxBoundsLocal.minY; }
+                }
+                let ex = ix, ey = iy;
+                if (gfxBoundsLocal) {
+                  if (rot === 0 || rot === 180) {
+                    if (ix === gfxBoundsLocal.minX) ex = ix - len; else ex = ix + len;
+                    ey = iy;
+                  } else {
+                    if (iy === gfxBoundsLocal.maxY) ey = iy + len; else ey = iy - len;
+                    ex = ix;
+                  }
+                } else {
+                  if (rot === 0) { ex = ix + len; ey = iy; }
+                  else if (rot === 180) { ex = ix - len; ey = iy; }
+                  else if (rot === 90) { ex = ix; ey = iy + len; }
+                  else if (rot === 270) { ex = ix; ey = iy - len; }
+                }
+                return { ex, ey };
+              };
+
+              const targetRaw = visibleRawPins[d.pinIndex];
+              if (!targetRaw) {
+                setSelectedPinId(null);
+                return;
+              }
+              const target = computeOuter(targetRaw);
+              // find closest placed pin by comparing offsetX/offsetY
+              const found = owner.pins.find((pp: any) => {
+                const dx = Math.abs((pp.offsetX ?? 0) - target.ex);
+                const dy = Math.abs((pp.offsetY ?? 0) - target.ey);
+                return dx < 2 && dy < 2;
+              });
+              if (found) {
+                setSelectedPinId(found.id ?? null);
+                return;
+              }
+              // fallback: if owner.pins has an index matching pinIndex, use it
+              if (owner.pins[d.pinIndex]) {
+                setSelectedPinId(owner.pins[d.pinIndex].id ?? null);
+                return;
+              }
+            } catch (err) {
+              // fall through to clearing selection
+            }
+          }
+        }
+        // fallback: clear
+        setSelectedPinId(null);
+      } catch (err) {}
+    };
+    window.addEventListener('select-pin', onSelectPin);
+    return () => window.removeEventListener('select-pin', onSelectPin);
+  }, [placedSymbols]);
+
   const toWorld = (p: any) => ({ x: (p.x - position.x) / scale, y: (p.y - position.y) / scale });
 
   // Same visual scale used by preview canvas
-  const SCALE = 5;
+  const SCALE = 6;
+  // Keep pin length multiplier in sync with preview renderer
+  const PIN_LENGTH_MULTIPLIER = 1;
 
   // Create simple pin descriptors from symbol unit array (raw pin data)
   const getPinDescriptors = (units: any[]) => {
@@ -53,6 +176,9 @@ export default function SymbolPlacementTool() {
     units.forEach((u) => {
       if (Array.isArray(u.pin)) {
         u.pin.forEach((p: any) => {
+          // skip pins that are NC / not connected so indices align with
+          // the preview renderer which also filters NC pins
+          if (isPinNoConnect(p)) return;
           const [x, y, rot] = p.at;
           out.push({ x, y, rot, length: p.length ?? 1 });
         });
@@ -107,6 +233,18 @@ export default function SymbolPlacementTool() {
     return null;
   };
 
+  // detect NC-like pin names (matches NC, no_connect, not connected, etc.)
+  const isPinNoConnect = (p: any) => {
+    const raw = (p?.name?.[''] ?? p?.name ?? '') as any;
+    let s = (raw ?? '').toString().trim();
+    const mInv = s.match(/^~\{(.+)\}$/);
+    if (mInv) s = mInv[1];
+    s = s.replace(/([A-Za-z])_\{([^}]+)\}/g, (_: any, a: string, b: string) => a + b.toLowerCase());
+    s = s.replace(/^\{(.+)\}$/, "$1");
+    const v = s.trim().toLowerCase();
+    return /^(nc|not[_\s-]?connect|no[_\s-]?connect|notconnected)$/.test(v);
+  };
+
   const placeSymbol = () => {
     if (tool !== "symbol") return;
 
@@ -133,34 +271,61 @@ export default function SymbolPlacementTool() {
     const pins = pinDescriptors.map((pd) => {
       const pxLocal = pd.x * SCALE; // original pin origin in local coords
       const pyLocal = pd.y * SCALE;
-      const lenLocal = (pd.length || 1) * SCALE * 1.6;
+      const lenLocal = (pd.length || 1) * SCALE * PIN_LENGTH_MULTIPLIER;
 
       // inner attachment point (ix,iy) - falls back to pin origin if no gfx bounds
       let ix = pxLocal;
       let iy = pyLocal;
       if (gfxBounds) {
+        // NOTE: swapped attachment edges to match preview canvas UX
         if (pd.rot === 0) {
-          ix = gfxBounds.maxX;
-          iy = pyLocal;
-        } else if (pd.rot === 180) {
+          // right-facing pin: attach to LEFT edge
           ix = gfxBounds.minX;
           iy = pyLocal;
+        } else if (pd.rot === 180) {
+          // left-facing pin: attach to RIGHT edge
+          ix = gfxBounds.maxX;
+          iy = pyLocal;
         } else if (pd.rot === 90) {
+          // down-facing -> bottom edge
           ix = pxLocal;
           iy = gfxBounds.maxY;
         } else if (pd.rot === 270) {
+          // up-facing -> top edge
           ix = pxLocal;
           iy = gfxBounds.minY;
         }
       }
 
-      // outer endpoint in local coords
+      // outer endpoint in local coords: extend OUTWARD away from the graphic edge
       let exLocal = ix;
       let eyLocal = iy;
-      if (pd.rot === 0) exLocal = ix + lenLocal;
-      else if (pd.rot === 180) exLocal = ix - lenLocal;
-      else if (pd.rot === 90) eyLocal = iy + lenLocal;
-      else if (pd.rot === 270) eyLocal = iy - lenLocal;
+      if (gfxBounds) {
+        if (pd.rot === 0 || pd.rot === 180) {
+          if (ix === gfxBounds.minX) {
+            // attached to left edge -> extend left
+            exLocal = ix - lenLocal;
+          } else {
+            // attached to right edge -> extend right
+            exLocal = ix + lenLocal;
+          }
+          eyLocal = iy;
+        } else {
+          // vertical pins
+          if (iy === gfxBounds.maxY) {
+            eyLocal = iy + lenLocal;
+          } else {
+            eyLocal = iy - lenLocal;
+          }
+          exLocal = ix;
+        }
+      } else {
+        // fallback: rotation-based extension
+        if (pd.rot === 0) exLocal = ix + lenLocal;
+        else if (pd.rot === 180) exLocal = ix - lenLocal;
+        else if (pd.rot === 90) eyLocal = iy + lenLocal;
+        else if (pd.rot === 270) eyLocal = iy - lenLocal;
+      }
 
       const absX = snappedX + exLocal;
       const absY = snappedY + eyLocal;
@@ -195,6 +360,26 @@ export default function SymbolPlacementTool() {
     if (!stage) return;
 
     const handleClick = () => placeSymbol();
+    // Clicking on empty canvas should deselect the current symbol. When the
+    // active tool is `symbol` we skip deselection because clicks are used to
+    // place new symbols and the placement handler runs in that case.
+    const handleStageClickDeselect = () => {
+      try {
+        if (tool === 'symbol') return; // don't deselect while placing symbols
+        const ptr = stage.getPointerPosition();
+        if (!ptr) return;
+        // If click didn't hit any shape, deselect
+        const node = stage.getIntersection(ptr);
+        if (!node && typeof setSelectedSymbolId === 'function') {
+          setSelectedSymbol(null);
+          setSelectedSymbolId(null);
+          setSelectedPinId(null);
+        }
+      } catch (err) {
+        // ignore
+      }
+    };
+
     const handleMove = () => {
       const ptr = stage.getPointerPosition();
       if (!ptr) return;
@@ -213,13 +398,16 @@ export default function SymbolPlacementTool() {
       }
     };
 
+    // Always attach the deselect handler so clicking empty canvas clears selection.
+    stage.on("click", handleStageClickDeselect);
+
     if (tool === "symbol") {
       stage.on("click", handleClick);
       stage.on("mousemove", handleMove);
       stage.on("mousedown", debugHit);
     } else {
       // helpful debug when handler isn't attached
-      console.debug("SymbolPlacementTool: not attaching handlers, tool=", tool, "pendingSymbol=", pendingSymbol, "symbolData=", symbolData);
+      console.debug("SymbolPlacementTool: not attaching placement handlers, tool=", tool, "pendingSymbol=", pendingSymbol, "symbolData=", symbolData);
     }
 
     const handleEscape = (e: KeyboardEvent) => {
@@ -232,6 +420,7 @@ export default function SymbolPlacementTool() {
     window.addEventListener("keydown", handleEscape);
 
     return () => {
+      stage.off("click", handleStageClickDeselect);
       stage.off("click", handleClick);
       stage.off("mousemove", handleMove);
       stage.off("mousedown", debugHit);
@@ -337,7 +526,7 @@ export default function SymbolPlacementTool() {
     <Layer x={position.x} y={position.y} scale={{ x: scale, y: scale }}>
       {tool === "symbol" && pendingSymbol && ghostPos && (
         <Group x={ghostPos.x} y={ghostPos.y} opacity={0.6} listening={false}>
-          <SymbolPreviewCanvas symbolData={pendingSymbol?.unit ?? pendingSymbol} />
+          <SymbolPreviewCanvas symbolData={pendingSymbol?.unit ?? pendingSymbol} selected={false} selectedPinId={selectedPinId} selectedPinIndex={null} ownerId={null} />
         </Group>
       )}
 
@@ -351,6 +540,7 @@ export default function SymbolPlacementTool() {
             key={placed.id}
             x={pos.x}
             y={pos.y}
+            rotation={placed.rotation ?? 0}
             draggable
             onDragStart={() => console.debug('dragstart', placed.id)}
             onDragMove={(e) => handleDragMove(e, placed.id)}
@@ -363,16 +553,22 @@ export default function SymbolPlacementTool() {
               const container = e.target.getStage()?.container();
               if (container) container.style.cursor = 'default';
             }}
-              onClick={() => {
-                // single-click to select (store full object + id)
-                setSelectedSymbol(placed);
-                setSelectedSymbolId(placed.id);
-              }}
-              onDblClick={() => {
-                // also support double-click selection
-                setSelectedSymbol(placed);
-                setSelectedSymbolId(placed.id);
-              }}
+              onClick={(e) => {
+                  // prevent stage-level click handlers (placement) from also firing
+                  // when selecting an existing symbol
+                  try { e.cancelBubble = true; } catch {}
+                  // single-click to select (store full object + id)
+                  setSelectedSymbol(placed);
+                  setSelectedSymbolId(placed.id);
+                  setSelectedPinId(null);
+                }}
+                onDblClick={(e) => {
+                  try { e.cancelBubble = true; } catch {}
+                  // also support double-click selection
+                  setSelectedSymbol(placed);
+                  setSelectedSymbolId(placed.id);
+                  setSelectedPinId(null);
+                }}
           >
             {/* capture rect to make the whole symbol easy to grab for dragging */}
             {(() => {
@@ -385,49 +581,82 @@ export default function SymbolPlacementTool() {
               return null;
             })()}
 
-            <SymbolPreviewCanvas symbolData={placed.symbolData?.unit ?? placed.symbolData} />
+            <SymbolPreviewCanvas
+              symbolData={placed.symbolData?.unit ?? placed.symbolData}
+              selected={selectedSymbolId === placed.id}
+              selectedPinId={selectedPinId}
+              selectedPinIndex={selectedPinId ? ((placed.pins || []).findIndex((pp: any) => pp.id === selectedPinId)) : null}
+              ownerId={placed.id}
+            />
 
-            {(Array.isArray(placed.pins) ? placed.pins : []).map((p: any) => {
-              // Hide overlay if any wire endpoint is connected to this pin
-              const isConnected = (wires || []).some((w: any) =>
-                w.points.some((pt: any) => pt.pinId === p.id)
-              ) || p.connected;
-              if (isConnected) return null;
-              return (
-                <Group
-                  key={p?.id ?? crypto.randomUUID()}
-                  // Use local offsets (offsetX/Y) so the marker center aligns
-                  // exactly with the pin outer endpoint drawn by SymbolPreviewCanvas.
-                  x={(p?.offsetX ?? ((p?.x ?? 0) - (placed.position?.x ?? 0)))}
-                  y={(p?.offsetY ?? ((p?.y ?? 0) - (placed.position?.y ?? 0)))}
-                >
-                  {/* Outer ring */}
-                  <Circle
-                    radius={5 / scale}
-                    fill="#ffffff"
-                    stroke="#c2102a"
-                    strokeWidth={1.2 / scale}
-                    listening={false}
-                  />
+            {(() => {
+              // flatten original raw pin definitions from the symbol so we can
+              // detect per-pin NC names. The placed.pins array was created from
+              // the flattened pin list in the same order, so indices align.
+              const units = placed.symbolData?.unit ?? placed.symbolData ?? [];
+              const rawPins: any[] = [];
+              if (Array.isArray(units)) {
+                units.forEach((u: any) => {
+                  if (Array.isArray(u.pin)) rawPins.push(...u.pin);
+                });
+              }
 
-                  {/* Inner filled dot */}
-                  <Circle
-                    radius={1.8 / scale}
-                    fill="#c2102a"
-                    listening={false}
-                  />
+              return (Array.isArray(placed.pins) ? placed.pins : []).map((p: any, idx: number) => {
+                // Hide overlay if any wire endpoint is connected to this pin
+                const isConnected = (wires || []).some((w: any) =>
+                  w.points.some((pt: any) => pt.pinId === p.id)
+                ) || p.connected;
+                if (isConnected) return null;
 
-                  {/* Invisible larger hit area for easier interactions */}
-                  <Circle
-                    radius={12 / scale}
-                    fill="transparent"
-                    listening={true}
-                    hitStrokeWidth={20 / scale}
-                    opacity={0}
-                  />
-                </Group>
-              );
-            })}
+                // If the original pin name indicates NC, skip rendering the circle
+                const rawPin = rawPins[idx];
+                if (rawPin && isPinNoConnect(rawPin)) return null;
+
+                return (
+                  <Group
+                    key={p?.id ?? crypto.randomUUID()}
+                    // Use local offsets (offsetX/Y) so the marker center aligns
+                    // exactly with the pin outer endpoint drawn by SymbolPreviewCanvas.
+                    x={(p?.offsetX ?? ((p?.x ?? 0) - (placed.position?.x ?? 0)))}
+                    y={(p?.offsetY ?? ((p?.y ?? 0) - (placed.position?.y ?? 0)))}
+                  >
+                    {/* Single small visible marker (reduced weight) - border only */}
+                    <Circle
+                      radius={2.6 / scale}
+                      fill="transparent"
+                      stroke="#c2102a"
+                      strokeWidth={1.2 / scale}
+                      listening={false}
+                    />
+
+                    {/* Invisible larger hit area for easier interactions; handle wire connect on click */}
+                    <Circle
+                      radius={12 / scale}
+                      fill="transparent"
+                      listening={true}
+                      hitStrokeWidth={20 / scale}
+                      opacity={0}
+                      onMouseEnter={(e) => {
+                        const container = e.target.getStage()?.container();
+                        if (container) container.style.cursor = 'crosshair';
+                        window.dispatchEvent(new CustomEvent('hover-pin', { detail: { pinId: p.id, x: p.x, y: p.y } }));
+                      }}
+                      onMouseLeave={(e) => {
+                        const container = e.target.getStage()?.container();
+                        if (container) container.style.cursor = 'default';
+                        window.dispatchEvent(new CustomEvent('leave-pin', { detail: { pinId: p.id } }));
+                      }}
+                      onClick={(e) => {
+                        e.cancelBubble = true;
+                        window.dispatchEvent(new CustomEvent('connect-wire-to-pin', { detail: { pinId: p.id, x: p.x, y: p.y } }));
+                        // also mark this pin as selected so preview can highlight it
+                        window.dispatchEvent(new CustomEvent('select-pin', { detail: { pinId: p.id } }));
+                      }}
+                    />
+                  </Group>
+                );
+              });
+            })()}
           </Group>
         );
       })}

@@ -14,7 +14,6 @@ import CrossHairGrid from "./layers/CrossHairGrid";
 // import { LoadSymbol } from "./components/LoadSymbol";
 // import { SymbolPreviewCanvas } from "./components/SymbolPreviewCanvas";
 import SymbolPlacementTool from "./components/SymbolPlacementTool";
-import KicadSchContext, { KicadSchProvider } from "./context/KicadSchContext";
 
 
 export function SchematicCanvas() {
@@ -24,7 +23,6 @@ export function SchematicCanvas() {
     <StageProvider>
       <ZoomProvider config={{ minScale: 0.25, maxScale: 4, scaleStep: 1.05 }}>
         <GridProvider initial={{ step: 40, baseStep: 40, visible: true }}>
-            <KicadSchProvider>
           <ComponentProvider>
                 <StageHost
                   style={{ width: "100%", height: "100%" }}
@@ -45,7 +43,6 @@ export function SchematicCanvas() {
                 
                 </StageHost>
           </ComponentProvider>
-         </KicadSchProvider>
         </GridProvider>
       </ZoomProvider>
     </StageProvider>
