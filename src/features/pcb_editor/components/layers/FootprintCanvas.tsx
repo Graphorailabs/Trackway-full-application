@@ -9,6 +9,7 @@ import { useGrid } from "@/features/pcb_editor/contexts/GridContext";
 import { useFootprintPreview } from "@/features/pcb_editor/footprint/FootprintContext";
 import { usePcb } from "@/features/pcb_editor/contexts/PcbContext";
 import { useSelection } from "@/features/pcb_editor/contexts/SelectionContext";
+import { useLayers } from "@/features/pcb_editor/contexts/LayerContext";
 import type { KonvaEventObject } from "konva/lib/Node";
 
 export default function FootprintCanvas() {
@@ -18,6 +19,7 @@ export default function FootprintCanvas() {
   const { placeFootprint, updateFootprint } = usePcb();
   const { select, clear, openContextMenu, selectedUuid } = useSelection();
   const { tool } = useToolContext();
+  const { selectedLayerId } = useLayers();
 
   const draggingRef = useRef(false);
   const dragLastPosRef = useRef<[number, number] | null>(null);
@@ -61,7 +63,7 @@ export default function FootprintCanvas() {
     // If preview active, place footprint
     if (preview?.active && preview?.footprint) {
       const placeAt = computeSnapped(worldPos);
-      placeFootprint(preview.footprint as any, { x: placeAt.x, y: placeAt.y, angle: preview.angle ?? 0 });
+      placeFootprint(preview.footprint as any, { x: placeAt.x, y: placeAt.y, angle: preview.angle ?? 0 }, selectedLayerId);
       clearPreview();
       return;
     }

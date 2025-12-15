@@ -22,7 +22,7 @@ import flipFootprintService from "@/features/pcb_editor/services/flipFootprint";
 import type { SheetMetadata } from "@/features/pcb_editor/types";
 import { createBlankPcb, deriveMetadata } from "@/features/pcb_editor/state/pcbDocumentUtils";
 import { usePcbSourceManager, type PcbSource } from "@/features/pcb_editor/state/usePcbSourceManager";
-import { type Paper, type Pcb, type PcbGraphicItem } from "trackway-parser-wasm";
+import { type CanonicalLayer, type Paper, type Pcb, type PcbGraphicItem } from "trackway-parser-wasm";
 
 /**
  * Public API surfaced to any component inside the PCB editor tree.
@@ -52,7 +52,7 @@ export type PcbContextValue = {
   addFootprint: (fp: import("trackway-parser-wasm").Footprint) => void;
   updateFootprint: (uuid: string, updater: (current: import("trackway-parser-wasm").Footprint) => import("trackway-parser-wasm").Footprint) => void;
   removeFootprint: (uuid: string) => void;
-  placeFootprint: (fp: import("trackway-parser-wasm").Footprint, at: { x: number; y: number; angle?: number }) => string;
+  placeFootprint: (fp: import("trackway-parser-wasm").Footprint, at: { x: number; y: number; angle?: number }, layerOverride?: CanonicalLayer) => string;
   flipFootprint: (uuid: string) => void;
   highlightFootprint: (uuid: string) => void;
   flashHighlightUuid: string | null;
@@ -61,6 +61,7 @@ export type PcbContextValue = {
 };
 
 const PcbContext = createContext<PcbContextValue | null>(null);
+const DEFAULT_FRONT_LAYER: CanonicalLayer = "F.Cu";
 
 /**
  * Convenience hook so consumers do not need to import React context internals.
@@ -249,7 +250,8 @@ export function PcbProvider({ children }: PropsWithChildren) {
   );
 
   const placeFootprint = useCallback(
-    (fp: import("trackway-parser-wasm").Footprint, at: { x: number; y: number; angle?: number }) => {
+    (fp: import("trackway-parser-wasm").Footprint, at: { x: number; y: number; angle?: number }, layerOverride?: CanonicalLayer) => {
+      const targetLayer = (layerOverride ?? (fp.layer as CanonicalLayer | undefined) ?? DEFAULT_FRONT_LAYER) as CanonicalLayer;
       // Ensure the placed instance contains the expected arrays and avoid
       // accidental missing properties by normalizing the model. We also
       // shallow-clone nested arrays so later mutations don't affect the
@@ -262,6 +264,7 @@ export function PcbProvider({ children }: PropsWithChildren) {
         properties: Array.isArray((fp as any).properties) ? (fp as any).properties.map((p: any) => ({ ...p })) : [],
         at: { x: at.x, y: at.y, angle: at.angle ?? 0 },
         placed: true,
+        layer: targetLayer,
       } as import("trackway-parser-wasm").Footprint;
 
       // Debug logging removed: placement details were previously emitted here.
