@@ -42,6 +42,92 @@ export default function WireTool() {
   const { placedSymbols, updatePlacedSymbol, livePinPositionsRef } = useSymbol();
   const { updateWirePinPosition } = useWires();
 
+  // Fast listeners for hover/connect events from pin hit areas.
+  // These are intentionally always-active (not gated by `tool`) to make
+  // hover detection and click-to-start extremely responsive.
+  useEffect(() => {
+    // Only enable fast hover/connect listeners while in wire mode; the
+    // always-on behavior caused selection/hover jitter. Gate it to improve
+    // responsiveness and reduce accidental wire selection when cursor moves.
+    if (tool !== 'wire') return;
+    const onHoverPin = () => {
+      try {
+        const stage = stageRef.current;
+        const container = stage?.container();
+        if (container) container.style.cursor = 'crosshair';
+      } catch (err) {
+        // ignore
+      }
+    };
+
+    const onLeavePin = () => {
+      try {
+        const stage = stageRef.current;
+        const container = stage?.container();
+        if (container) container.style.cursor = 'default';
+      } catch (err) {}
+    };
+
+    const onConnectQuick = (ev: any) => {
+      try {
+        const d = ev.detail || {};
+        const targetPinId = d.pinId;
+        const worldPos = { x: d.x, y: d.y };
+        if (!targetPinId) return;
+
+        // Mark pin connected on placed symbols or components
+        const sym = (placedSymbols || []).find((s: any) => (s.pins || []).some((pp: any) => pp.id === targetPinId));
+        if (sym) {
+          const updatedPins = (sym.pins || []).map((p: any) => (p.id === targetPinId ? { ...p, connected: true } : p));
+          updatePlacedSymbol(sym.id, { pins: updatedPins });
+        } else {
+          components.forEach((comp: any) => {
+            (comp.pins || []).forEach((p: any) => {
+              if (p.id === targetPinId) p.connected = true;
+            });
+          });
+        }
+
+        // update existing wires that reference this pinId
+        setWires((prevWires: any[]) =>
+          prevWires.map((wire: any) => ({
+            ...wire,
+            points: wire.points.map((pt: any) => (pt.pinId === targetPinId ? { ...pt, connected: true } : pt)),
+          }))
+        );
+
+        updateWirePinPosition(targetPinId, worldPos.x, worldPos.y);
+
+        // Start or extend drawing anchored at this pin
+        setDrawing((d) => {
+          if (!d) return { worldPoints: [{ ...worldPos, pinId: targetPinId }, { ...worldPos, pinId: targetPinId }] };
+
+          const pts = [...d.worldPoints];
+          const last = pts[pts.length - 2];
+          const newPoint = { ...worldPos, pinId: targetPinId };
+          if (last && last.x !== worldPos.x && last.y !== worldPos.y) {
+            pts.splice(pts.length - 1, 1, { x: worldPos.x, y: last.y }, newPoint);
+          } else {
+            pts.splice(pts.length - 1, 1, newPoint);
+          }
+          return { worldPoints: [...pts, newPoint] };
+        });
+      } catch (err) {
+        console.error('quick connect failed', err);
+      }
+    };
+
+    window.addEventListener('hover-pin', onHoverPin);
+    window.addEventListener('leave-pin', onLeavePin);
+    window.addEventListener('connect-wire-to-pin', onConnectQuick as any);
+
+    return () => {
+      window.removeEventListener('hover-pin', onHoverPin);
+      window.removeEventListener('leave-pin', onLeavePin);
+      window.removeEventListener('connect-wire-to-pin', onConnectQuick as any);
+    };
+  }, [tool, placedSymbols, components, updatePlacedSymbol, setWires, updateWirePinPosition, stageRef]);
+
 
 
   // --- Reroute wires on pin move (must be inside component) ---
@@ -138,12 +224,34 @@ export default function WireTool() {
   }, [setWires]);
 
  function toWorldCoords(stage: any, state: any){
-     const pointer = stage.getPointerPosition();
-     if(!pointer) return;
+     // Prefer Konva's absolute transform inversion when available. This
+     // maps the pointer position into the stage's world coordinates
+     // correctly even when the stage has been panned/scaled.
+     try {
+       const pointer = stage.getPointerPosition && stage.getPointerPosition();
+       if (!pointer) return;
+       const abs = stage.getAbsoluteTransform && stage.getAbsoluteTransform();
+       if (abs && abs.copy && abs.point) {
+         // Some Konva versions expose a `point` method on Transform
+         const inv = abs.copy().invert();
+         // `point` expects an object {x,y}
+         const p = inv.point(pointer);
+         return { x: p.x, y: p.y };
+       }
 
-     return {
-        x: (pointer.x - state.position.x) / state.scale,
-        y: (pointer.y - state.position.y) / state.scale,
+       // Fallback: use stored state (pan/zoom) if transform isn't available
+       return {
+         x: (pointer.x - state.position.x) / state.scale,
+         y: (pointer.y - state.position.y) / state.scale,
+       };
+     } catch (err) {
+       // On any error, fallback to previous method
+       const pointer = stage.getPointerPosition && stage.getPointerPosition();
+       if (!pointer) return;
+       return {
+         x: (pointer.x - state.position.x) / state.scale,
+         y: (pointer.y - state.position.y) / state.scale,
+       };
      }
  }
 
@@ -333,6 +441,66 @@ useEffect(() => {
   stage.on("click", onClick);
   stage.on("dblclick", finalize);
 
+  // Allow external components to request connecting a wire to a specific pin
+  // (e.g. clicking a placement overlay). The event detail must be { pinId, x, y }
+  const onExternalConnect = (ev: any) => {
+    try {
+      const d = ev.detail || {};
+      const pinId = d.pinId;
+      if (!pinId) return;
+      let worldPos = { x: d.x, y: d.y };
+
+      // same logic as onClick when snapping to a pin: mark pin connected and
+      // update placed symbol/component state and wire positions
+      const targetPinId = pinId;
+
+      // Try to find placed symbol that contains this pin
+      const sym = (placedSymbols || []).find((s: any) => (s.pins || []).some((pp: any) => pp.id === targetPinId));
+      if (sym) {
+        const updatedPins = (sym.pins || []).map((p: any) => (p.id === targetPinId ? { ...p, connected: true } : p));
+        updatePlacedSymbol(sym.id, { pins: updatedPins });
+      } else {
+        // try components list
+        components.forEach((comp: any) => {
+          (comp.pins || []).forEach((p: any) => {
+            if (p.id === targetPinId) p.connected = true;
+          });
+        });
+      }
+
+      // update existing wires that reference this pinId
+      setWires((prevWires: any[]) =>
+        prevWires.map((wire: any) => ({
+          ...wire,
+          points: wire.points.map((pt: any) => (pt.pinId === targetPinId ? { ...pt, connected: true } : pt)),
+        }))
+      );
+
+      updateWirePinPosition(targetPinId, worldPos.x, worldPos.y);
+
+      // Now synthesize drawing behavior: if not currently drawing, start a new drawing anchored to this pin
+      setDrawing((d) => {
+        if (!d) return { worldPoints: [{ ...worldPos, pinId: targetPinId }, { ...worldPos, pinId: targetPinId }] };
+
+        const pts = [...d.worldPoints];
+        const last = pts[pts.length - 2];
+
+        let newPoint = { ...worldPos, pinId: targetPinId };
+        if (last && last.x !== worldPos.x && last.y !== worldPos.y) {
+          pts.splice(pts.length - 1, 1, { x: worldPos.x, y: last.y }, newPoint);
+        } else {
+          pts.splice(pts.length - 1, 1, newPoint);
+        }
+
+        return { worldPoints: [...pts, newPoint] };
+      });
+    } catch (err) {
+      console.error('external connect handler failed', err);
+    }
+  };
+
+  window.addEventListener('connect-wire-to-pin', onExternalConnect as any);
+
   window.addEventListener("keydown", (ev) => {
     if (ev.key === "Enter") finalize();
     if (ev.key === "Escape") setDrawing(null);
@@ -343,6 +511,7 @@ useEffect(() => {
     stage.off("click", onClick);
     stage.off("dblclick", finalize);
     window.removeEventListener("keydown", finalize);
+    window.removeEventListener('connect-wire-to-pin', onExternalConnect as any);
   };
 }, [tool, drawing, snapWorld, buildPolyline, state, stageRef, components]);
 
@@ -715,7 +884,11 @@ const removeSmallSegments = (pts: Point[], minLen = 4) => {
             }
           }
         });
-        const pixelStroke = Math.max(baseStroke, maxPinThickness ? (maxPinThickness / scale) : 0);
+        // Derive stroke width so it matches the connected pin visual stroke.
+        // `pinThickness` is stored in the symbol as a visual thickness (world units);
+        // convert to pixel/stage units by dividing by `scale`.
+        const strokeFromPin = maxPinThickness ? (maxPinThickness / scale) : undefined;
+        const pixelStroke = Math.max(strokeFromPin ?? baseStroke / scale, 0.5);
 
         // If any symbol is being dragged (live positions exist), render
         // wires with sharp 90° corners to keep them perpendicular during drag.
@@ -727,7 +900,7 @@ const removeSmallSegments = (pts: Point[], minLen = 4) => {
             key={w.id}
             data={makeOrthogonalRoundedPath(routed, cornerRadius)}
             stroke="#29AF0F"
-            strokeWidth={Math.max(pixelStroke, 0.5)}
+             strokeWidth={Math.max(pixelStroke, 0.5)}   
             lineCap="round"
             lineJoin="round"
             listening={false}
@@ -750,7 +923,8 @@ const removeSmallSegments = (pts: Point[], minLen = 4) => {
           }
         }
       });
-      const pixelStroke = Math.max(baseStroke, maxPinThickness ? (maxPinThickness / scale) : 0);
+      const strokeFromPin = maxPinThickness ? (maxPinThickness / scale) : undefined;
+      const pixelStroke = Math.max(strokeFromPin ?? baseStroke / scale, 0.5);
       return (
         <Path
           key={`preview-${wid}`}
@@ -804,7 +978,8 @@ const removeSmallSegments = (pts: Point[], minLen = 4) => {
                   }
                 }
               });
-              const pixelStroke = Math.max(baseStroke, maxPinThickness ? (maxPinThickness / scale) : 0);
+              const strokeFromPin = maxPinThickness ? (maxPinThickness / scale) : undefined;
+              const pixelStroke = Math.max(strokeFromPin ?? baseStroke / scale, 0.5);
               return Math.max(pixelStroke, 0.5);
             } catch (err) {
               return Math.max(baseStroke / scale, 1);

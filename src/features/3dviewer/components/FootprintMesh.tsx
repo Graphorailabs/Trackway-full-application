@@ -1,3 +1,10 @@
+// <<<<<<< main
+// export default function FootprintMesh({ fp, idx }: { fp: any; idx: number }) {
+//   const x = (fp?.at?.x ?? 0) as number;
+//   const y = (fp?.at?.y ?? 0) as number;
+//   const z = 0 + (idx % 5) * 0.001;
+// =======
+
 import { useMemo } from "react";
 import * as THREE from "three";
 import useFootprint from "../hooks/useFootprint";
@@ -203,6 +210,7 @@ export default function FootprintMesh({ fp, idx, boardBounds }: FootprintMeshPro
   const bottomPadOffsetZ = isBackSide ? -PAD_SURFACE_EPS - 0.03 : -(BOARD_THICKNESS + PAD_SURFACE_EPS);
   const holeCenterZ = (topPadOffsetZ + bottomPadOffsetZ) / 2;
   const holeHeight = Math.abs(topPadOffsetZ - bottomPadOffsetZ) + PAD_SURFACE_EPS;
+
 
   return (
     <group position={groupPosition} rotation={[0, 0, -angleRad]} scale={groupScale}>
