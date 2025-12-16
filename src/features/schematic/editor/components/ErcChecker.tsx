@@ -11,6 +11,25 @@ export const ErcChecker = ({ children, onClose }: ErcCheckerProps) => {
   const [isOpen, setIsOpen] = useState(false);
   const modalRef = useRef<HTMLDivElement | null>(null);
   const runnerRef = useRef<ErcRunnerHandle | null>(null);
+  const [errorCount, setErrorCount] = useState<number>(0);
+  const [warnCount, setWarnCount] = useState<number>(0);
+
+  const handleIssuesChange = (issues: any[] | null) => {
+    if (!issues || issues.length === 0) {
+      setErrorCount(0);
+      setWarnCount(0);
+      return;
+    }
+    let e = 0;
+    let w = 0;
+    for (const iss of issues) {
+      const sev = (iss.severity || "ERROR").toString();
+      if (sev === "ERROR") e++;
+      else if (sev === "WARNING") w++;
+    }
+    setErrorCount(e);
+    setWarnCount(w);
+  };
 
   // null => centered. otherwise fixed position {x,y}
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
@@ -111,21 +130,37 @@ export const ErcChecker = ({ children, onClose }: ErcCheckerProps) => {
             <div className="flex-1 p-4 overflow-auto bg-[#0b0b0b] text-gray-200">
               {children ?? (
                 <div className="flex h-full items-center justify-center text-sm text-gray-400">
-                 <ErcRunner ref={runnerRef} />
+                 <ErcRunner ref={runnerRef} onIssuesChange={handleIssuesChange} />
                 </div>
               )}
             </div>
 
             {/* Footer */}
             <div className="flex items-center justify-end gap-2 p-3 border-t border-gray-700">
-             <button onClick={() => {
-               // call the runner's run() if available
-               runnerRef.current?.run();
+             <div className="flex items-center gap-3">
+               <div className="flex items-center gap-3 mr-4">
+                 <div className="text-sm text-gray-200">Show:</div>
+                 <div className="flex items-center gap-2 px-2 py-1 bg-[#121212] rounded">
+                   <label className="text-xs text-gray-300">All</label>
+                 </div>
+                 <div className="flex items-center gap-2 px-2 py-1 bg-[#3b2d2d] rounded">
+                   <span className="text-xs text-red-400">Errors</span>
+                   <span className="ml-1 bg-red-600 text-white text-xs px-2 py-0.5 rounded-full">{errorCount}</span>
+                 </div>
+                 <div className="flex items-center gap-2 px-2 py-1 bg-[#2d3b2d] rounded">
+                   <span className="text-xs text-amber-300">Warnings</span>
+                   <span className="ml-1 bg-amber-500 text-white text-xs px-2 py-0.5 rounded-full">{warnCount}</span>
+                 </div>
+               </div>
 
-             }} 
-             className="bg-green-600 rounded px-4 py-1 text-white hover:bg-gray-500">
-                Run ERC
-              </button>
+               <button onClick={() => {
+                 // call the runner's run() if available
+                 runnerRef.current?.run();
+               }}
+               className="bg-green-600 rounded px-4 py-1 text-white hover:bg-gray-500">
+                 Run ERC
+               </button>
+             </div>
               <button onClick={() => close()} className="bg-gray-600 rounded px-4 py-1 text-white hover:bg-gray-500">
                 Close
               </button>
