@@ -40,13 +40,23 @@ import {
   type Pcb,
   // ERC
   ercRunFromSexpr,
-  //ercRunFromValue,
+  // ercRunFromValue,
   ercBuildModelFromSexpr,
   ercReportValueToJson,
   ercReportJsonToValue,
-  //ercReportJsonToJson,
+  // ercReportJsonToJson,
   type SchematicModel,
   type ErcReport,
+
+  // DRC
+  drcCreateDefaultConfig,
+  drcRunFromPcbSexpr,
+  type DrcConfig,
+  type DRCIssue,
+
+  // Gerber
+  gerberExportZipFromPcbSexpr,
+  type GerberZipOptions,
 } from "trackway-parser-wasm";
 
 function main(): void {
@@ -201,6 +211,21 @@ function main(): void {
 
   const minimalPcbFromSexpr: Pcb = pcbSexprToValue(minimalPcbSexpr);
   console.log("Minimal PCB generator:", minimalPcbFromSexpr.generator);
+
+  // --- DRC examples ------------------------------------------------------
+
+  const drcConfig: DrcConfig = drcCreateDefaultConfig() as DrcConfig;
+  const drcIssues: DRCIssue[] = drcRunFromPcbSexpr(minimalPcbSexpr, drcConfig) as DRCIssue[];
+  console.log("DRC issues:", drcIssues);
+
+  // --- Gerber ZIP export (browser-friendly) ------------------------------
+
+  const gerberOpts: GerberZipOptions = {
+    base_name: "minimal",
+    include_drills: true,
+  } as GerberZipOptions;
+  const zipBytes: Uint8Array = gerberExportZipFromPcbSexpr(minimalPcbSexpr, gerberOpts);
+  console.log("Gerber ZIP byte length:", zipBytes.byteLength);
 
   // --- TypeScript declarations --------------------------------------------
 

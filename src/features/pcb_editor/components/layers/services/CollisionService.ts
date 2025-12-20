@@ -77,7 +77,7 @@ export const findBlockingObstacleLocal = (
     clearance: number,
     layer: string | undefined,
     pcb: any,
-    placedSegmentsRef: React.MutableRefObject<Array<{ start: Pt; end: Pt; width: number; layer?: string }>>
+    placedSegmentsRef: React.MutableRefObject<Array<{ uuid?: string; start: Pt; end: Pt; width: number; layer?: string }>>
 ) => {
     // Build obstacles from PCB tracks (segments). However, if there are
     // via centers at some segment endpoints, those segment endpoints
@@ -315,11 +315,11 @@ export const findBlockingObstacleLocal = (
 export const segmentsAreFree = (
     segments: Array<{ start: [number, number]; end: [number, number]; width: number; layer?: string }>,
     clearance: number,
-    findBlockingObstacleLocal: (p1: Pt, p2: Pt, trackWidth: number, clearance: number, layer: string | undefined, pcb: any, placedSegmentsRef: React.MutableRefObject<Array<{ start: Pt; end: Pt; width: number; layer?: string }>>) => any,
+    findBlockingObstacleLocal: (p1: Pt, p2: Pt, trackWidth: number, clearance: number, layer: string | undefined, pcb: any, placedSegmentsRef: React.MutableRefObject<Array<{ uuid?: string; start: Pt; end: Pt; width: number; layer?: string }>>) => any,
     currentTraceLayer: string | undefined,
     selectedLayerId: string | undefined,
     pcb: any,
-    placedSegmentsRef: React.MutableRefObject<Array<{ start: Pt; end: Pt; width: number; layer?: string }>>
+    placedSegmentsRef: React.MutableRefObject<Array<{ uuid?: string; start: Pt; end: Pt; width: number; layer?: string }>>
 ) => {
     for (const s of segments) {
         const p1: Pt = { x: s.start[0], y: s.start[1] };

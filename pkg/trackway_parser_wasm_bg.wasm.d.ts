@@ -2,6 +2,11 @@
 /* eslint-disable */
 export const memory: WebAssembly.Memory;
 export const exportTypes: () => [number, number];
+export const drcCreateDefaultConfig: () => [number, number, number];
+export const drcRunFromPcbSexpr: (a: number, b: number, c: number) => [number, number, number];
+export const drcRunFromPcbValue: (a: any, b: number) => [number, number, number];
+export const gerberExportZipFromPcbSexpr: (a: number, b: number, c: number) => [number, number, number];
+export const gerberExportZipFromPcbValue: (a: any, b: number) => [number, number, number];
 export const schematicSexprToJson: (a: number, b: number, c: number) => [number, number, number, number];
 export const schematicJsonToSexpr: (a: number, b: number, c: number) => [number, number, number, number];
 export const schematicJsonToValue: (a: number, b: number) => [number, number, number];

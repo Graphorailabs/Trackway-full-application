@@ -5,13 +5,11 @@
   "files": [
     "trackway_parser_wasm_bg.wasm",
     "trackway_parser_wasm.js",
-    "trackway_parser_wasm_bg.js",
     "trackway_parser_wasm.d.ts"
   ],
   "main": "trackway_parser_wasm.js",
   "types": "trackway_parser_wasm.d.ts",
   "sideEffects": [
-    "./trackway_parser_wasm.js",
     "./snippets/*"
   ]
 }

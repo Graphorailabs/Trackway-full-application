@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type ChangeEvent } from "react";
-import { GitBranch, Layers, Loader2, PackagePlus, Save, Settings, Square, ZoomIn, ZoomOut, Circle as CircleIcon } from "lucide-react";
+import { GitBranch, Layers, Loader2, PackagePlus, Redo2, Save, Settings, Square, Undo2, ZoomIn, ZoomOut, Circle as CircleIcon } from "lucide-react";
 import { LuMousePointer2 } from "react-icons/lu";
 import { CanvasViewport } from "@/features/pcb_editor/components/CanvasViewport";
 import { ENABLE_PCB_DEBUG_LOG_BUTTON } from "@/features/pcb_editor/constants";
@@ -44,9 +44,33 @@ export function PCBEditorLayout() {
 
   const TopToolbar = () => {
     const { zoomIn, zoomOut, zoom } = useZoom();
-    const { savePcb, isSaving, pcb } = usePcb();
+    const { savePcb, isSaving, pcb, canUndo, canRedo, undo, redo } = usePcb();
+
+    // Keyboard shortcuts for undo/redo — attach here so `usePcb()` is
+    // called inside the `<PcbProvider>` render tree and hooks are valid.
+    useEffect(() => {
+      const onKeyDown = (e: KeyboardEvent) => {
+        const tag = (e.target as HTMLElement)?.tagName;
+        const editable = (e.target as HTMLElement)?.isContentEditable;
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || editable) return;
+        if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z') {
+          if (canUndo) {
+            e.preventDefault();
+            undo();
+          }
+        } else if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'y') {
+          if (canRedo) {
+            e.preventDefault();
+            redo();
+          }
+        }
+      };
+      window.addEventListener('keydown', onKeyDown);
+      return () => window.removeEventListener('keydown', onKeyDown);
+    }, [canUndo, canRedo, undo, redo]);
     const SHOW_PCB_DEBUG = Boolean(ENABLE_PCB_DEBUG_LOG_BUTTON);
     const { layers, selectedLayerId, selectLayer } = useLayers();
+
     const handleSave = async () => {
       try {
         await savePcb();
@@ -72,6 +96,24 @@ export function PCBEditorLayout() {
             className="!flex !h-7 !w-7 !items-center !justify-center !rounded-full !border-emerald-400/40 !bg-emerald-500/10 !p-0 !text-emerald-200"
           >
             {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+          </ToolbarItem>
+          <ToolbarItem
+            label="Undo"
+            aria-label="Undo"
+            onClick={undo}
+            disabled={!canUndo}
+            className="!flex !h-7 !w-7 !items-center !justify-center !rounded-full !border-white/20 !bg-white/5 !p-0 disabled:!cursor-not-allowed disabled:!opacity-50"
+          >
+            <Undo2 className="h-3 w-3" />
+          </ToolbarItem>
+          <ToolbarItem
+            label="Redo"
+            aria-label="Redo"
+            onClick={redo}
+            disabled={!canRedo}
+            className="!flex !h-7 !w-7 !items-center !justify-center !rounded-full !border-white/20 !bg-white/5 !p-0 disabled:!cursor-not-allowed disabled:!opacity-50"
+          >
+            <Redo2 className="h-3 w-3" />
           </ToolbarItem>
           <ToolbarItem
             label="Settings"

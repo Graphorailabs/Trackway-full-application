@@ -7,6 +7,11 @@ import App from './App.tsx'
 import SchematicPage from '@/pages/schematic'
 import PcbEditorPage from '@/pages/pcb_editor'
 import GerberPage from '@/pages/gerber'
+
+// Initialize wasm-backed parser before mounting React so exported
+// helpers (createMinimalPcb, pcbJsonToValue, etc.) are available.
+import initParser from 'trackway-parser-wasm';
+await initParser();
 const router = createHashRouter([
   { path: "/", element: <App />,
     children:[

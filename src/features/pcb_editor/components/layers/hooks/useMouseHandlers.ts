@@ -40,7 +40,8 @@ export const useMouseHandlers = (
     routingActiveRef: React.MutableRefObject<boolean>,
     workerRef: React.MutableRefObject<Worker | null>,
     workerRequestIdRef: React.MutableRefObject<number>,
-    placedSegmentsRef: React.MutableRefObject<Array<{ start: Pt; end: Pt; width: number; layer?: string }>>,
+    placedSegmentsRef: React.MutableRefObject<Array<{ uuid?: string; start: Pt; end: Pt; width: number; layer?: string }>>,
+    routingOriginRef: React.MutableRefObject<Pt | null>,
     setPreviewTracks: (tracks: Pt[]) => void,
     previewTracks: Pt[],
     _previewIncompatibleWithPad: boolean,
@@ -58,6 +59,13 @@ export const useMouseHandlers = (
 ) => {
     const draggingViaRef = useRef<string | null>(null);
 
+    const makeUuid = (prefix: string) => {
+        try {
+            if (typeof crypto !== 'undefined' && (crypto as any).randomUUID) return (crypto as any).randomUUID() as string;
+        } catch (err) {}
+        return `${prefix}-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
+    };
+
     const stopRouting = () => {
         try {
             routingActiveRef.current = false;
@@ -65,6 +73,7 @@ export const useMouseHandlers = (
         try { setRoutingStart(null); } catch (err) {}
         try { setRoutingActive(false); } catch (err) {}
         try { placedSegmentsRef.current = []; } catch (err) {}
+        try { routingOriginRef.current = null; } catch (err) {}
         try { setPreviewTracks([]); } catch (err) {}
     };
 
@@ -235,7 +244,7 @@ export const useMouseHandlers = (
         if (snap) worldPos = snap;
 
         // create via
-        const viaId = typeof crypto !== 'undefined' && (crypto as any).randomUUID ? (crypto as any).randomUUID() : `via-${Date.now()}-${Math.floor(Math.random()*10000)}`;
+        const viaId = makeUuid('via');
         const viaObj: import("trackway-parser-wasm").TrackVia = {
             at: [worldPos.x, worldPos.y],
             size: viaSize ?? 0.8,
@@ -248,7 +257,7 @@ export const useMouseHandlers = (
         addVia?.(viaObj);
 
         // Build connecting segment from routingStart to via center
-        const segId = typeof crypto !== 'undefined' && (crypto as any).randomUUID ? (crypto as any).randomUUID() : `seg-${Date.now()}-${Math.floor(Math.random()*10000)}`;
+        const segId = makeUuid('seg');
         const currentLayer = (currentTraceLayer as string) || (selectedLayerId as string) || "F.Cu";
         const seg = { start: [routingStart.x, routingStart.y], end: [worldPos.x, worldPos.y], width: routerParams.trackWidth, layer: currentLayer, net: 0, uuid: segId } as any;
 
@@ -263,7 +272,7 @@ export const useMouseHandlers = (
         console.log('[routing] placing via during routing', { viaId, at: worldPos, segId, layer: currentLayer });
         addTrack?.({ kind: 'segment', data: seg } as any);
         // record placed segment locally
-        placedSegmentsRef.current.push({ start: { x: seg.start[0], y: seg.start[1] }, end: { x: seg.end[0], y: seg.end[1] }, width: seg.width, layer: seg.layer });
+        placedSegmentsRef.current.push({ uuid: seg.uuid, start: { x: seg.start[0], y: seg.start[1] }, end: { x: seg.end[0], y: seg.end[1] }, width: seg.width, layer: seg.layer });
 
         // Toggle routing session layer so next segments are on the other side
         const nextLayer = currentLayer === 'F.Cu' ? 'B.Cu' : 'F.Cu';
@@ -289,6 +298,7 @@ export const useMouseHandlers = (
         if (!routingActive) {
             // starting a new session: clear any leftover placed segments
             placedSegmentsRef.current = [];
+            try { routingOriginRef.current = null; } catch (err) {}
             setRoutingActive(true);
             routingActiveRef.current = true;
             // initialize routing session trace layer from currently selected layer
@@ -317,6 +327,7 @@ export const useMouseHandlers = (
                             }
                         } catch (err) {}
                         setRoutingStart(startPt);
+                        routingOriginRef.current = startPt;
                         return;
                     }
                 }
@@ -332,6 +343,7 @@ export const useMouseHandlers = (
                             }
                         } catch (err) {}
                         setRoutingStart(startPt);
+                        routingOriginRef.current = startPt;
                         return;
                     }
                 }
@@ -339,12 +351,20 @@ export const useMouseHandlers = (
                 // ignore finalize failures and fall back to raw click
             }
             setRoutingStart(worldPos);
+            routingOriginRef.current = worldPos;
             return;
         }
 
         if (!routingStart) {
             // defensive: ensure we have a start when active
-            setRoutingStart(worldPos);
+            try {
+                const placed = placedSegmentsRef.current || [];
+                const last = placed.length ? placed[placed.length - 1].end : null;
+                const fallback = last ?? routingOriginRef.current ?? worldPos;
+                setRoutingStart({ x: fallback.x, y: fallback.y });
+            } catch (err) {
+                setRoutingStart(worldPos);
+            }
             return;
         }
 
@@ -363,6 +383,7 @@ export const useMouseHandlers = (
                         width: routerParams.trackWidth,
                         layer: initialLayer,
                         net: 0, // TODO: determine net
+                        uuid: makeUuid('seg'),
                     });
                 }
                 // Allow finalization to pads if the click is near a pad.
@@ -442,6 +463,7 @@ export const useMouseHandlers = (
                             width: routerParams.trackWidth,
                             layer: currentLayer,
                             net: padNet ?? 0,
+                            uuid: makeUuid('seg'),
                         });
                         // If we pass through a via at the segment end, toggle layer for next segment
                         const via = findViaAtPoint({ x: endX, y: endY } as Pt, pcb);
@@ -472,7 +494,7 @@ export const useMouseHandlers = (
                     const finalizedVia = (finalize as any).via;
                     if (finalizedPad) {
                         // record placed segments
-                        placedSegmentsRef.current.push(...segmentsFinal.map(s => ({ start: { x: s.start[0], y: s.start[1] }, end: { x: s.end[0], y: s.end[1] }, width: s.width, layer: s.layer })));
+                        placedSegmentsRef.current.push(...segmentsFinal.map(s => ({ uuid: s.uuid, start: { x: s.start[0], y: s.start[1] }, end: { x: s.end[0], y: s.end[1] }, width: s.width, layer: s.layer })));
                         // finalize: stop routing (pad case)
                         console.debug('[routing] finalizing: stopping routing (pad finalize enforced)');
                         stopRouting();
@@ -486,7 +508,7 @@ export const useMouseHandlers = (
                         setRoutingActive(true);
                         routingActiveRef.current = true;
                         // record placed segments
-                        placedSegmentsRef.current.push(...segmentsFinal.map(s => ({ start: { x: s.start[0], y: s.start[1] }, end: { x: s.end[0], y: s.end[1] }, width: s.width, layer: s.layer })));
+                        placedSegmentsRef.current.push(...segmentsFinal.map(s => ({ uuid: s.uuid, start: { x: s.start[0], y: s.start[1] }, end: { x: s.end[0], y: s.end[1] }, width: s.width, layer: s.layer })));
                         // request an updated preview using the new start
                         if (workerRef.current) {
                             const res = buildWorkerObstacles(currentLayer, pcb, placedSegmentsRef) as any;
@@ -556,7 +578,7 @@ export const useMouseHandlers = (
                 // Record placed segments locally so subsequent worker calls
                 // include them immediately as obstacles (no need to wait for
                 // `pcb` state to propagate).
-                placedSegmentsRef.current.push(...segments.map(s => ({ start: { x: s.start[0], y: s.start[1] }, end: { x: s.end[0], y: s.end[1] }, width: s.width, layer: s.layer })));
+                placedSegmentsRef.current.push(...segments.map(s => ({ uuid: s.uuid, start: { x: s.start[0], y: s.start[1] }, end: { x: s.end[0], y: s.end[1] }, width: s.width, layer: s.layer })));
 
                 // Immediately request an updated preview from the worker using
                 // the newly placed endpoint as start and the current mouse
@@ -604,7 +626,7 @@ export const useMouseHandlers = (
                     for (let i = 0; i < candidate.length - 1; i++) {
                         const a = candidate[i];
                         const b = candidate[i + 1];
-                        segments.push({ start: [a.x, a.y], end: [b.x, b.y], width: routerParams.trackWidth, layer: currentLayer, net: 0 });
+                        segments.push({ start: [a.x, a.y], end: [b.x, b.y], width: routerParams.trackWidth, layer: currentLayer, net: 0, uuid: makeUuid('seg') });
                         const via = findViaAtPoint({ x: b.x, y: b.y } as Pt, pcb);
                         if (via) {
                             const nextLayer = currentLayer === 'F.Cu' ? 'B.Cu' : 'F.Cu';
@@ -657,7 +679,7 @@ export const useMouseHandlers = (
                         for (let i = 0; i < candidate.length - 1; i++) {
                             const a = candidate[i];
                             const b = candidate[i + 1];
-                            segmentsFinal.push({ start: [a.x, a.y], end: [b.x, b.y], width: routerParams.trackWidth, layer: currentLayer, net: padNet ?? 0 });
+                            segmentsFinal.push({ start: [a.x, a.y], end: [b.x, b.y], width: routerParams.trackWidth, layer: currentLayer, net: padNet ?? 0, uuid: makeUuid('seg') });
                             const via = findViaAtPoint({ x: b.x, y: b.y } as Pt, pcb);
                             if (via) {
                                 const nextLayer = currentLayer === 'F.Cu' ? 'B.Cu' : 'F.Cu';
@@ -676,7 +698,7 @@ export const useMouseHandlers = (
                             addTrack?.({ kind: 'segment', data: s } as any);
                         }
                         try { setCurrentTraceLayer?.(currentLayer); } catch (err) {}
-                        placedSegmentsRef.current.push(...segmentsFinal.map(s => ({ start: { x: s.start[0], y: s.start[1] }, end: { x: s.end[0], y: s.end[1] }, width: s.width, layer: s.layer })));
+                        placedSegmentsRef.current.push(...segmentsFinal.map(s => ({ uuid: s.uuid, start: { x: s.start[0], y: s.start[1] }, end: { x: s.end[0], y: s.end[1] }, width: s.width, layer: s.layer })));
                         // If finalize target is a via, continue routing from it
                         const finalizedVia = (finalizeCandidate as any).via;
                         if (finalizedVia) {
@@ -705,7 +727,7 @@ export const useMouseHandlers = (
                     // otherwise commit and continue routing
                     for (const s of segments) addTrack?.({ kind: 'segment', data: s } as any);
                     // record placed segments so worker avoids them right away
-                    placedSegmentsRef.current.push(...segments.map(s => ({ start: { x: s.start[0], y: s.start[1] }, end: { x: s.end[0], y: s.end[1] }, width: s.width, layer: s.layer })));
+                    placedSegmentsRef.current.push(...segments.map(s => ({ uuid: s.uuid, start: { x: s.start[0], y: s.start[1] }, end: { x: s.end[0], y: s.end[1] }, width: s.width, layer: s.layer })));
                     // If the last endpoint lies on a pad, stop routing and
                     // require an explicit click to start a new session.
                     const padFinalizeCheck = tryFinalizeAtCursor(last, prev ?? undefined, pcb, padHoverApi, viaHoverApi, candidateLayer as any);

@@ -8,7 +8,7 @@
 import type { Pt } from "../routing/octilinearRouter";
 import type React from 'react';
 
-type Segment = { start: Pt; end: Pt; width: number; layer?: string };
+type Segment = { uuid?: string; start: Pt; end: Pt; width: number; layer?: string };
 import { ENABLE_ENDPOINT_SNAP, ENDPOINT_SNAP_TOLERANCE, PAD_SNAP_RADIUS } from "@/features/pcb_editor/constants";
 
 /**
