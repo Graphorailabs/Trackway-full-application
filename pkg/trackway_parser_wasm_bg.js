@@ -208,6 +208,84 @@ function takeFromExternrefTable0(idx) {
     return value;
 }
 /**
+ * Return a reasonable default DRC config as a JS value.
+ * @returns {any}
+ */
+export function drcCreateDefaultConfig() {
+    const ret = wasm.drcCreateDefaultConfig();
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
+}
+
+/**
+ * Run DRC on a PCB S-expression and return issues as an array of `DRCIssue`.
+ *
+ * If `config` is omitted or `null`, a default config is used.
+ * @param {string} input
+ * @param {any | null} [config]
+ * @returns {any}
+ */
+export function drcRunFromPcbSexpr(input, config) {
+    const ptr0 = passStringToWasm0(input, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.drcRunFromPcbSexpr(ptr0, len0, isLikeNone(config) ? 0 : addToExternrefTable0(config));
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
+}
+
+/**
+ * Run DRC from a JS `Pcb` value and return issues as `DRCIssue[]`.
+ * @param {any} value
+ * @param {any | null} [config]
+ * @returns {any}
+ */
+export function drcRunFromPcbValue(value, config) {
+    const ret = wasm.drcRunFromPcbValue(value, isLikeNone(config) ? 0 : addToExternrefTable0(config));
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
+}
+
+/**
+ * Export Gerber + Excellon drills as a single ZIP file.
+ *
+ * Returns the ZIP bytes as `Uint8Array` (browser-friendly, no filesystem access).
+ *
+ * If `options` is omitted or `null`, defaults are used.
+ * @param {string} input
+ * @param {any | null} [options]
+ * @returns {Uint8Array}
+ */
+export function gerberExportZipFromPcbSexpr(input, options) {
+    const ptr0 = passStringToWasm0(input, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.gerberExportZipFromPcbSexpr(ptr0, len0, isLikeNone(options) ? 0 : addToExternrefTable0(options));
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
+}
+
+/**
+ * Export Gerber + Excellon drills from a JS `Pcb` value as a ZIP (`Uint8Array`).
+ * @param {any} value
+ * @param {any | null} [options]
+ * @returns {Uint8Array}
+ */
+export function gerberExportZipFromPcbValue(value, options) {
+    const ret = wasm.gerberExportZipFromPcbValue(value, isLikeNone(options) ? 0 : addToExternrefTable0(options));
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
+}
+
+/**
  * Convert a schematic S-expression string to JSON.
  * @param {string} input
  * @param {boolean} pretty
@@ -1051,6 +1129,11 @@ export function __wbg___wbindgen_is_function_ee8a6c5833c90377(arg0) {
     return ret;
 };
 
+export function __wbg___wbindgen_is_null_5e69f72e906cc57c(arg0) {
+    const ret = arg0 === null;
+    return ret;
+};
+
 export function __wbg___wbindgen_is_object_c818261d21f283a4(arg0) {
     const val = arg0;
     const ret = typeof(val) === 'object' && val !== null;
@@ -1209,6 +1292,11 @@ export function __wbg_new_e17d9f43105b08be() {
     return ret;
 };
 
+export function __wbg_new_from_slice_92f4d78ca282a2d2(arg0, arg1) {
+    const ret = new Uint8Array(getArrayU8FromWasm0(arg0, arg1));
+    return ret;
+};
+
 export function __wbg_next_020810e0ae8ebcb0() { return handleError(function (arg0) {
     const ret = arg0.next();
     return ret;
@@ -1274,5 +1362,10 @@ export function __wbindgen_init_externref_table() {
     table.set(offset + 2, true);
     table.set(offset + 3, false);
     ;
+};
+
+export function __wbindgen_object_is_undefined(arg0) {
+    const ret = arg0 === undefined;
+    return ret;
 };
 

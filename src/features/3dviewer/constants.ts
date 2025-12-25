@@ -23,7 +23,7 @@ export const BOARD_THICKNESS = 1;
 export const PAD_SURFACE_EPS = 0.04;
 export const FOOTPRINT_MODEL_SURFACE_OFFSET = 0.35;
 export const SHOW_MODEL_DEBUG_CUBE = true;
-export const SHOW_FOOTPRINT_CENTER_POINT = true;
+export const SHOW_FOOTPRINT_CENTER_POINT = false;
 
 export const MODEL_ZERO_VECTOR = { x: 0, y: 0, z: 0 } as const;
 export const MODEL_UNIT_VECTOR = { x: 1, y: 1, z: 1 } as const;

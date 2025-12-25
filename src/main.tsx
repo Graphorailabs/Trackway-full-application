@@ -10,8 +10,6 @@ import GerberPage from '@/pages/gerber'
 
 // Initialize wasm-backed parser before mounting React so exported
 // helpers (createMinimalPcb, pcbJsonToValue, etc.) are available.
-import initParser from 'trackway-parser-wasm';
-await initParser();
 const router = createHashRouter([
   { path: "/", element: <App />,
     children:[
