@@ -121,8 +121,7 @@ export default function FootprintManagerModal({ open, onClose, onPlace, inEditor
                   cloudItems={cloudItems}
                   expandedCloud={expandedCloud}
                   toggleCloudCategory={toggleCloudCategory}
-                    handleInstallCategory={handleInstallCategory}
-                    loadingCategories={loadingCategories}
+                  loadingCategories={loadingCategories}
                   selected={selected}
                   setSelected={setSelected}
                   debouncedSearch={debouncedSearch}

@@ -40,11 +40,11 @@ import {
   type Pcb,
   // ERC
   ercRunFromSexpr,
-  // ercRunFromValue,
+  ercRunFromValue,
   ercBuildModelFromSexpr,
   ercReportValueToJson,
   ercReportJsonToValue,
-  // ercReportJsonToJson,
+  ercReportJsonToJson,
   type SchematicModel,
   type ErcReport,
 
@@ -56,7 +56,7 @@ import {
 
   // Gerber
   gerberExportZipFromPcbSexpr,
-  type GerberZipOptions,
+  gerberExportZipFromPcbValue,
 } from "trackway-parser-wasm";
 
 function main(): void {
@@ -219,13 +219,15 @@ function main(): void {
   console.log("DRC issues:", drcIssues);
 
   // --- Gerber ZIP export (browser-friendly) ------------------------------
+  // Demonstrate generating a Gerber ZIP without passing explicit options.
+  // The wasm helper will derive sensible defaults from the PCB (all layers,
+  // inner copper layers, and drill files) when `options` is omitted.
+  const zipBytes: Uint8Array = gerberExportZipFromPcbSexpr(minimalPcbSexpr);
+  console.log("Gerber ZIP (S-expression) byte length:", zipBytes.byteLength);
 
-  const gerberOpts: GerberZipOptions = {
-    base_name: "minimal",
-    include_drills: true,
-  } as GerberZipOptions;
-  const zipBytes: Uint8Array = gerberExportZipFromPcbSexpr(minimalPcbSexpr, gerberOpts);
-  console.log("Gerber ZIP byte length:", zipBytes.byteLength);
+  // Also show generating from an in-memory PCB value without options.
+  const zipBytesFromValue: Uint8Array = gerberExportZipFromPcbValue(minimalPcbFromSexpr);
+  console.log("Gerber ZIP (Value) byte length:", zipBytesFromValue.byteLength);
 
   // --- TypeScript declarations --------------------------------------------
 

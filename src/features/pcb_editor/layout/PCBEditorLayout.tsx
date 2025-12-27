@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type ChangeEvent } from "react";
-import { GitBranch, Layers, Loader2, PackagePlus, Redo2, Save, Settings, Square, Undo2, ZoomIn, ZoomOut, Circle as CircleIcon } from "lucide-react";
+import { GitBranch, Layers, Loader2, PackagePlus, Redo2, Save, Settings, Square, Undo2, ZoomIn, ZoomOut, Circle as CircleIcon, ShieldCheck, Download } from "lucide-react";
 import { LuMousePointer2 } from "react-icons/lu";
 import { CanvasViewport } from "@/features/pcb_editor/components/CanvasViewport";
 import { ENABLE_PCB_DEBUG_LOG_BUTTON } from "@/features/pcb_editor/constants";
@@ -23,12 +23,16 @@ import { useFootprintManagers } from "@/features/footprint_manager/FootprintMana
 import { ShapeSelectionModal } from "../components/shapes/ShapeSelectionModal";
 import { RoutingProvider } from "@/features/pcb_editor/contexts/RoutingContext";
 import { Modal as ViewerModal, Viewer3D, CubeIcon } from "@/features/3dviewer/components";
+import { DRCModal } from "@/features/drc_evaluator";
+import { GerberExportModal } from "@/features/gerber_exporter";
 
 export function PCBEditorLayout() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [layersModalOpen, setLayersModalOpen] = useState(false);
   const [shapeModalOpen, setShapeModalOpen] = useState(false);
   const [footprintModalOpen, setFootprintModalOpen] = useState(false);
+  const [drcOpen, setDrcOpen] = useState(false);
+  const [gerberOpen, setGerberOpen] = useState(false);
   const [viewerOpen, setViewerOpen] = useState(false);
   const [toast, setToast] = useState<ToastState | null>(null);
 
@@ -130,6 +134,22 @@ export function PCBEditorLayout() {
             className="!flex !h-7 !w-7 !items-center !justify-center !rounded-full !border-white/20 !bg-white/5 !p-0"
           >
             <CubeIcon className="h-3 w-3" />
+          </ToolbarItem>
+          <ToolbarItem
+            label="DRC Checks"
+            aria-label="Open DRC evaluator"
+            onClick={() => setDrcOpen(true)}
+            className="!flex !h-7 !w-7 !items-center !justify-center !rounded-full !border-white/20 !bg-white/5 !p-0"
+          >
+            <ShieldCheck className="h-3 w-3" />
+          </ToolbarItem>
+          <ToolbarItem
+            label="Export Gerber"
+            aria-label="Export PCB to Gerber"
+            onClick={() => setGerberOpen(true)}
+            className="!flex !h-7 !w-7 !items-center !justify-center !rounded-full !border-white/20 !bg-white/5 !p-0"
+          >
+            <Download className="h-3 w-3" />
           </ToolbarItem>
           {SHOW_PCB_DEBUG ? (
             <ToolbarItem
@@ -383,6 +403,8 @@ export function PCBEditorLayout() {
                     <CanvasViewport />
                     <RightToolbar />
                   </div>
+                  <DRCModal open={drcOpen} onClose={() => setDrcOpen(false)} />
+                  <GerberExportModal open={gerberOpen} onClose={() => setGerberOpen(false)} />
                   <EditorSettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
                   <LayerVisibilityModal open={layersModalOpen} onClose={() => setLayersModalOpen(false)} />
                   <ShapeSelectionModal open={shapeModalOpen} onClose={() => setShapeModalOpen(false)} />

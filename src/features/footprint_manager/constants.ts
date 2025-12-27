@@ -17,3 +17,6 @@ export const FOOTPRINT_PREVIEW_FLIP_ARC_POINTS = false;
 // "Expand" mode. Increase if you need larger uncropped previews, but beware
 // very large canvases may consume significant memory.
 export const FOOTPRINT_PREVIEW_MAX_STAGE_DIM = 10000;
+
+export const BASE_BACKEND_URL = "http://localhost:5000/api/v1/footprints";
+export const CATEGOTIES_ENDPOINT = "/categories";
