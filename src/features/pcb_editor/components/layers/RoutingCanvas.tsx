@@ -71,6 +71,7 @@ export function RoutingCanvas() {
         points={[segment.start[0], segment.start[1], segment.end[0], segment.end[1]]}
         stroke={layerStroke}
         strokeWidth={segment.width}
+        strokeScaleEnabled={true}
         onContextMenu={(e) => {
           try {
             e.evt.preventDefault();
@@ -105,7 +106,7 @@ export function RoutingCanvas() {
         const size = Number(via.size) || 0.8;
         const radius = size / 2;
         // increase display size for visibility
-        const displayRadius = Math.max(radius * 1.6, 0.8);
+        // const displayRadius = Math.max(radius * 1.6, 0.8);
         const uuid = via.uuid as string | undefined;
         const isHovered = viaHover && viaHover.uuid === uuid;
         const nodeId = uuid || `via-${idx}`;
@@ -149,26 +150,28 @@ export function RoutingCanvas() {
               } catch (err) {}
             }}
           >
-            {/* Outer yellow ring */}
+            {/* Outer yellow ring: render at true via radius (mm) */}
             <Circle
               x={0}
               y={0}
-              radius={isHovered ? displayRadius * 1.25 : displayRadius}
+              radius={isHovered ? radius * 1.25 : radius}
               fill={"#ffeb3b"}
               stroke={isHovered ? "#f57f17" : "#f9a825"}
               strokeWidth={isHovered ? 0.12 : 0.08}
+              strokeScaleEnabled={true}
               listening={false}
             />
             {/* Inner 'hole' painted white (approximate drill/hole) */}
-            <Circle
-              x={0}
-              y={0}
-              radius={Math.max(0.12, (Number(via.drill) || (size / 4)))}
-              fill={"#ffffff"}
-              stroke={"#e0e0e0"}
-              strokeWidth={0.02}
-              listening={false}
-            />
+              <Circle
+                x={0}
+                y={0}
+                radius={Math.max(0.12, (Number(via.drill) ? Number(via.drill) / 2 : (size / 4)))}
+                fill={"#ffffff"}
+                stroke={"#e0e0e0"}
+                strokeWidth={0.02}
+                strokeScaleEnabled={true}
+                listening={false}
+              />
           </Group>
         );
       });
@@ -198,6 +201,7 @@ export function RoutingCanvas() {
                   points={[line.start.x, line.start.y, line.end.x, line.end.y]}
                   stroke="#777"
                   strokeWidth={line.width}
+                  strokeScaleEnabled={true}
                   opacity={0.45}
                   dash={[3, 4]}
                 />
@@ -215,6 +219,7 @@ export function RoutingCanvas() {
                   points={[line.start.x, line.start.y, line.end.x, line.end.y]}
                   stroke="yellow"
                   strokeWidth={line.width}
+                  strokeScaleEnabled={true}
                   opacity={0.7}
                   dash={[5, 5]}
                 />
