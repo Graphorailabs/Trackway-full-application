@@ -7,6 +7,7 @@ import App from './App.tsx'
 import SchematicPage from '@/pages/schematic'
 import PcbEditorPage from '@/pages/pcb_editor'
 import GerberPage from '@/pages/gerber'
+
 const router = createHashRouter([
   { path: "/", element: <App />,
     children:[
