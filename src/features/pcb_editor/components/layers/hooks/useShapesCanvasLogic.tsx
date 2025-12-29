@@ -10,6 +10,7 @@ import { useGrid } from "@/features/pcb_editor/contexts/GridContext";
 import { PAD_SNAP_RADIUS } from "@/features/pcb_editor/constants";
 import { useFootprintPreview } from "@/features/pcb_editor/footprint/FootprintContext";
 import { useSelection } from "../../../contexts/SelectionContext";
+import { computeFootprintLocalBounds, getFootprintPlacement } from "@/features/pcb_editor/footprint/footprintBounds";
 // import { DEFAULT_SHAPE_STROKE, DEFAULT_SHAPE_WIDTH, ENABLE_SNAP_TO_VISIBLE_GRID } from "@/features/pcb_editor/constants";
 import { updateGraphicDataByKind } from "../ShapesCanvasService";
 
@@ -180,61 +181,22 @@ export function useShapesCanvasLogic() {
         // even if the footprint stage is not receiving pointer events.
         const hitFootprint = (pcb.footprints ?? []).find((fp) => {
           try {
-            const pads = (fp.pads ?? []) as any[];
-            const graphics = (fp.graphics ?? []) as any[];
-            const texts = ((fp as any).texts ?? []) as any[];
-            const points: Array<[number, number]> = [];
-            pads.forEach((p) => {
-              const at = p.at ?? { x: 0, y: 0 };
-              const sizeArr = p.size ?? [1, 1];
-              const w = sizeArr[0] ?? 1;
-              const h = sizeArr[1] ?? w;
-              points.push([ (at.x ?? 0) - w / 2, (at.y ?? 0) - h / 2 ]);
-              points.push([ (at.x ?? 0) + w / 2, (at.y ?? 0) + h / 2 ]);
-            });
-            graphics.forEach((g) => {
-              if (!g) return;
-              if (g.kind === "line") {
-                const s = g.start ?? g.data?.start ?? [0, 0];
-                const e = g.end ?? g.data?.end ?? [0, 0];
-                points.push([s.x ?? s[0] ?? 0, s.y ?? s[1] ?? 0]);
-                points.push([e.x ?? e[0] ?? 0, e.y ?? e[1] ?? 0]);
-              } else if (g.kind === "polygon") {
-                const rawPts = g.pts ?? g.data?.pts ?? null;
-                if (Array.isArray(rawPts)) {
-                  rawPts.forEach((pt: any) => points.push([pt[0] ?? pt.x ?? 0, pt[1] ?? pt.y ?? 0]));
-                } else if (rawPts && Array.isArray(rawPts.xy)) {
-                  rawPts.xy.forEach((pt: any) => points.push([pt[0] ?? pt.x ?? 0, pt[1] ?? pt.y ?? 0]));
-                }
-              } else if (g.kind === "rect") {
-                const s = g.start ?? g.data?.start ?? [0, 0];
-                const e = g.end ?? g.data?.end ?? [0, 0];
-                points.push([s[0] ?? s.x ?? 0, s[1] ?? s.y ?? 0]);
-                points.push([e[0] ?? e.x ?? 0, e[1] ?? e.y ?? 0]);
-              }
-            });
-            texts.forEach((t) => {
-              const at = t.at ?? { x: 0, y: 0 };
-              points.push([at.x ?? 0, at.y ?? 0]);
-            });
-            if (!points.length) return false;
-            const xs = points.map((p) => p[0]);
-            const ys = points.map((p) => p[1]);
-            const minX = xs.length ? Math.min(...xs) : -5;
-            const maxX = xs.length ? Math.max(...xs) : 5;
-            const minY = ys.length ? Math.min(...ys) : -5;
-            const maxY = ys.length ? Math.max(...ys) : 5;
-            const at = fp.at ?? { x: 0, y: 0, angle: 0 } as { x?: number; y?: number; angle?: number };
-            const cx = at.x ?? 0;
-            const cy = at.y ?? 0;
-            const angle = at.angle ?? 0;
-            const dx = worldPos.x - cx;
-            const dy = worldPos.y - cy;
+            const bounds = computeFootprintLocalBounds(fp);
+            const placement = getFootprintPlacement(fp);
+            const dx = worldPos.x - placement.x;
+            const dy = worldPos.y - placement.y;
+            const angle = placement.angle ?? 0;
             const c = Math.cos(angle);
             const s = Math.sin(angle);
             const localX = dx * c + dy * s;
             const localY = -dx * s + dy * c;
-            return localX >= minX && localX <= maxX && localY >= minY && localY <= maxY;
+            const padding = bounds.hasGeometry ? 0.4 : 2;
+            return (
+              localX >= bounds.minX - padding &&
+              localX <= bounds.maxX + padding &&
+              localY >= bounds.minY - padding &&
+              localY <= bounds.maxY + padding
+            );
           } catch (err) {
             return false;
           }

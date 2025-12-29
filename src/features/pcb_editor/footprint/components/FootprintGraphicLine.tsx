@@ -1,4 +1,5 @@
 import { Line } from "react-konva";
+import { FOOTPRINT_GRAPHIC_MIN_HIT_PX } from "./constants";
 
 type Props = {
   g: any;
@@ -25,8 +26,9 @@ export default function FootprintGraphicLine({ g }: Props) {
   const ey = Number(Array.isArray(endRaw) ? endRaw[1] : endRaw.y) || 0;
 
   const strokeWidth = Number(g.data?.stroke?.width ?? g.width ?? 0.12) || 0.12;
+  const hitStrokeWidth = Math.max(strokeWidth, FOOTPRINT_GRAPHIC_MIN_HIT_PX);
   const layer = g.data?.layer ?? g.layer;
   const stroke = layerColorFor(layer);
 
-  return <Line points={[sx, sy, ex, ey]} stroke={stroke} strokeWidth={strokeWidth} />;
+  return <Line points={[sx, sy, ex, ey]} stroke={stroke} strokeWidth={strokeWidth} hitStrokeWidth={hitStrokeWidth} />;
 }

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type ChangeEvent } from "react";
-import { GitBranch, Layers, Loader2, PackagePlus, Save, Settings, Square, ZoomIn, ZoomOut, Circle as CircleIcon } from "lucide-react";
+import { GitBranch, Layers, Loader2, PackagePlus, Redo2, Save, Settings, Square, Undo2, ZoomIn, ZoomOut, Circle as CircleIcon, ShieldCheck, Download } from "lucide-react";
 import { LuMousePointer2 } from "react-icons/lu";
 import { CanvasViewport } from "@/features/pcb_editor/components/CanvasViewport";
 import { ENABLE_PCB_DEBUG_LOG_BUTTON } from "@/features/pcb_editor/constants";
@@ -23,12 +23,16 @@ import { useFootprintManagers } from "@/features/footprint_manager/FootprintMana
 import { ShapeSelectionModal } from "../components/shapes/ShapeSelectionModal";
 import { RoutingProvider } from "@/features/pcb_editor/contexts/RoutingContext";
 import { Modal as ViewerModal, Viewer3D, CubeIcon } from "@/features/3dviewer/components";
+import { DRCModal } from "@/features/drc_evaluator";
+import { GerberExportModal } from "@/features/gerber_exporter";
 
 export function PCBEditorLayout() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [layersModalOpen, setLayersModalOpen] = useState(false);
   const [shapeModalOpen, setShapeModalOpen] = useState(false);
   const [footprintModalOpen, setFootprintModalOpen] = useState(false);
+  const [drcOpen, setDrcOpen] = useState(false);
+  const [gerberOpen, setGerberOpen] = useState(false);
   const [viewerOpen, setViewerOpen] = useState(false);
   const [toast, setToast] = useState<ToastState | null>(null);
 
@@ -44,9 +48,33 @@ export function PCBEditorLayout() {
 
   const TopToolbar = () => {
     const { zoomIn, zoomOut, zoom } = useZoom();
-    const { savePcb, isSaving, pcb } = usePcb();
+    const { savePcb, isSaving, pcb, canUndo, canRedo, undo, redo } = usePcb();
+
+    // Keyboard shortcuts for undo/redo — attach here so `usePcb()` is
+    // called inside the `<PcbProvider>` render tree and hooks are valid.
+    useEffect(() => {
+      const onKeyDown = (e: KeyboardEvent) => {
+        const tag = (e.target as HTMLElement)?.tagName;
+        const editable = (e.target as HTMLElement)?.isContentEditable;
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || editable) return;
+        if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z') {
+          if (canUndo) {
+            e.preventDefault();
+            undo();
+          }
+        } else if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'y') {
+          if (canRedo) {
+            e.preventDefault();
+            redo();
+          }
+        }
+      };
+      window.addEventListener('keydown', onKeyDown);
+      return () => window.removeEventListener('keydown', onKeyDown);
+    }, [canUndo, canRedo, undo, redo]);
     const SHOW_PCB_DEBUG = Boolean(ENABLE_PCB_DEBUG_LOG_BUTTON);
     const { layers, selectedLayerId, selectLayer } = useLayers();
+
     const handleSave = async () => {
       try {
         await savePcb();
@@ -74,6 +102,24 @@ export function PCBEditorLayout() {
             {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
           </ToolbarItem>
           <ToolbarItem
+            label="Undo"
+            aria-label="Undo"
+            onClick={undo}
+            disabled={!canUndo}
+            className="!flex !h-7 !w-7 !items-center !justify-center !rounded-full !border-white/20 !bg-white/5 !p-0 disabled:!cursor-not-allowed disabled:!opacity-50"
+          >
+            <Undo2 className="h-3 w-3" />
+          </ToolbarItem>
+          <ToolbarItem
+            label="Redo"
+            aria-label="Redo"
+            onClick={redo}
+            disabled={!canRedo}
+            className="!flex !h-7 !w-7 !items-center !justify-center !rounded-full !border-white/20 !bg-white/5 !p-0 disabled:!cursor-not-allowed disabled:!opacity-50"
+          >
+            <Redo2 className="h-3 w-3" />
+          </ToolbarItem>
+          <ToolbarItem
             label="Settings"
             aria-label="Editor settings"
             onClick={() => setSettingsOpen(true)}
@@ -88,6 +134,22 @@ export function PCBEditorLayout() {
             className="!flex !h-7 !w-7 !items-center !justify-center !rounded-full !border-white/20 !bg-white/5 !p-0"
           >
             <CubeIcon className="h-3 w-3" />
+          </ToolbarItem>
+          <ToolbarItem
+            label="DRC Checks"
+            aria-label="Open DRC evaluator"
+            onClick={() => setDrcOpen(true)}
+            className="!flex !h-7 !w-7 !items-center !justify-center !rounded-full !border-white/20 !bg-white/5 !p-0"
+          >
+            <ShieldCheck className="h-3 w-3" />
+          </ToolbarItem>
+          <ToolbarItem
+            label="Export Gerber"
+            aria-label="Export PCB to Gerber"
+            onClick={() => setGerberOpen(true)}
+            className="!flex !h-7 !w-7 !items-center !justify-center !rounded-full !border-white/20 !bg-white/5 !p-0"
+          >
+            <Download className="h-3 w-3" />
           </ToolbarItem>
           {SHOW_PCB_DEBUG ? (
             <ToolbarItem
@@ -341,6 +403,8 @@ export function PCBEditorLayout() {
                     <CanvasViewport />
                     <RightToolbar />
                   </div>
+                  <DRCModal open={drcOpen} onClose={() => setDrcOpen(false)} />
+                  <GerberExportModal open={gerberOpen} onClose={() => setGerberOpen(false)} />
                   <EditorSettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
                   <LayerVisibilityModal open={layersModalOpen} onClose={() => setLayersModalOpen(false)} />
                   <ShapeSelectionModal open={shapeModalOpen} onClose={() => setShapeModalOpen(false)} />

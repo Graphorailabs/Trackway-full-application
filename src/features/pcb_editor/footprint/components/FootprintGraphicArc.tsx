@@ -1,5 +1,6 @@
 import { Line, Circle } from "react-konva";
 import { FOOTPRINT_PREVIEW_DEBUG as DEFAULT_DEBUG, FOOTPRINT_PREVIEW_FLIP_ARC_POINTS as DEFAULT_FLIP } from "@/features/footprint_manager/constants";
+import { FOOTPRINT_GRAPHIC_MIN_HIT_PX } from "./constants";
 
 type Props = { g: any };
 
@@ -57,6 +58,7 @@ export default function FootprintGraphicArc({ g }: Props) {
   const forceVisibleArc = (typeof window !== "undefined" ? (window as any).FOOTPRINT_PREVIEW_FORCE_VISIBLE_ARC ?? false : false) as boolean;
   const effectiveStroke = dbg ? "#ff00ff" : forceVisibleArc ? "#00ffff" : stroke;
   const effectiveStrokeWidth = Math.max(strokeWidth * 4, 1);
+  const hitStrokeWidth = Math.max(effectiveStrokeWidth, FOOTPRINT_GRAPHIC_MIN_HIT_PX);
 
   // Compute center using circumcenter if we have a mid point
   let cx: number | null = null;
@@ -111,7 +113,13 @@ export default function FootprintGraphicArc({ g }: Props) {
             listening={false}
           />
         )}
-        <Line points={[sx, sy, ex, ey]} stroke={effectiveStroke} strokeWidth={effectiveStrokeWidth} strokeScaleEnabled={false} />
+        <Line
+          points={[sx, sy, ex, ey]}
+          stroke={effectiveStroke}
+          strokeWidth={effectiveStrokeWidth}
+          strokeScaleEnabled={false}
+          hitStrokeWidth={hitStrokeWidth}
+        />
       </>
     );
   }
@@ -161,7 +169,13 @@ export default function FootprintGraphicArc({ g }: Props) {
             listening={false}
           />
         )}
-        <Line points={[sx, sy, ex, ey]} stroke={effectiveStroke} strokeWidth={effectiveStrokeWidth} strokeScaleEnabled={false} />
+        <Line
+          points={[sx, sy, ex, ey]}
+          stroke={effectiveStroke}
+          strokeWidth={effectiveStrokeWidth}
+          strokeScaleEnabled={false}
+          hitStrokeWidth={hitStrokeWidth}
+        />
       </>
     );
   }
@@ -211,7 +225,13 @@ export default function FootprintGraphicArc({ g }: Props) {
         </>
       )}
 
-      <Line points={pts} stroke={effectiveStroke} strokeWidth={effectiveStrokeWidth} strokeScaleEnabled={strokeScaleEnabled} />
+      <Line
+        points={pts}
+        stroke={effectiveStroke}
+        strokeWidth={effectiveStrokeWidth}
+        strokeScaleEnabled={strokeScaleEnabled}
+        hitStrokeWidth={hitStrokeWidth}
+      />
     </>
   );
 }

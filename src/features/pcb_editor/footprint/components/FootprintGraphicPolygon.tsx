@@ -1,5 +1,6 @@
 import { Line } from "react-konva";
 import { FOOTPRINT_PREVIEW_DEBUG as DEFAULT_DEBUG } from "@/features/footprint_manager/constants";
+import { FOOTPRINT_GRAPHIC_MIN_HIT_PX } from "./constants";
 
 type Props = { g: any };
 
@@ -39,6 +40,16 @@ export default function FootprintGraphicPolygon({ g }: Props) {
   const dbg = (typeof window !== "undefined" ? (window as any).FOOTPRINT_PREVIEW_DEBUG ?? DEFAULT_DEBUG : DEFAULT_DEBUG) as boolean;
   const effectiveStroke = dbg ? "#ff00ff" : strokeColor;
   const effectiveStrokeWidth = dbg ? Math.max(strokeW * 3, 0.8) : strokeW;
+  const hitStrokeWidth = Math.max(effectiveStrokeWidth, FOOTPRINT_GRAPHIC_MIN_HIT_PX);
 
-  return <Line points={pts} closed stroke={effectiveStroke} strokeWidth={effectiveStrokeWidth} fill={fillFlag ? strokeColor : undefined} />;
+  return (
+    <Line
+      points={pts}
+      closed
+      stroke={effectiveStroke}
+      strokeWidth={effectiveStrokeWidth}
+      fill={fillFlag ? strokeColor : undefined}
+      hitStrokeWidth={hitStrokeWidth}
+    />
+  );
 }

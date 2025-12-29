@@ -26,6 +26,7 @@
     "react-router-dom": "^7.9.4",
     "tailwindcss": "^4.1.16",
     "three": "^0.179.1",
+    "three-stdlib": "^2.36.1",
     "trackway-parser-wasm": "file:pkg",
     "vite-plugin-top-level-await": "^1.6.0",
     "vite-plugin-wasm": "^3.5.0"
@@ -36,6 +37,7 @@
     "@types/react": "^19.1.16",
     "@types/react-dom": "^19.1.9",
     "@vitejs/plugin-react": "^5.0.4",
+    "baseline-browser-mapping": "^2.9.11",
     "eslint": "^9.36.0",
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.22",

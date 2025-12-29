@@ -7,7 +7,6 @@ type Props = {
   cloudItems: Record<string, FootprintMetadata[]>;
   expandedCloud: Record<string, boolean>;
   toggleCloudCategory: (cat: string) => Promise<void>;
-  handleInstallCategory: (cat: string) => Promise<void>;
   loadingCategories?: Record<string, boolean>;
   selected?: FootprintMetadata | null;
   setSelected: (m: FootprintMetadata | null) => void;
@@ -15,7 +14,7 @@ type Props = {
   tokenMatch: (target: string, q: string) => boolean;
 };
 
-export default function CloudSection({ categories, cloudItems, expandedCloud, toggleCloudCategory, handleInstallCategory, loadingCategories, selected, setSelected, debouncedSearch, tokenMatch }: Props) {
+export default function CloudSection({ categories, cloudItems, expandedCloud, toggleCloudCategory, loadingCategories, selected, setSelected, debouncedSearch, tokenMatch }: Props) {
   const q = debouncedSearch;
   const isSearching = !!q;
   const visible = categories.filter((c) => {
@@ -38,7 +37,6 @@ export default function CloudSection({ categories, cloudItems, expandedCloud, to
               <span className="capitalize">{c}</span>
             </button>
             <div className="flex items-center gap-2">
-              <button onClick={(e) => { e.stopPropagation(); handleInstallCategory(c); }} className="text-xs bg-emerald-600/80 px-2 py-1 rounded">Install</button>
               <span className="text-xs text-slate-400">{expandedCloud[c] ? "▾" : "▸"}</span>
             </div>
           </div>

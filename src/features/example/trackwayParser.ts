@@ -45,6 +45,18 @@ import {
   ercReportJsonToJson,
   type SchematicModel,
   type ErcReport,
+
+  // DRC exports
+  drcCreateDefaultConfig,
+  drcRunFromPcbSexpr,
+  drcRunFromPcbValue,
+  type DrcConfig,
+  type DRCIssue,
+
+  // Gerber exports
+  gerberExportZipFromPcbSexpr,
+  gerberExportZipFromPcbValue,
+  type GerberZipOptions,
 } from "trackway-parser-wasm";
 
 type PrettyOptions = { pretty?: boolean };
@@ -234,6 +246,34 @@ export class TrackwayParser {
     /** Re-format ErcReport JSON string (identity/pretty) */
     reportJsonToJson(json: string, pretty?: boolean): string {
       return ercReportJsonToJson(json, Boolean(pretty));
+    },
+  };
+
+  /** DRC helpers (Design Rules Check) */
+  readonly drc = {
+    /** Create a reasonable default DRC config (zones enabled). */
+    createDefaultConfig(): DrcConfig {
+      return drcCreateDefaultConfig() as DrcConfig;
+    },
+    /** Run DRC from a PCB S-expression, returns `DRCIssue[]`. */
+    runFromPcbSexpr(input: string, config?: DrcConfig | null): DRCIssue[] {
+      return drcRunFromPcbSexpr(input, (config ?? null) as unknown as any) as DRCIssue[];
+    },
+    /** Run DRC from a JS `Pcb` value, returns `DRCIssue[]`. */
+    runFromPcbValue(value: Pcb, config?: DrcConfig | null): DRCIssue[] {
+      return drcRunFromPcbValue(value as unknown as any, (config ?? null) as unknown as any) as DRCIssue[];
+    },
+  };
+
+  /** Gerber/Excellon export helpers */
+  readonly gerber = {
+    /** Export Gerbers (and drills) from a PCB S-expression as a ZIP `Uint8Array`. */
+    exportZipFromPcbSexpr(input: string, options?: GerberZipOptions | null): Uint8Array {
+      return gerberExportZipFromPcbSexpr(input, (options ?? null) as unknown as any) as unknown as Uint8Array;
+    },
+    /** Export Gerbers (and drills) from a JS `Pcb` value as a ZIP `Uint8Array`. */
+    exportZipFromPcbValue(value: Pcb, options?: GerberZipOptions | null): Uint8Array {
+      return gerberExportZipFromPcbValue(value as unknown as any, (options ?? null) as unknown as any) as unknown as Uint8Array;
     },
   };
 }

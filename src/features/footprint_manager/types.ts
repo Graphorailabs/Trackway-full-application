@@ -14,6 +14,22 @@ export type FootprintPackage = {
   data?: ArrayBuffer | string;
 };
 
+export type Footprint3DModelMetadata = {
+  id: string;
+  name: string;
+  category: string;
+  footprintName?: string;
+  format?: string;
+  description?: string;
+  source?: "cloud" | "local";
+  tags?: string[];
+};
+
+export type Footprint3DModelPackage = {
+  meta: Footprint3DModelMetadata;
+  data?: ArrayBuffer | string;
+};
+
 // High level facade used by the UI to list/search/install footprints.
 export interface FootprintManager {
   listCategories(): Promise<string[]>;
@@ -28,8 +44,17 @@ export interface LocalPackageManager {
   uninstall(id: string): Promise<void>;
 }
 
+export interface Local3DModelManager {
+  listInstalled(): Promise<Footprint3DModelMetadata[]>;
+  installFromZip(buffer: ArrayBuffer, category?: string): Promise<Footprint3DModelMetadata[]>;
+  uninstall(id: string): Promise<void>;
+  getModel(id: string): Promise<Footprint3DModelPackage | null>;
+  findByFootprintName(footprintName: string): Promise<Footprint3DModelPackage | null>;
+}
+
 // Combined runtime object used by the context/provider
 export type FootprintManagers = {
   cloud: FootprintManager;
   local: LocalPackageManager;
+  models?: Local3DModelManager;
 };

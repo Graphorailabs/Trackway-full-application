@@ -50,7 +50,7 @@ export const findViaUnderCursor = (cursorWorld: Pt, pcb: any) => {
  * @param placedSegmentsRef - locally placed segments in the current routing session
  * @returns nearest endpoint `Pt` or `null`
  */
-export const findNearestEndpoint = (pt: Pt, pcb: any, placedSegmentsRef: React.MutableRefObject<Array<{ start: Pt; end: Pt; width: number; layer?: string }>>) => {
+export const findNearestEndpoint = (pt: Pt, pcb: any, placedSegmentsRef: React.MutableRefObject<Array<{ uuid?: string; start: Pt; end: Pt; width: number; layer?: string }>>) => {
     if (!ENABLE_ENDPOINT_SNAP) return null;
     const eps = 1e-6;
     const endpoints: Pt[] = [];

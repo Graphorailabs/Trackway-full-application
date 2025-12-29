@@ -37,6 +37,10 @@ export type PcbContextValue = {
   error: string | null;
   saveError: string | null;
   lastSavedAt: number | null;
+  canUndo: boolean;
+  canRedo: boolean;
+  undo: () => void;
+  redo: () => void;
   updatePcb: (updater: (current: Pcb) => Pcb) => void;
   addGraphicItem: (item: PcbGraphicItem) => void;
   // Via helpers: operate on `pcb.tracks` where kind === 'via'
@@ -87,10 +91,39 @@ export function PcbProvider({ children }: PropsWithChildren) {
   const [pcb, setPcb] = useState<Pcb>(() => createBlankPcb());
   const pcbRef = useRef<Pcb>(pcb);
 
-  const applyLoadedPcb = useCallback((next: Pcb) => {
+  const HISTORY_LIMIT = 50;
+  const [past, setPast] = useState<Pcb[]>([]);
+  const [future, setFuture] = useState<Pcb[]>([]);
+  const pastRef = useRef<Pcb[]>(past);
+  const futureRef = useRef<Pcb[]>(future);
+
+  useEffect(() => {
+    pastRef.current = past;
+  }, [past]);
+
+  useEffect(() => {
+    futureRef.current = future;
+  }, [future]);
+
+  const clearHistory = useCallback(() => {
+    setPast([]);
+    setFuture([]);
+    pastRef.current = [];
+    futureRef.current = [];
+  }, []);
+
+  const applyPcbState = useCallback((next: Pcb) => {
     setPcb(next);
     pcbRef.current = next;
   }, []);
+
+  const applyLoadedPcb = useCallback(
+    (next: Pcb) => {
+      clearHistory();
+      applyPcbState(next);
+    },
+    [applyPcbState, clearHistory],
+  );
 
   const getSnapshot = useCallback(() => pcbRef.current ?? createBlankPcb(), []);
 
@@ -125,10 +158,62 @@ export function PcbProvider({ children }: PropsWithChildren) {
   const sheetMetadata = useMemo(() => deriveMetadata(pcb), [pcb]);
 
   const updatePcb = useCallback((updater: (current: Pcb) => Pcb) => {
-    const next = updater(pcbRef.current);
-    pcbRef.current = next;
-    setPcb(next);
-  }, []);
+    const current = pcbRef.current;
+    const next = updater(current);
+    if (next === current) return;
+
+    // Record history for undo and clear redo branch.
+    setPast((prev) => {
+      const updated = [...prev, current];
+      if (updated.length > HISTORY_LIMIT) {
+        updated.splice(0, updated.length - HISTORY_LIMIT);
+      }
+      pastRef.current = updated;
+      return updated;
+    });
+    setFuture(() => {
+      futureRef.current = [];
+      return [];
+    });
+
+    applyPcbState(next);
+  }, [applyPcbState]);
+
+  const canUndo = past.length > 0;
+  const canRedo = future.length > 0;
+
+  const undo = useCallback(() => {
+    const current = pcbRef.current;
+    if (!pastRef.current.length) return;
+    const previous = pastRef.current[pastRef.current.length - 1] as Pcb;
+    const nextPast = pastRef.current.slice(0, -1);
+    const nextFuture = [current, ...futureRef.current];
+
+    pastRef.current = nextPast;
+    futureRef.current = nextFuture;
+
+    setPast(nextPast);
+    setFuture(nextFuture);
+    applyPcbState(previous);
+  }, [applyPcbState]);
+
+  const redo = useCallback(() => {
+    const current = pcbRef.current;
+    if (!futureRef.current.length) return;
+    const next = futureRef.current[0] as Pcb;
+    const nextFuture = futureRef.current.slice(1);
+    const nextPast = [...pastRef.current, current];
+    if (nextPast.length > HISTORY_LIMIT) {
+      nextPast.splice(0, nextPast.length - HISTORY_LIMIT);
+    }
+
+    pastRef.current = nextPast;
+    futureRef.current = nextFuture;
+
+    setPast(nextPast);
+    setFuture(nextFuture);
+    applyPcbState(next);
+  }, [applyPcbState]);
 
   const addGraphicItem = useCallback(
     (item: PcbGraphicItem) => {
@@ -359,6 +444,10 @@ export function PcbProvider({ children }: PropsWithChildren) {
       error: loadError,
       saveError,
       lastSavedAt,
+      canUndo,
+      canRedo,
+      undo,
+      redo,
       updatePcb,
       addGraphicItem,
       addFootprint,
@@ -388,6 +477,10 @@ export function PcbProvider({ children }: PropsWithChildren) {
       loadError,
       saveError,
       lastSavedAt,
+      canUndo,
+      canRedo,
+      undo,
+      redo,
       updatePcb,
       addGraphicItem,
       addFootprint,

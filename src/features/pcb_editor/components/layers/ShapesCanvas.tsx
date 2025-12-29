@@ -159,10 +159,40 @@ export default function ShapesCanvas() {
     const workerRef = useRef<Worker | null>(null);
     const routingActiveRef = useRef<boolean>(false);
     const workerRequestIdRef = useRef<number>(0);
+    const routingOriginRef = useRef<Pt | null>(null);
     // Segments placed during the current continuous routing session.
     // Stored in a ref so we can include them in obstacle lists immediately
     // without waiting for `pcb` state to update.
-    const placedSegmentsRef = useRef<Array<{ start: Pt; end: Pt; width: number; layer?: string }>>([]);
+    const placedSegmentsRef = useRef<Array<{ uuid?: string; start: Pt; end: Pt; width: number; layer?: string }>>([]);
+
+    // Keep the routing session anchor consistent with PCB snapshot changes
+    // (undo/redo). When the PCB rolls back, drop any locally recorded
+    // segments that no longer exist and re-anchor `routingStart` to the last
+    // remaining segment endpoint (or to the original session start).
+    useEffect(() => {
+        if (tool !== 'route') return;
+        if (!routingActiveRef.current) return;
+
+        const existingUuids = new Set<string>();
+        for (const t of (pcb?.tracks || [])) {
+            const data = (t as any)?.data;
+            const uuid = data?.uuid;
+            if (typeof uuid === 'string' && uuid.length) existingUuids.add(uuid);
+        }
+
+        const before = placedSegmentsRef.current || [];
+        const after = before.filter(s => !s.uuid || existingUuids.has(s.uuid));
+        if (after.length !== before.length) placedSegmentsRef.current = after;
+
+        const lastEnd = after.length ? after[after.length - 1].end : null;
+        const nextStart = lastEnd ?? routingOriginRef.current ?? null;
+
+        if (nextStart) {
+            if (!routingStart || routingStart.x !== nextStart.x || routingStart.y !== nextStart.y) {
+                setRoutingStart({ x: nextStart.x, y: nextStart.y });
+            }
+        }
+    }, [pcb, routingStart, tool]);
 
     // Instantiate centralized mouse handlers now that routing refs/state are declared
     //
@@ -202,6 +232,7 @@ export default function ShapesCanvas() {
         workerRef,
         workerRequestIdRef,
         placedSegmentsRef,
+        routingOriginRef,
         setPreviewTracks,
         previewTracks,
         previewIncompatibleWithPad,
@@ -262,6 +293,7 @@ export default function ShapesCanvas() {
                 setRoutingActive(false);
                 routingActiveRef.current = false;
                 placedSegmentsRef.current = [];
+                routingOriginRef.current = null;
             }
         };
         window.addEventListener("keydown", onKey);
@@ -277,6 +309,7 @@ export default function ShapesCanvas() {
             setRoutingActive(false);
             routingActiveRef.current = false;
             placedSegmentsRef.current = [];
+            routingOriginRef.current = null;
             try { setPreviewIncompatibleWithPad(false); } catch (e) { /* noop */ }
             try { resetCurrentTraceLayer?.(); } catch (e) { /* noop */ }
         }

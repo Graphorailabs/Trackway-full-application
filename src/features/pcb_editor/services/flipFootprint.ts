@@ -25,7 +25,50 @@ const normalizeAngle = (deg: number) => {
     return next;
 };
 
+const flipAnglePreserveUnit = (v: number | undefined | null) => {
+    if (v == null) return v;
+    // If the value looks like radians (small magnitude), convert to degrees,
+    // normalize, then convert back to radians to preserve numeric form.
+    if (Math.abs(v) <= Math.PI * 2 + 1e-6) {
+        const deg = (v * 180) / Math.PI;
+        const nd = normalizeAngle(deg);
+        return (nd * Math.PI) / 180;
+    }
+    const deg = v as number;
+    return normalizeAngle(deg);
+};
+
 const clone = (v: any) => JSON.parse(JSON.stringify(v));
+
+// Mutate `obj` in-place, mirroring coordinate-like fields only.
+// To avoid flipping non-coordinate 2-value arrays (e.g. font sizes),
+// we only treat length-2 numeric arrays as points when the parent key
+// indicates coordinates (e.g. 'at','start','end','center','mid','pts','xy').
+const COORD_KEYS = new Set(["at", "start", "end", "center", "mid", "pts", "xy", "xyr", "pts.xy", "data.at", "data.start", "data.end", "data.center", "data.mid", "data.pts", "position", "pos", "origin"]);
+const mirrorCoordsRecursive = (obj: any, parentKey?: string) => {
+    if (obj == null) return;
+    if (Array.isArray(obj)) {
+        // array of two numbers under a coordinate-like parent -> mirror X
+        if (obj.length === 2 && typeof obj[0] === 'number' && typeof obj[1] === 'number' && parentKey && COORD_KEYS.has(parentKey)) {
+            obj[0] = -obj[0];
+            return;
+        }
+        // recurse into elements, preserving parentKey (useful for pts arrays)
+        for (let i = 0; i < obj.length; i++) mirrorCoordsRecursive(obj[i], parentKey);
+        return;
+    }
+    if (typeof obj === 'object') {
+        // object with x/y -> mirror regardless of key
+        if (typeof obj.x === 'number' && typeof obj.y === 'number') {
+            obj.x = -obj.x;
+            return;
+        }
+        // recurse, passing the child key so arrays beneath it know their context
+        for (const k of Object.keys(obj)) {
+            try { mirrorCoordsRecursive(obj[k], k); } catch (e) {}
+        }
+    }
+};
 
 const coerceLayerName = (layer: any): string | undefined => {
     const mapped = mapLayer(layer);
@@ -41,6 +84,7 @@ const coerceLayerName = (layer: any): string | undefined => {
 export function flipFootprint(fp: any) {
     if (!fp) return fp;
     const next = clone(fp);
+    const before = clone(fp);
 
     const flippedLayer = coerceLayerName(next.layer);
     if (flippedLayer) next.layer = flippedLayer;
@@ -74,12 +118,17 @@ export function flipFootprint(fp: any) {
             if (Array.isArray(p.layers)) p.layers = mapLayersArray(p.layers);
             if (Array.isArray(p.data?.layers)) p.data.layers = mapLayersArray(p.data.layers);
 
-            // Normalize `at` to object form and mirror local X (negate X)
+            // Normalize `at` to object form and mirror local X (negate X).
+            // Preserve any angle value if present (array [x,y,angle] or object.at.angle).
             if (Array.isArray(p.at) && typeof p.at[0] !== "undefined") {
-                p.at = { x: -(Number(p.at[0]) || 0), y: Number(p.at[1]) || 0 };
+                const ax = Number(p.at[0]) || 0;
+                const ay = Number(p.at[1]) || 0;
+                const aangle = typeof p.at[2] === "number" ? p.at[2] : undefined;
+                p.at = aangle !== undefined ? { x: -ax, y: ay, angle: flipAnglePreserveUnit(aangle) } : { x: -ax, y: ay };
             } else if (p.at && typeof p.at === "object") {
                 if (typeof p.at.x === "number") p.at.x = -p.at.x;
                 if (typeof p.at.y === "number") p.at.y = p.at.y;
+                if (typeof p.at.angle === "number") p.at.angle = flipAnglePreserveUnit(p.at.angle as number);
             } else {
                 // flat x/y fields
                 if (typeof p.x === "number" || typeof p.y === "number") {
@@ -89,9 +138,48 @@ export function flipFootprint(fp: any) {
                 }
             }
 
-            // invert pad rotation if present
-            if (typeof p.rotation === "number") p.rotation = normalizeAngle(p.rotation);
-            if (typeof p.rot === "number") p.rot = normalizeAngle(p.rot);
+            // Also handle nested locations under p.data.at or p.data.x/p.data.y
+            if (p.data) {
+                // use recursive mirror helper to handle any nested coordinate forms
+                mirrorCoordsRecursive(p.data);
+                // ensure arrays like p.data.at remain arrays if they were originally arrays
+                if (Array.isArray(p.data.at)) {
+                    // already mirrored by helper above
+                }
+            }
+
+            // invert pad rotation if present, preserving numeric unit (radians vs degrees)
+            if (typeof p.rotation === "number") p.rotation = flipAnglePreserveUnit(p.rotation as number);
+            if (typeof p.rot === "number") p.rot = flipAnglePreserveUnit(p.rot as number);
+            return p;
+        });
+    }
+
+    // Canonicalize pads: ensure `p.at` is always an object {x,y,angle?}
+    if (Array.isArray(next.pads)) {
+        next.pads = next.pads.map((p: any) => {
+            try {
+                // if at is array [x,y,angle]
+                if (Array.isArray(p.at)) {
+                    const ax = Number(p.at[0]) || 0;
+                    const ay = Number(p.at[1]) || 0;
+                    const aangle = typeof p.at[2] === 'number' ? p.at[2] : undefined;
+                    p.at = aangle !== undefined ? { x: ax, y: ay, angle: aangle } : { x: ax, y: ay };
+                }
+                // if p.data.at is array
+                if (p.data && Array.isArray(p.data.at)) {
+                    const ax = Number(p.data.at[0]) || 0;
+                    const ay = Number(p.data.at[1]) || 0;
+                    const aangle = typeof p.data.at[2] === 'number' ? p.data.at[2] : undefined;
+                    p.data.at = aangle !== undefined ? { x: ax, y: ay, angle: aangle } : { x: ax, y: ay };
+                }
+                // flat x/y fields -> at
+                if ((typeof p.x === 'number' || typeof p.y === 'number') && !p.at) {
+                    p.at = { x: Number(p.x) || 0, y: Number(p.y) || 0 };
+                    delete p.x;
+                    delete p.y;
+                }
+            } catch (e) {}
             return p;
         });
     }
@@ -106,85 +194,12 @@ export function flipFootprint(fp: any) {
             if (Array.isArray(gg.layers)) gg.layers = mapLayersArray(gg.layers);
             if (Array.isArray(gg.data?.layers)) gg.data.layers = mapLayersArray(gg.data.layers);
 
-            // Normalize and mirror coordinates (mirror local X)
-            if (Array.isArray(gg.start) && Array.isArray(gg.end)) {
-                // preserve array form expected by renderer
-                gg.start = [-(gg.start[0] ?? 0), gg.start[1] ?? 0];
-                gg.end = [-(gg.end[0] ?? 0), gg.end[1] ?? 0];
-            }
-            // also handle nested data.start / data.end which renderer may use
-            if (gg.data && Array.isArray(gg.data.start)) {
-                gg.data.start = [-(gg.data.start[0] ?? 0), gg.data.start[1] ?? 0];
-            } else if (gg.data && gg.data.start && typeof gg.data.start === 'object') {
-                if (typeof gg.data.start.x === 'number') gg.data.start.x = -gg.data.start.x;
-                if (typeof gg.data.start.y === 'number') gg.data.start.y = gg.data.start.y;
-            }
-            if (gg.data && Array.isArray(gg.data.end)) {
-                gg.data.end = [-(gg.data.end[0] ?? 0), gg.data.end[1] ?? 0];
-            } else if (gg.data && gg.data.end && typeof gg.data.end === 'object') {
-                if (typeof gg.data.end.x === 'number') gg.data.end.x = -gg.data.end.x;
-                if (typeof gg.data.end.y === 'number') gg.data.end.y = gg.data.end.y;
-            }
-            // polygon pts: support g.pts or g.data.pts.xy
-            if (Array.isArray(gg.pts)) {
-                // pts may be an array of arrays or array of objects; preserve form
-                gg.pts = gg.pts.map((pt: any) => Array.isArray(pt) ? [-(pt[0] ?? 0), pt[1] ?? 0] : { x: -(pt.x ?? 0), y: pt.y ?? 0 });
-            }
-            if (gg.data && gg.data.pts && Array.isArray(gg.data.pts.xy)) {
-                gg.data.pts.xy = gg.data.pts.xy.map((pt: any) => [-(pt[0] ?? 0), pt[1] ?? 0]);
-            }
-            if (typeof gg.x === "number") gg.x = -gg.x;
-            if (typeof gg.y === "number") gg.y = typeof gg.y === "number" ? gg.y : gg.y;
-            if (typeof gg.at === "object") {
-                if (typeof gg.at.x === "number") gg.at.x = -gg.at.x;
-                if (typeof gg.at.y === "number") gg.at.y = gg.at.y;
-            }
-            // circle center fields
-            if (Array.isArray(gg.center)) {
-                gg.center = [-(gg.center[0] ?? 0), gg.center[1] ?? 0];
-            }
-            if (gg.data && Array.isArray(gg.data.center)) {
-                gg.data.center = [-(gg.data.center[0] ?? 0), gg.data.center[1] ?? 0];
-            }
-            // arc mid point
-            if (Array.isArray(gg.mid)) {
-                gg.mid = [-(gg.mid[0] ?? 0), gg.mid[1] ?? 0];
-            }
-            if (gg.data && Array.isArray(gg.data.mid)) {
-                gg.data.mid = [-(gg.data.mid[0] ?? 0), gg.data.mid[1] ?? 0];
-            }
-            // text data positions
-            // NOTE: handle text-kind graphics specifically to avoid over-generalizing
-            // flips for arbitrary coordinate-like fields. Many graphics objects are
-            // not text and shouldn't have their arbitrary fields mirrored.
-            if (gg.kind === "text") {
-                if (gg.data && Array.isArray(gg.data.at)) {
-                    gg.data.at = [-(gg.data.at[0] ?? 0), gg.data.at[1] ?? 0];
-                } else if (gg.data && gg.data.at && typeof gg.data.at === "object") {
-                    if (typeof gg.data.at.x === "number") gg.data.at.x = -gg.data.at.x;
-                    if (typeof gg.data.at.y === "number") gg.data.at.y = gg.data.at.y;
-                } else if (Array.isArray(gg.at)) {
-                    gg.at = [-(gg.at[0] ?? 0), gg.at[1] ?? 0];
-                } else if (gg.at && typeof gg.at === "object") {
-                    if (typeof gg.at.x === "number") gg.at.x = -gg.at.x;
-                    if (typeof gg.at.y === "number") gg.at.y = gg.at.y;
-                } else if (typeof gg.x === "number") {
-                    gg.x = -gg.x;
-                }
-                // If rotation/angle is present for the text graphic, invert it.
-                if (gg.data && typeof gg.data.angle === "number") gg.data.angle = normalizeAngle(gg.data.angle);
-                if (typeof gg.angle === "number") gg.angle = normalizeAngle(gg.angle);
-                if (typeof gg.rotation === "number") gg.rotation = normalizeAngle(gg.rotation);
-            } else {
-                if (gg.data && Array.isArray(gg.data.at)) {
-                    gg.data.at = [-(gg.data.at[0] ?? 0), gg.data.at[1] ?? 0];
-                }
-            }
-            if (gg.data && (typeof gg.data.x === "number" || typeof gg.data.y === "number")) {
-                gg.data.x = typeof gg.data.x === "number" ? -gg.data.x : gg.data.x;
-                gg.data.y = typeof gg.data.y === "number" ? gg.data.y : gg.data.y;
-            }
-            if (typeof gg.rotation === "number") gg.rotation = normalizeAngle(gg.rotation);
+            // Use recursive mirror helper so we catch all nested coordinate forms
+            mirrorCoordsRecursive(gg);
+            // ensure any explicit rotation/angle fields are still flipped preserving units
+            if (gg.data && typeof gg.data.angle === "number") gg.data.angle = flipAnglePreserveUnit(gg.data.angle as number);
+            if (typeof gg.angle === "number") gg.angle = flipAnglePreserveUnit(gg.angle as number);
+            if (typeof gg.rotation === "number") gg.rotation = flipAnglePreserveUnit(gg.rotation as number);
             return gg;
         });
     }
@@ -199,7 +214,7 @@ export function flipFootprint(fp: any) {
                 if (typeof tt.at.x === "number") tt.at.x = -tt.at.x;
                 if (typeof tt.at.y === "number") tt.at.y = tt.at.y;
             }
-            if (typeof tt.rotation === "number") tt.rotation = normalizeAngle(tt.rotation);
+            if (typeof tt.rotation === "number") tt.rotation = flipAnglePreserveUnit(tt.rotation as number);
             if (typeof tt.layer === "string") tt.layer = mapLayer(tt.layer);
             if (tt.layer && typeof tt.layer === "object") tt.layer = mapLayer(tt.layer);
             return tt;
@@ -207,6 +222,26 @@ export function flipFootprint(fp: any) {
     }
 
     // Properties and other metadata typically don't need changes, UUIDs stay the same.
+    // If debug UUID is set on window, emit a compact before/after diff to console
+    try {
+        const dbgUuid = typeof globalThis !== 'undefined' ? (globalThis as any).__TRACKWAY_DEBUG_FLIP_UUID : undefined;
+        if (dbgUuid && dbgUuid === next.uuid) {
+            try {
+                const compact = (f: any) => ({
+                    uuid: f.uuid,
+                    at: f.at,
+                    pads: (f.pads || []).map((p: any) => ({ uuid: p.uuid, at: p.at, dataAt: p.data?.at, x: p.x, y: p.y })),
+                    graphics: (f.graphics || []).map((g: any) => ({ uuid: g.uuid, kind: g.kind, start: g.start ?? g.data?.start, end: g.end ?? g.data?.end, at: g.at ?? g.data?.at, pts: g.pts ?? g.data?.pts?.xy ?? g.data?.pts }))
+                });
+                console.log('[flipFootprint] DEBUG before', compact(before));
+                console.log('[flipFootprint] DEBUG after', compact(next));
+            } catch (e) {
+                console.log('[flipFootprint] DEBUG (raw) before', before);
+                console.log('[flipFootprint] DEBUG (raw) after', next);
+            }
+        }
+    } catch (e) {}
+
     return next as any;
 }
 
