@@ -27,7 +27,7 @@ function openDB(): Promise<IDBDatabase> {
     req.onerror = () => reject(req.error);
   });
 }
-
+ 
 function tx<T>(
   db: IDBDatabase,
   mode: IDBTransactionMode,
