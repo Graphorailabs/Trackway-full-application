@@ -2,6 +2,9 @@ import { useEffect, useState, useRef } from 'react';
 import { Layer, Group } from 'react-konva';
 import { useSymbol } from '../context/SymbolContext';
 import { useTool } from '../context/LeftToolbarContext';
+// import { api } from '@/api/api';
+// import { footprintLibSexprToValue, footprintLibJsonToValue } from 'trackway-parser-wasm';
+// import { usePcb } from '@/features/pcb_editor/contexts/PcbContext';
 // use built-in UUID when available
 import SymbolPreviewCanvas from './SymbolPreviewCanvas';
 import CanvasStage from './CanvaStage';
@@ -13,6 +16,15 @@ const SCALE = 6;
 export default function SymbolPlacementTool() {
   const { tool } = useTool();
   const { pendingSymbol, setPendingSymbol, addPlacedSymbol, setSelectedSymbol } = useSymbol();
+  // call hook unconditionally
+  // let pcbCtx: any = null;
+  // try {
+  //   pcbCtx = usePcb();
+  // } catch (e) {
+  //   // if PCB provider isn't present, pcbCtx remains null — placement will be best-effort
+  //   pcbCtx = null;
+  // }
+  // const placeFootprint = pcbCtx?.placeFootprint ?? ((_fp: any, _at: any) => "");
 
   const [pos, setPos] = useState({ x: 0, y: 0 }); // world coordinates
   const [_dragging, setDragging] = useState(false);
@@ -98,6 +110,64 @@ export default function SymbolPlacementTool() {
 
       addPlacedSymbol(placed);
       setSelectedSymbol(placed);
+      // Try to resolve and add matching footprint to PCB context (best-effort)
+      // (async () => {
+      //   try {
+      //     // Try to extract symbol id from placed.symbolData.unit if available
+      //     let symbolName: string | null = selectedSymbolId ?? null;
+      //     if (!symbolName) {
+      //       const unit = placed?.symbolData?.unit;
+      //       if (Array.isArray(unit) && unit.length > 0) {
+      //         // Try to get id from first unit object
+      //         symbolName = unit[0]?.id ?? null;
+      //       }
+      //     }
+      //     if (!symbolName) return;
+
+      //     // fetch categories then per-category lists to find a matching footprint by base name
+      //     const catsRes = await api.get(`/footprints/categories`);
+      //     const categories = catsRes.data?.data ?? [];
+      //     let found: any = null;
+      //     for (const c of categories) {
+      //       try {
+      //         const list = await api.get(`/footprints/categories/${c.slug}`);
+      //         const fps = list.data?.footprints ?? list.data?.data ?? [];
+      //         const match = (fps || []).find((f: any) => {
+      //           const base = (f.name || "").split('.').slice(0, -1).join('.') || f.name || "";
+      //           return base.trim().toLowerCase() === (symbolName || "").trim().toLowerCase();
+      //         });
+      //         if (match) { found = match; break; }
+      //       } catch (e) {
+      //         // ignore per-category errors
+      //       }
+      //     }
+
+      //     if (!found) return; // no footprint available for this symbol
+
+      //     // fetch footprint content and parse
+      //     const contentRes = await api.get(`/footprints/${found.id}/content`);
+      //     const txt = contentRes.data?.content ?? contentRes.data;
+      //     if (!txt) return;
+
+      //     let parsed: any = null;
+      //     try { parsed = footprintLibSexprToValue(txt as string); } catch (e) {
+      //       try { parsed = footprintLibJsonToValue(txt as string); } catch (e2) { parsed = null; }
+      //     }
+      //     const fpModel = parsed ? (parsed.footprint ?? parsed) : null;
+      //     if (!fpModel) return;
+
+      //     const instance = { ...fpModel, uuid: crypto.randomUUID(), at: { x: placed.position.x, y: placed.position.y, angle: 0 } } as import('trackway-parser-wasm').Footprint;
+      //     try {
+      //       const uuid = placeFootprint(instance, { x: placed.position.x, y: placed.position.y, angle: 0 });
+      //       // Delay logging slightly so context state updates propagate
+      //       setTimeout(() => {
+      //         try { console.log('[Schematic] PCB after footprint added', { placedFootprintUuid: uuid, pcb: pcbCtx?.pcb }); } catch (e) {}
+      //       }, 50);
+      //     } catch (e) { /* best-effort */ }
+      //   } catch (e) {
+      //     // ignore any errors in footprint resolution — placement should not fail
+      //   }
+      // })();
       // If the routing tool is active and drawing, attempt to connect the
       // in-progress wire to any placed pin that's near the current preview
       // endpoint. This mirrors the user's clicking-on-pin behavior but is

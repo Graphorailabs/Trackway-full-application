@@ -18,6 +18,6 @@ export const FOOTPRINT_PREVIEW_FLIP_ARC_POINTS = false;
 // very large canvases may consume significant memory.
 export const FOOTPRINT_PREVIEW_MAX_STAGE_DIM = 10000;
 
-export const BASE_BACKEND_URL = "http://localhost:3000/api/v1/footprints";
+export const BASE_BACKEND_URL = "https://srv1213622.hstgr.cloud/api/v1/footprints";
 export const CATEGOTIES_ENDPOINT = "/categories";
 export const MODEL3D_ENDPOINT = "/3dmodels";
