@@ -281,23 +281,23 @@ export function RoutingCanvas({ tracks }: { tracks?: WireSegment[] }) {
           // but require near-exact equality for wire-wire connections to avoid
           // false positives when the user starts drawing a new wire.
          // const PIN_TH = 6; // world units (used by isPointOnPlacedPin internally)
-          const WIRE_EPS = 1e-4; // small epsilon for wire endpoint equality
+        //  const WIRE_EPS = 1e-4; // small epsilon for wire endpoint equality
 
-          const pointClose = (a: { x: number; y: number }, b: { x: number; y: number }) => {
-            return Math.hypot(a.x - b.x, a.y - b.y) <= WIRE_EPS;
-          };
+          // const pointClose = (a: { x: number; y: number }, b: { x: number; y: number }) => {
+          //   return Math.hypot(a.x - b.x, a.y - b.y) <= WIRE_EPS;
+          // };
 
-          const isPointConnectedToAnyWire = (pt: { x: number; y: number }) => {
-            for (const [otherId, segs] of Object.entries(grouped)) {
-              if (otherId === groupId) continue;
-              for (const s of segs) {
-                const a = { x: s.start[0], y: s.start[1] };
-                const b = { x: s.end[0], y: s.end[1] };
-                if (pointClose(pt, a) || pointClose(pt, b)) return true;
-              }
-            }
-            return false;
-          };
+          // const isPointConnectedToAnyWire = (pt: { x: number; y: number }) => {
+          //   for (const [otherId, segs] of Object.entries(grouped)) {
+          //     if (otherId === groupId) continue;
+          //     for (const s of segs) {
+          //       const a = { x: s.start[0], y: s.start[1] };
+          //       const b = { x: s.end[0], y: s.end[1] };
+          //       if (pointClose(pt, a) || pointClose(pt, b)) return true;
+          //     }
+          //   }
+          //   return false;
+          // };
 
           const startOnPin = isPointOnPlacedPin(start); // uses PIN_TH internally
           const endOnPin = isPointOnPlacedPin(end);
