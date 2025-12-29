@@ -31,12 +31,9 @@ export function useFootprintModelAsset(targetModel: ResolvableFootprintModel | n
       }
 
       const rawPath = targetModel?.path ?? null;
-      if (targetModel && rawPath && !requiresLocalResolution(rawPath)) {
+        if (targetModel && rawPath && !requiresLocalResolution(rawPath)) {
         if (!targetModel.format) {
-          console.warn("[3DViewer] Footprint model path uses unsupported format", {
-            path: rawPath,
-            libraryLink: trimmedLibraryLink || null,
-          });
+          // unsupported format (silenced)
           setAsset(null);
           return;
         }
@@ -60,16 +57,26 @@ export function useFootprintModelAsset(targetModel: ResolvableFootprintModel | n
             resolvedFormat = normalizeModelFormat(pkg.meta?.format ?? null);
           }
           if (!resolvedFormat) {
-            console.warn("[3DViewer] Unsupported 3D model format", {
-              origin,
-              format: pkg.meta?.format ?? null,
-              libraryLink: trimmedLibraryLink || null,
-            });
+            // unsupported format from package (silenced)
             return false;
           }
           const packageName = pkg.meta?.name ?? null;
           resolvedSourceName = packageName ?? resolvedSourceName ?? (trimmedLibraryLink || null);
           dataBuffer = pkg.data as ArrayBuffer;
+          // If the package explicitly indicates it came from the cloud, log it
+          // so we can differentiate cloud-resolved models from local ones.
+          try {
+            if (pkg.meta?.source === "cloud") {
+              console.info("Footprint 3D model resolved through cloud (asset):", {
+                origin,
+                id: pkg.meta?.id ?? null,
+                name: pkg.meta?.name ?? null,
+                footprintName: pkg.meta?.footprintName ?? null,
+              });
+            }
+          } catch (e) {
+            /* ignore logging errors */
+          }
           return true;
         };
 
@@ -99,7 +106,7 @@ export function useFootprintModelAsset(targetModel: ResolvableFootprintModel | n
         setAsset({ url: objectUrl, format: resolvedFormat, sourceName: resolvedSourceName ?? null });
       } catch (err) {
         if (!cancelled) {
-          console.warn("Failed to resolve footprint model", err);
+          // failed to resolve (silenced)
           setAsset(null);
         }
       }
