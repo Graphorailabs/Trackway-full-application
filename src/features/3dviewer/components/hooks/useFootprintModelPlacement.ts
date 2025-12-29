@@ -111,54 +111,24 @@ export function useFootprintModelPlacement({ fp, bboxCenterX: _bboxCenterX, bbox
 					setModelScaleMultiplier(multiplier);
 				}
 			}
-			console.log("[3DViewer] Footprint model bounds", {
-				footprintUuid,
-				size: size.toArray(),
-				centerLocal: localCenter.toArray(),
-				modelSizeMax,
-				cubeSizeMax,
-				modelScaleMultiplierEstimate: resolvedAsset?.url && modelSizeMax > 0 ? cubeSizeMax / modelSizeMax : null,
-			});
+			// debug: footprint model bounds (silenced)
 		},
 		[footprintUuid, resolvedAsset?.url, scaleX, scaleY, scaleZ],
 	);
 
 	useEffect(() => {
-		console.log("[3DViewer] Footprint model candidate", {
-			footprintUuid,
-			libraryLink,
-			path: targetModel?.path ?? null,
-			format: targetModel?.format ?? null,
-			assetResolved: Boolean(resolvedAsset),
-		});
+		// debug: footprint model candidate (silenced)
 	}, [footprintUuid, libraryLink, targetModel?.path, targetModel?.format, resolvedAsset]);
 
 	useEffect(() => {
 		if (!targetModel && libraryLink) {
-			console.log("[3DViewer] Missing explicit footprint model, falling back to library link", {
-				footprintUuid,
-				libraryLink,
-			});
+			// debug: falling back to library link (silenced)
 		}
 	}, [targetModel, footprintUuid, libraryLink]);
 
 	useEffect(() => {
 		if (!resolvedAsset) return;
-		console.log("[3DViewer] Rendering footprint model", {
-			footprintUuid,
-			libraryLink,
-			path: targetModel?.path ?? null,
-			format: modelFormat,
-			resolvedUrl: resolvedAsset.url,
-			resolvedSourceName: resolvedAsset.sourceName ?? null,
-			offsetX,
-			offsetY,
-			translation,
-			resolvedTranslation: { x: translationX, y: translationY, z: translationZ },
-			rotation,
-			scale,
-			isBackSide,
-		});
+		// debug: rendering footprint model (silenced)
 	}, [resolvedAsset, footprintUuid, libraryLink, targetModel?.path, modelFormat, offsetX, offsetY, translation, translationX, translationY, translationZ, rotation, scale, isBackSide]);
 
 	useEffect(() => {

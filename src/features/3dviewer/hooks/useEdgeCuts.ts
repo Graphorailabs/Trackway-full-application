@@ -188,7 +188,7 @@ export default function useEdgeCuts(pcb: Pcb | null | undefined) {
       result.push({ outer, holes });
     }
 
-    try { console.debug("useEdgeCuts parsed shapes", { count: result.length }); } catch (e) {}
+    try { /* debug: useEdgeCuts parsed shapes (silenced) */ } catch (e) {}
     return result;
   }, [pcb]);
 }

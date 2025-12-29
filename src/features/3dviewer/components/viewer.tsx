@@ -19,18 +19,9 @@ export function Viewer3D() {
             try {
                 const installed = await activeManager.listInstalled();
                 if (cancelled) return;
-                console.log("[3DViewer] Installed 3D models", {
-                    count: installed.length,
-                    items: installed.map((meta) => ({
-                        id: meta.id,
-                        name: meta.name,
-                        footprintName: meta.footprintName ?? null,
-                        category: meta.category,
-                        format: meta.format,
-                    })),
-                });
+                // debug: installed 3D models (silenced in production)
             } catch (err) {
-                if (!cancelled) console.warn("[3DViewer] Failed to list 3D models", err);
+                // silent
             }
         }
         logInstalledModels(manager);
