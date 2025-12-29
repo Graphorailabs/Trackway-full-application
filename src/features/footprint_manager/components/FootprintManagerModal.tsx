@@ -32,7 +32,7 @@ export default function FootprintManagerModal({ open, onClose, onPlace, inEditor
     expandedCloud,
     cloudItems,
     toggleCloudCategory,
-    handleInstallCategory,
+    //handleInstallCategory,
     loadingCategories,
     // installed
     installed,

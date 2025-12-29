@@ -8,9 +8,14 @@ import topLevelAwait from "vite-plugin-top-level-await";
 
 // https://vite.dev/config/
 export default defineConfig({
+   base: "/",
   plugins: [wasm(), topLevelAwait(), react(),  tailwindcss(), tsconfigPaths({
     projects:["tsconfig.app.json"]
   })],
+  preview: {
+    host: true,
+    port:4173,
+  },
   // Improve chunking to avoid very large bundles
   build: {
     chunkSizeWarningLimit: 700, // kB - raise/lower as needed

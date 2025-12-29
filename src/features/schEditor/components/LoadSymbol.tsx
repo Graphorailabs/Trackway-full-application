@@ -4,11 +4,11 @@ import { useEffect, useState } from "react"
 import { SiCircuitverse } from "react-icons/si";
 
 import { SymbolPreview } from "./SymbolPreview"
-// import { useSymbol } from "../context/SymbolContext";
-// import { useTool } from "../context/ToolContext";
 import { symbolLibSexprToJson } from "trackway-parser-wasm";
 import { api } from "@/api/api";
 import FootprintPreview from "./SymbolFootprintPreview";
+import { useSymbol } from "../context/SymbolContext";
+import { useTool } from "../context/LeftToolbarContext";
 
 interface SymbolLibrary {
   id: string;
@@ -28,10 +28,9 @@ export const LoadSymbol = () => {
     const [selectedFootprintId, setSelectedFootprintId] = useState<string | null>(null);
     const [footprintContent, setFootprintContent] = useState<string | null>(null);
     
-  // const { setSelectedSymbol, setSymbolData, setPendingSymbol } = useSymbol();
+  const { symbolData, setSymbolData, setPendingSymbol } = useSymbol();
 
-  //  const {setTool, setSelectedSymbolId} = useTool();
-
+   const {setTool, setSelectedSymbolId} = useTool();
     useEffect(() => {
       let isMounted = true;
 
@@ -67,7 +66,6 @@ export const LoadSymbol = () => {
     }, [selectedLibId]);
 
    
-  const [symbolData, setSymbolData] = useState<any[]>([]);
   
 
   // const loadSymbolNamesFromContent = (content: string) => {
@@ -79,7 +77,7 @@ export const LoadSymbol = () => {
 
 
   const handleContent = (symbolId: string) => {
-    const selected = symbolData.find((s) => s.id === symbolId);
+    const selected = symbolData.find((s: any) => s.id === symbolId);
     if (selected) {
       setGetContentById(selected);
     } else {
@@ -248,7 +246,7 @@ export const LoadSymbol = () => {
                 // const isExpanded = !!expandedSymbols[name];
 
                 const getFootprintProp = () => {
-                  const sym = symbolData.find((s) => s.id === name);
+                  const sym = symbolData.find((s: any) => s.id === name);
                   if (!sym) return "";
                   // properties may contain a Footprint key (case-sensitive) or 'footprint'
                   // return sym.properties?.Footprint || sym.properties?.footprint || "";
@@ -391,16 +389,16 @@ export const LoadSymbol = () => {
                       return;
                   }
 
-                  // ✔ send full symbol object as pending (do not mark it as placed)
-                  // setPendingSymbol(getContentById.unit);
-                  // console.log('pendingsymbolfromok', getContentById);
-                  // // Do not set `selectedSymbol` here — that's reserved for placed components
-                  // setSymbolData(getContentById);
-                  // setSelectedSymbolId(getContentById.id);
-                  // console.log("✔ OK selected symbol id:", getContentById.id);
+                 // ✔ send full symbol object as pending (do not mark it as placed)
+                  setPendingSymbol(getContentById.unit);
+                  console.log('pendingsymbolfromok', getContentById);
+                  // Do not set `selectedSymbol` here — that's reserved for placed components
+                  //setContextSymbolData(getContentById);
+                  setSelectedSymbolId(getContentById.id);
+                  console.log("✔ OK selected symbol id:", getContentById.id);
 
-                  // // small delay to ensure pendingSymbol state is applied before switching tool
-                  // setTimeout(() => setTool("symbol"), 10);
+                  // small delay to ensure pendingSymbol state is applied before switching tool
+                  setTimeout(() => setTool("symbol"), 10);
 
                   setIsOpen(false);
                 }}
