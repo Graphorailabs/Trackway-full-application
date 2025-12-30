@@ -1,0 +1,43 @@
+name: Trackway Web CI/CD
+
+on:
+  push:
+    branches:
+      -main
+
+
+jobs:
+   deploy:
+     runs-on: ubuntu-latest
+    
+     steps:
+        - name: Checkout repository
+          uses: actions/checkout@v4
+
+        - name: Build Docker image
+          run: |
+            docker buildx build --platforms linux/amd64, linux/arm64 -t graphoraailabs/trackway-frontend:prod --push .
+
+        - name: Push Docker image to Docker DockerHub
+          uses: docker/login-action@v2
+          env:
+            DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+            DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+          run: |
+            echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
+            docker push graphoraailabs/trackway-frontend:prod
+
+        - name: Deploy to Server via SSH
+          env: 
+            SSH_USERNAME: ${{ secrets.SSH_USERNAME }}
+            SSH_HOST: ${{ secrets.SSH_HOST }}
+            SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          run: |
+            sudo apt-get update
+            sudo apt-get install -y sshpass
+
+            sshpass -p "$SSH_PRIVATE_KEY" ssh -o StrictHostKeyChecking=no "$SSH_USERNAME@$SSH_HOST" << 'ENDSSH'
+              cd /root/trackway-web || exit 1
+              sudo docker compose pull client-prod
+              sudo docker compose up -d --build client-prod
+            ENDSSH
