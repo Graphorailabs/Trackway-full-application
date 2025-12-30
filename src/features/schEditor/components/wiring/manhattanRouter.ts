@@ -11,5 +11,4 @@ export interface Pt {
 
 export type Point = Pt;
 
-// Keep this module intentionally small — advanced routing logic lives
-// inside routing workers and other router modules.
+
