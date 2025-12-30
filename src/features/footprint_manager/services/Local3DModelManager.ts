@@ -135,7 +135,7 @@ export class Local3DModelManager implements Local3DModelManagerContract {
         const text = await file.async("text");
         return JSON.parse(text) as Partial<Footprint3DModelMetadata>;
       } catch (err) {
-        console.warn("Failed to parse 3D metadata", err);
+        /* silent */
       }
     }
     return null;
@@ -176,7 +176,7 @@ export class Local3DModelManager implements Local3DModelManagerContract {
       const payload = records.map((record) => record.meta);
       localStorage.setItem(this.storageKey, JSON.stringify(payload));
     } catch (err) {
-      console.warn("Failed to sync 3D model cache", err);
+      /* silent */
     }
   }
 
@@ -244,7 +244,7 @@ export class Local3DModelManager implements Local3DModelManagerContract {
           await this.putCategoryToDb({ id: activeCategory, name: activeCategory, description: parsedMeta?.description ?? "" });
         }
       } catch (err) {
-        console.warn("Failed to store 3D model", path, err);
+        /* silent */
       }
     }
 
@@ -258,7 +258,7 @@ export class Local3DModelManager implements Local3DModelManagerContract {
     try {
       await this.deleteModelFromDb(id);
     } catch (err) {
-      console.warn("Failed to delete 3D model", err);
+      /* silent */
     }
 
     try {
@@ -269,7 +269,7 @@ export class Local3DModelManager implements Local3DModelManagerContract {
         localStorage.setItem(this.storageKey, JSON.stringify(filtered));
       }
     } catch (err) {
-      console.warn("Failed to update 3D cache", err);
+      /* silent */
     }
 
     try {
@@ -281,7 +281,7 @@ export class Local3DModelManager implements Local3DModelManagerContract {
         tx.objectStore(this.categoriesStore).delete(category);
       }
     } catch (err) {
-      console.warn("Failed to prune 3D model category", err);
+      /* silent */
     }
   }
 
@@ -294,7 +294,6 @@ export class Local3DModelManager implements Local3DModelManagerContract {
       const data = await file.arrayBuffer();
       return { meta, data };
     } catch (err) {
-      console.warn("Failed to read 3D blob", err);
       return { meta, data: undefined };
     }
   }
@@ -309,7 +308,6 @@ export class Local3DModelManager implements Local3DModelManagerContract {
       const data = await file.arrayBuffer();
       return { meta, data };
     } catch (err) {
-      console.warn("Failed to read 3D blob", err);
       return { meta, data: undefined };
     }
   }
