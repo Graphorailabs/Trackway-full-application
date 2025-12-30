@@ -15,6 +15,10 @@ export default defineConfig({
   preview: {
     host: true,
     port:4173,
+    allowedHosts: [
+      'ohmgpt.com',
+      'www.ohmgpt.com'
+    ]
   },
   // Improve chunking to avoid very large bundles
   build: {
