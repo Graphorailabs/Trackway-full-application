@@ -1,7 +1,7 @@
 
 import axios from "axios";
 
-const baseURL = "https://srv1213622.hstgr.cloud/api/v1";
+const baseURL = "https://api.ohmgpt.com/api/v1";
 
 export const api = axios.create({
   baseURL,
