@@ -84,7 +84,6 @@ export const LoadSymbol = () => {
           if (selectedSymbol) {
             console.log("Found symbol:", selectedSymbol.unit);
             setGetContentById(selectedSymbol);        // ⭐ STORE FULL SYMBOL OBJECT
-            setSelectedSymbol(selectedSymbol);        // ⭐ STORE FULL OBJECT
             setSymbolData(selectedSymbol); 
            setSelectedSymbolId(selectedSymbol.id);
           console.log("✔ selectedSymbolId set:", selectedSymbol.id);

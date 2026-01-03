@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
-import { Layer, Group, Circle } from 'react-konva';
+import { useEffect, useState, useRef } from 'react';
+import { Layer, Group, Circle, Rect } from 'react-konva';
 import { PIN_HIGHLIGHT_COLOR, PIN_HIGHLIGHT_STROKE, PIN_HIGHLIGHT_STROKE_WIDTH, PIN_HIGHLIGHT_RADIUS_OFFSET, PIN_HIT_RADIUS, PIN_HIGHLIGHT_OPACITY } from '../constant';
 import { usePlacedSymbol } from '../context/PlacedSymbolContext';
+import { useTool } from '../context/LeftToolbarContext';
 import { useSymbol } from '../context/SymbolContext';
 import { SymbolPreviewCanvas } from './SymbolPreviewCanvas';
 import { useCameraViewport } from './canvas/CameraViewPort';
@@ -10,6 +11,7 @@ import CanvasStage from './CanvaStage';
 export default function PlacedSymbolsRenderer() {
   const { placedSymbols, updatePlacedSymbol, livePinPositionsRef, removePlacedSymbol } = usePlacedSymbol();
   const { selectedSymbol, setSelectedSymbol } = useSymbol();
+  const { tool } = useTool();
   const [size, setSize] = useState({ width: window.innerWidth, height: window.innerHeight });
 
   useEffect(() => {
@@ -38,27 +40,131 @@ export default function PlacedSymbolsRenderer() {
     return () => window.removeEventListener('keydown', onKey);
   }, [selectedSymbol, removePlacedSymbol, setSelectedSymbol]);
 
-  const handleMouseDown = (e: any) => {
-    // Walk up Konva node tree to see if click landed on a placed symbol Group
-    let node: any = e.target as any;
-    let foundId: string | undefined;
-    while (node) {
-      try {
-        if (typeof node.id === 'function') {
-          const id = node.id();
-          if (id && placedSymbols.find((p: any) => p.id === id)) { foundId = id; break; }
-        } else if (node.attrs && node.attrs.id) {
-          const id = node.attrs.id;
-          if (id && placedSymbols.find((p: any) => p.id === id)) { foundId = id; break; }
+  const computePlacedBBox = (placed: any) => {
+    try {
+      const unit = placed.symbolData?.unit ?? placed.symbolData;
+      if (!unit || !Array.isArray(unit)) return null;
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      const add = (x: number, y: number) => {
+        const sx = x; const sy = y;
+        if (sx < minX) minX = sx; if (sy < minY) minY = sy; if (sx > maxX) maxX = sx; if (sy > maxY) maxY = sy;
+      };
+      for (const u of unit) {
+        if (Array.isArray(u.graphics)) {
+          for (const g of u.graphics) {
+            if (!g || !g.kind) continue;
+            if (g.kind === 'Rectangle') {
+              const { start, end } = g.data; add(start[0], start[1]); add(end[0], end[1]);
+            } else if (g.kind === 'Polyline') {
+              const raw = g.data?.pts?.xy || []; raw.forEach((pt: any) => add(pt[0], pt[1]));
+            } else if (g.kind === 'Circle' || g.kind === 'circle') {
+              const cx = Number(g.data?.cx ?? g.cx ?? g.x ?? 0); const cy = Number(g.data?.cy ?? g.cy ?? g.y ?? 0); const r = Number(g.data?.r ?? g.r ?? g.radius ?? 0);
+              add(cx - r, cy - r); add(cx + r, cy + r);
+            }
+          }
         }
-      } catch (err) {}
-      node = node.getParent ? node.getParent() : null;
-    }
+        if (Array.isArray(u.pin)) {
+          for (const p of u.pin) {
+            add(p.at[0], p.at[1]);
+          }
+        }
+      }
+      if (minX === Infinity) return null;
+      // account for placed.position offset
+      const pos = placed.position || { x: 0, y: 0 };
+      return { minX: minX + pos.x, minY: minY + pos.y, maxX: maxX + pos.x, maxY: maxY + pos.y };
+    } catch (err) { return null; }
+  };
 
-    if (!foundId) {
-      // Clicked outside any placed symbol -> deselect
+  const handleMouseDown = (e: any) => {
+    try {
+      // First try to find the clicked Group/node by walking the Konva node tree
+      let node: any = e.target as any;
+      let foundId: string | undefined;
+      while (node) {
+        try {
+          if (typeof node.id === 'function') {
+            const id = node.id();
+            if (id && placedSymbols.find((p: any) => p.id === id)) { foundId = id; break; }
+          } else if (node.attrs && node.attrs.id) {
+            const id = node.attrs.id;
+            if (id && placedSymbols.find((p: any) => p.id === id)) { foundId = id; break; }
+          }
+        } catch (err) {}
+        node = node.getParent ? node.getParent() : null;
+      }
+
+      if (foundId) {
+        // Click landed on a placed symbol Group -> select that symbol
+        try { const ps = placedSymbols.find((p: any) => p.id === foundId); if (ps) setSelectedSymbol(ps); } catch {}
+        return;
+      }
+
+      // Fallback: perform world-space bbox hit-test using the event's client coords
+      const evt = e?.evt ?? (e as any);
+      const cx = evt.clientX; const cy = evt.clientY;
+      if (typeof cx === 'number' && typeof cy === 'number') {
+        const world = screenToWorld({ x: cx, y: cy });
+        // find topmost placed symbol whose bbox contains the world point
+        for (let i = placedSymbols.length - 1; i >= 0; i--) {
+          const placed = placedSymbols[i];
+          const bb = computePlacedBBox(placed);
+          if (!bb) continue;
+          if (world.x >= bb.minX && world.x <= bb.maxX && world.y >= bb.minY && world.y <= bb.maxY) {
+            try { setSelectedSymbol(placed); } catch {}
+            return;
+          }
+        }
+      }
+
+      // If we reach here, nothing selected -> deselect
       try { setSelectedSymbol(null); } catch (err) {}
+    } catch (err) {
+      // ignore
     }
+  };
+
+  // Manual drag state for fallback dragging when Konva draggable doesn't fire
+  const manualDragRef = useRef<{ id: string | null; offsetX: number; offsetY: number } | null>(null);
+  const startManualDrag = (placed: any, clientX: number, clientY: number) => {
+    try {
+      const world = screenToWorld({ x: clientX, y: clientY });
+      const pos = placed.position || { x: 0, y: 0 };
+      const offsetX = world.x - pos.x;
+      const offsetY = world.y - pos.y;
+      manualDragRef.current = { id: placed.id, offsetX, offsetY };
+      
+      const onMove = (ev: PointerEvent) => {
+        try {
+          const w = screenToWorld({ x: ev.clientX, y: ev.clientY });
+          const st = manualDragRef.current;
+          if (!st || !st.id) return;
+          const nx = w.x - st.offsetX; const ny = w.y - st.offsetY;
+          try { updatePlacedSymbol(st.id, { position: { x: nx, y: ny } }); } catch (err) { /* ignore */ }
+          // update livePinPositionsRef for immediate snap/hover accuracy
+          try {
+            const ref = livePinPositionsRef as any;
+            if (ref && ref.current) {
+              const placedObj = placedSymbols.find((p: any) => p.id === st.id);
+              if (placedObj) {
+                ref.current[st.id] = ref.current[st.id] || {};
+                for (const p of (placedObj.pins || [])) {
+                  const ox = p.offsetX ?? ((p.x ?? 0) - (placedObj.position?.x ?? 0));
+                  const oy = p.offsetY ?? ((p.y ?? 0) - (placedObj.position?.y ?? 0));
+                  ref.current[st.id][p.id] = { x: nx + ox, y: ny + oy };
+                }
+              }
+            }
+          } catch (err) {}
+        } catch (err) {}
+      };
+      const onUp = (_ev: PointerEvent) => {
+        try { manualDragRef.current = null; } catch {}
+        try { window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerup', onUp); } catch {}
+      };
+      window.addEventListener('pointermove', onMove);
+      window.addEventListener('pointerup', onUp);
+    } catch (err) {}
   };
 
   // Hovered pin state for rendering highlight
@@ -172,6 +278,38 @@ export default function PlacedSymbolsRenderer() {
     };
   }, [screenToWorld, livePinPositionsRef]);
 
+  // Global pointerdown fallback: when Konva events don't reach group handlers
+  // (some environments may suppress Konva events), use a window-level listener
+  // to perform a world-space bbox hit-test and select the topmost symbol.
+  useEffect(() => {
+    const onPointerDown = (ev: PointerEvent) => {
+      try {
+        const cx = ev.clientX, cy = ev.clientY;
+        if (typeof cx !== 'number' || typeof cy !== 'number') return;
+        const world = screenToWorld({ x: cx, y: cy });
+        
+        for (let i = (placedSymbols || []).length - 1; i >= 0; i--) {
+          const placed = placedSymbols[i];
+          const bb = computePlacedBBox(placed);
+          if (!bb) continue;
+          if (world.x >= bb.minX && world.x <= bb.maxX && world.y >= bb.minY && world.y <= bb.maxY) {
+              try { setSelectedSymbol(placed); } catch (err) {}
+              // If the clicked symbol is the selected one and tool allows, start manual drag here
+              try {
+                if (tool !== 'wire') {
+                  startManualDrag(placed, cx, cy);
+                }
+              } catch (err) {}
+              return;
+            }
+        }
+        try { setSelectedSymbol(null); } catch (err) {}
+      } catch (err) { /* ignore */ }
+    };
+    window.addEventListener('pointerdown', onPointerDown, { passive: false });
+    return () => window.removeEventListener('pointerdown', onPointerDown);
+  }, [placedSymbols, screenToWorld, setSelectedSymbol]);
+
   return (
     <div style={{ position: 'absolute', inset: 0, pointerEvents: 'auto' }}>
       <CanvasStage width={size.width} height={size.height} zoom={zoom} viewportCenter={viewportCenter} camera={camera} onMouseDown={handleMouseDown}>
@@ -189,27 +327,92 @@ export default function PlacedSymbolsRenderer() {
                 listening={true}
                 // Allow dragging (start only when user interacts). We still mark
                 // the symbol as selected on interaction so other UI can react.
-                draggable={true}
+                draggable={isSelected && tool !== 'wire'}
                 onMouseDown={(e:any) => {
                   try { e.cancelBubble = true; } catch (err) {}
-                  try { setSelectedSymbol(placed); } catch (err) {}
-                  try { if (e.target && typeof e.target.startDrag === 'function') e.target.startDrag(); } catch (err) {}
+                  try {
+                    if (tool === 'wire') return;
+                    const evt = e?.evt ?? e;
+                    const clientX = evt?.clientX ?? (evt?.touches && evt.touches[0]?.clientX) ?? null;
+                    const clientY = evt?.clientY ?? (evt?.touches && evt.touches[0]?.clientY) ?? null;
+                    if (!isSelected) {
+                      setSelectedSymbol(placed);
+                          // start native Konva drag if possible, otherwise fall back to manual drag
+                          try {
+                            requestAnimationFrame(() => {
+                              try {
+                                const stage = (e && e.target && typeof e.target.getStage === 'function') ? e.target.getStage() : null;
+                                const node = stage ? stage.findOne('#' + placed.id) : null;
+                                if (node && typeof node.startDrag === 'function') {
+                                  // ensure draggable flag is enabled on the Konva node then start drag
+                                  try { node.draggable(true); } catch {}
+                                  try { node.startDrag(); return; } catch {}
+                                }
+                              } catch (err) {}
+                              if (typeof clientX === 'number' && typeof clientY === 'number') startManualDrag(placed, clientX, clientY);
+                            });
+                          } catch {}
+                      return;
+                    }
+                        // already selected -> try native Konva drag, fallback to manual
+                        try {
+                          const stage = (e && e.target && typeof e.target.getStage === 'function') ? e.target.getStage() : null;
+                          const node = stage ? stage.findOne('#' + placed.id) : null;
+                          if (node && typeof node.startDrag === 'function') {
+                            try { node.startDrag(); } catch (err) { if (typeof clientX === 'number' && typeof clientY === 'number') startManualDrag(placed, clientX, clientY); }
+                          } else {
+                            if (typeof clientX === 'number' && typeof clientY === 'number') startManualDrag(placed, clientX, clientY);
+                          }
+                        } catch (err) { if (typeof clientX === 'number' && typeof clientY === 'number') startManualDrag(placed, clientX, clientY); }
+                  } catch (err) {}
                 }}
                 onTouchStart={(e:any) => {
                   try { e.cancelBubble = true; } catch (err) {}
-                  try { setSelectedSymbol(placed); } catch (err) {}
-                  try { if (e.target && typeof e.target.startDrag === 'function') e.target.startDrag(); } catch (err) {}
+                  try {
+                    if (tool === 'wire') return;
+                    const touch = (e?.evt?.touches && e.evt.touches[0]) || (e?.touches && e.touches[0]);
+                    const clientX = touch?.clientX ?? null;
+                    const clientY = touch?.clientY ?? null;
+                    if (!isSelected) {
+                      setSelectedSymbol(placed);
+                        try {
+                          requestAnimationFrame(() => {
+                            try {
+                              const stage = (e && e.target && typeof e.target.getStage === 'function') ? e.target.getStage() : null;
+                              const node = stage ? stage.findOne('#' + placed.id) : null;
+                              if (node && typeof node.startDrag === 'function') {
+                                try { node.draggable(true); } catch {}
+                                try { node.startDrag(); return; } catch {}
+                              }
+                            } catch (err) {}
+                            if (typeof clientX === 'number' && typeof clientY === 'number') startManualDrag(placed, clientX, clientY);
+                          });
+                        } catch {}
+                      return;
+                    }
+                      try {
+                        const stage = (e && e.target && typeof e.target.getStage === 'function') ? e.target.getStage() : null;
+                        const node = stage ? stage.findOne('#' + placed.id) : null;
+                        if (node && typeof node.startDrag === 'function') {
+                          try { node.startDrag(); } catch (err) { if (typeof clientX === 'number' && typeof clientY === 'number') startManualDrag(placed, clientX, clientY); }
+                        } else {
+                          if (typeof clientX === 'number' && typeof clientY === 'number') startManualDrag(placed, clientX, clientY);
+                        }
+                      } catch (err) { if (typeof clientX === 'number' && typeof clientY === 'number') startManualDrag(placed, clientX, clientY); }
+                  } catch (err) {}
                 }}
                 // Keep double-click handlers for explicit selection as well
                 onDblClick={(e:any) => { try{ e.cancelBubble = true }catch{}; setSelectedSymbol(placed); }}
                 onDblTap={(e:any) => { try{ e.cancelBubble = true }catch{}; setSelectedSymbol(placed); }}
                 onDragStart={(e:any) => {
                   try { e.cancelBubble = true; } catch {}
+                  try { } catch {}
                 }}
                 onDragMove={(e:any) => {
                   // update live pin positions so routing preview can snap while dragging
                   try {
                     const nx = e.target.x(); const ny = e.target.y();
+                    try { } catch {}
                     const pins = Array.isArray(placed.pins) ? placed.pins : [];
                     const ref = livePinPositionsRef as any;
                     if (ref && ref.current) {
@@ -224,6 +427,7 @@ export default function PlacedSymbolsRenderer() {
                 }}
                 onDragEnd={(e:any) => {
                   try { e.cancelBubble = true; } catch {}
+                  try { } catch {}
                   try {
                     const nx = e.target.x(); const ny = e.target.y();
                     // update placed symbol master state
@@ -257,6 +461,26 @@ export default function PlacedSymbolsRenderer() {
                 {/* Render symbol using existing Konva-based preview canvas */}
                 {/* @ts-ignore - SymbolPreviewCanvas uses Konva primitives */}
                 <SymbolPreviewCanvas symbolData={placed.symbolData?.unit ?? placed.symbolData} selected={isSelected} ownerId={placed.id} />
+
+                {/* Invisible bbox overlay to reliably receive clicks/selects when child shapes don't bubble events */}
+                {(() => {
+                  const bb = computePlacedBBox(placed);
+                  if (!bb) return null;
+                  const localX = bb.minX - (placed.position?.x ?? 0);
+                  const localY = bb.minY - (placed.position?.y ?? 0);
+                  const w = bb.maxX - bb.minX; const h = bb.maxY - bb.minY;
+                  return (
+                    <Rect
+                      x={localX}
+                      y={localY}
+                      width={w}
+                      height={h}
+                      fill={'transparent'}
+                      listening={true}
+                      onMouseDown={(e:any) => { try { e.cancelBubble = true; } catch {} try { setSelectedSymbol(placed); } catch {} }}
+                    />
+                  );
+                })()}
 
                 {/* Render invisible hit circles for each placed pin so wires can start/finish */}
                 {(Array.isArray(placed.pins) ? placed.pins : []).map((p: any) => {
