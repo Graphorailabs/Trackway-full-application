@@ -50,6 +50,44 @@ export function RoutingCanvas({ tracks }: { tracks?: WireSegment[] }) {
     try { return usePlacedSymbol(); } catch (e) { return { placedSymbols: [] as any[], livePinPositionsRef: { current: {} } as any }; }
   })();
 
+  // Find nearest placed pin to a world point. Returns {x,y,id} or null.
+  const findNearestPlacedPin = (pt: { x: number; y: number } | null, thresh = 2) => {
+    if (!pt) return null;
+    try {
+      // check live positions first
+      const lp = (livePinPositionsRef && (livePinPositionsRef as any).current) || {};
+      let best: { x: number; y: number; id: string } | null = null;
+      let bestDist = Infinity;
+      for (const symId of Object.keys(lp || {})) {
+        const pinsMap = lp[symId] || {};
+        for (const pinId of Object.keys(pinsMap || {})) {
+          const p = pinsMap[pinId];
+          if (!p) continue;
+          const dx = p.x - pt.x; const dy = p.y - pt.y;
+          const d = Math.hypot(dx, dy);
+          if (d < bestDist) { bestDist = d; best = { x: p.x, y: p.y, id: pinId }; }
+        }
+      }
+      if (best && bestDist <= thresh) return best;
+
+      // fallback: search placedSymbols static list
+      if (Array.isArray(placedSymbols)) {
+        for (const sym of (placedSymbols || [])) {
+          if (!Array.isArray(sym.pins)) continue;
+          for (const pin of sym.pins) {
+            const px = pin?.x; const py = pin?.y;
+            if (typeof px !== 'number' || typeof py !== 'number') continue;
+            const dx = px - pt.x; const dy = py - pt.y;
+            const d = Math.hypot(dx, dy);
+            if (d < bestDist) { bestDist = d; best = { x: px, y: py, id: pin.id }; }
+          }
+        }
+      }
+      if (best && bestDist <= thresh) return best;
+    } catch (e) {}
+    return null;
+  };
+
   const isPointOnPlacedPin = (pt: { x: number; y: number } | null) => {
     if (!pt) return false;
     const THRESH = 6; // world units tolerance (increased to match canvas/grid scale)
@@ -212,9 +250,12 @@ export function RoutingCanvas({ tracks }: { tracks?: WireSegment[] }) {
       if (!worldPoint) return;
       try {
         if (tool === 'wire' && !routingIsDrawing) {
-          try { startDrawing(worldPoint); } catch {}
-          try { setPreviewTracks([worldPoint]); } catch {}
-          try { postWorkerMessage({ type: 'route', id: Date.now(), start: worldPoint, goal: worldPoint, params: { gridStep:1, trackWidth:0.6, clearance:0.2, maxNodes:2000 } }); } catch {}
+          // snap to nearest pin if click falls within threshold
+          const snap = findNearestPlacedPin(worldPoint, 2);
+          const startPt = snap ? { x: snap.x, y: snap.y } : worldPoint;
+          try { startDrawing(startPt); } catch {}
+          try { setPreviewTracks([startPt]); } catch {}
+          try { postWorkerMessage({ type: 'route', id: Date.now(), start: startPt, goal: startPt, params: { gridStep:1, trackWidth:0.6, clearance:0.2, maxNodes:2000 } }); } catch {}
         }
       } catch (err) {}
     };
@@ -259,24 +300,25 @@ export function RoutingCanvas({ tracks }: { tracks?: WireSegment[] }) {
           listening={false}
         />
         {isSelected && vertices.map((v, i) => (
-          <Circle
-            key={`handle-${groupId}-${i}`}
-            x={v.x}
-            y={v.y}
-            radius={4}
-            fill={stroke}
-            stroke="#ffffff"
-            strokeWidth={1}
-            listening={true}
-            onClick={(e:any)=>{ try{ e.cancelBubble=true }catch{}; try{ setSelectedWireId(groupId); }catch{} }}
-          />
-        ))}
+              <Circle
+                key={`handle-${groupId}-${i}`}
+                x={v.x}
+                y={v.y}
+                radius={1.0}
+                fill={stroke}
+                stroke="#ffffff"
+                strokeWidth={0.8}
+                listening={true}
+                onClick={(e:any)=>{ try{ e.cancelBubble=true }catch{}; try{ setSelectedWireId(groupId); }catch{} }}
+              />
+            ))}
         {/* Show endpoint markers only when the endpoint is NOT connected to
             a placed pin or any other drawn wire. */}
         {vertices.length >= 2 && (() => {
           const start = vertices[0];
           const end = vertices[vertices.length - 1];
-          const size = 10;
+          // endpoint marker size in mm (world units)
+          const size = 2; 
           // Keep pin detection tolerant (pins may be placed slightly off-grid),
           // but require near-exact equality for wire-wire connections to avoid
           // false positives when the user starts drawing a new wire.
@@ -329,7 +371,8 @@ export function RoutingCanvas({ tracks }: { tracks?: WireSegment[] }) {
                 const key = `${start.x.toFixed(6)}:${start.y.toFixed(6)}`;
                 const coll = endpointCollisionMap[key] || [];
                 const idx = coll.indexOf(`${groupId}::start`);
-                const offsetAmt = coll.length > 1 && idx >= 0 ? (idx - (coll.length - 1) / 2) * 6 : 0;
+                const offsetStep = size * 1.2;
+                const offsetAmt = coll.length > 1 && idx >= 0 ? (idx - (coll.length - 1) / 2) * offsetStep : 0;
                 return (
                   <Rect
                     x={start.x - size / 2 + offsetAmt}
@@ -338,8 +381,8 @@ export function RoutingCanvas({ tracks }: { tracks?: WireSegment[] }) {
                     height={size}
                     fill={'transparent'}
                     stroke={'#22c55e'}
-                    strokeWidth={2}
-                    cornerRadius={2}
+                    strokeWidth={0.5}
+                    cornerRadius={0.3}
                     listening={true}
                     onClick={endpointClick(start, 'start')}
                   />
@@ -349,7 +392,8 @@ export function RoutingCanvas({ tracks }: { tracks?: WireSegment[] }) {
                 const key = `${end.x.toFixed(6)}:${end.y.toFixed(6)}`;
                 const coll = endpointCollisionMap[key] || [];
                 const idx = coll.indexOf(`${groupId}::end`);
-                const offsetAmt = coll.length > 1 && idx >= 0 ? (idx - (coll.length - 1) / 2) * 6 : 0;
+                const offsetStep = size * 1.2;
+                const offsetAmt = coll.length > 1 && idx >= 0 ? (idx - (coll.length - 1) / 2) * offsetStep : 0;
                 return (
                   <Rect
                     x={end.x - size / 2 + offsetAmt}
@@ -358,8 +402,8 @@ export function RoutingCanvas({ tracks }: { tracks?: WireSegment[] }) {
                     height={size}
                     fill={'transparent'}
                     stroke={'#22c55e'}
-                    strokeWidth={2}
-                    cornerRadius={2}
+                    strokeWidth={0.5}
+                    cornerRadius={0.3}
                     listening={true}
                     onClick={endpointClick(end, 'end')}
                   />
@@ -417,7 +461,9 @@ export function RoutingCanvas({ tracks }: { tracks?: WireSegment[] }) {
         // If routing hasn't been enabled via context, start routing when the
         // user has the wire tool selected and clicks the canvas (click-to-start).
         if (tool === 'wire') {
-          startRef.current = w;
+          // snap initial click to nearest placed pin when within threshold
+          const snap = findNearestPlacedPin(w, 2);
+          startRef.current = snap ? { x: snap.x, y: snap.y } : w;
           startScreenRef.current = { x: ev.clientX, y: ev.clientY };
           preferredAxisRef.current = null;
           try { startDrawing(startRef.current); } catch (e) {}
@@ -432,8 +478,9 @@ export function RoutingCanvas({ tracks }: { tracks?: WireSegment[] }) {
       }
 
       if (!startRef.current) {
-        // first click while routing: set start point
-        startRef.current = w;
+        // first click while routing: set start point (snap to pin if close)
+        const snap = findNearestPlacedPin(w, 2);
+        startRef.current = snap ? { x: snap.x, y: snap.y } : w;
         startScreenRef.current = { x: ev.clientX, y: ev.clientY };
         preferredAxisRef.current = null;
         // prime preview using start point
@@ -457,7 +504,8 @@ export function RoutingCanvas({ tracks }: { tracks?: WireSegment[] }) {
         setLocalSegments((prev) => [...prev, ...parts]);
         // continue drawing from the last point of the preview
         const lastPoint = previewTracks[previewTracks.length - 1];
-        startRef.current = lastPoint;
+        const snapLast = findNearestPlacedPin(lastPoint, 2);
+        startRef.current = snapLast ? { x: snapLast.x, y: snapLast.y } : lastPoint;
         // reset screen/axis state so next segment re-locks from this click
         startScreenRef.current = { x: ev.clientX, y: ev.clientY };
         preferredAxisRef.current = null;
@@ -497,9 +545,11 @@ export function RoutingCanvas({ tracks }: { tracks?: WireSegment[] }) {
             let corner = { x: s.x, y: s.y };
             if (effectiveAxis === 'h') corner = { x: w.x, y: s.y };
             else corner = { x: s.x, y: w.y };
-            setLocalSegments((prev) => [...prev, { start: s, end: corner, width: 1.0 }, { start: corner, end: w, width: 1.0 }]);
-            // continue drawing from the clicked point
-            startRef.current = w;
+            const snapW = findNearestPlacedPin(w, 2);
+            const wFinal = snapW ? { x: snapW.x, y: snapW.y } : w;
+            setLocalSegments((prev) => [...prev, { start: s, end: corner, width: 1.0 }, { start: corner, end: wFinal, width: 1.0 }]);
+            // continue drawing from the clicked (possibly snapped) point
+            startRef.current = wFinal;
             startScreenRef.current = { x: ev.clientX, y: ev.clientY };
             preferredAxisRef.current = null;
             try { setPreviewTracks([startRef.current]); } catch (e) {}
@@ -510,7 +560,26 @@ export function RoutingCanvas({ tracks }: { tracks?: WireSegment[] }) {
     };
 
     const onDblClick = (ev: MouseEvent) => {
-      if (!routingIsDrawing) return;
+      // If routing isn't active, allow double-click to start routing (snap like single-click)
+      if (!routingIsDrawing) {
+        if (tool === 'wire') {
+          const w = toWorld(ev.clientX, ev.clientY);
+          const snap = findNearestPlacedPin(w, 2);
+          const start = snap ? { x: snap.x, y: snap.y } : w;
+          lastMousePosRef.current = start;
+          startRef.current = start;
+          startScreenRef.current = { x: ev.clientX, y: ev.clientY };
+          preferredAxisRef.current = null;
+          try { startDrawing(startRef.current); } catch (e) {}
+          try { setPreviewTracks([startRef.current]); } catch (e) {}
+          try { postWorkerMessage({ type: 'route', id: Date.now(), start: startRef.current, goal: startRef.current, preferredAxis: preferredAxisRef.current, params: {
+            gridStep: 1, trackWidth: 0.6, clearance: 0.2, maxNodes: 2000, maxShoveDepth: 2, shoveStep: 1, orthoCost: 1, diagCost: 1.4, turnPenalty: 0.2, shovePenalty: 1000
+          } }); } catch (e) {}
+          return;
+        }
+        return;
+      }
+
       const w = toWorld(ev.clientX, ev.clientY);
       lastMousePosRef.current = w;
       if (Array.isArray(previewTracks) && previewTracks.length > 1) {
@@ -519,7 +588,11 @@ export function RoutingCanvas({ tracks }: { tracks?: WireSegment[] }) {
         setLocalSegments((prev) => [...prev, ...parts]);
       } else {
         const s = startRef.current;
-        if (s) setLocalSegments((prev) => [...prev, { start: { x: s.x, y: s.y }, end: { x: w.x, y: w.y }, width: 1.0 }]);
+        if (s) {
+          const snapW = findNearestPlacedPin(w, 2);
+          const wFinal = snapW ? { x: snapW.x, y: snapW.y } : w;
+          setLocalSegments((prev) => [...prev, { start: { x: s.x, y: s.y }, end: { x: wFinal.x, y: wFinal.y }, width: 1.0 }]);
+        }
       }
       startRef.current = null;
       preferredAxisRef.current = null;
@@ -533,7 +606,10 @@ export function RoutingCanvas({ tracks }: { tracks?: WireSegment[] }) {
       lastMousePosRef.current = w;
       // If user started routing via toolbar (no click), initialize startRef
       if (!startRef.current) {
-        startRef.current = w;
+        // If the user began routing from toolbar (no click), snap the
+        // initial start point to a nearby pin when appropriate.
+        const snap = findNearestPlacedPin(w, 2);
+        startRef.current = snap ? { x: snap.x, y: snap.y } : w;
         startScreenRef.current = { x: ev.clientX, y: ev.clientY };
         preferredAxisRef.current = null;
       }
@@ -578,7 +654,9 @@ export function RoutingCanvas({ tracks }: { tracks?: WireSegment[] }) {
             setLocalSegments((prev) => [...prev, ...parts]);
           } else if (startRef.current && lastMousePosRef.current) {
             const s = startRef.current; const w = lastMousePosRef.current;
-            setLocalSegments((prev) => [...prev, { start: { x: s.x, y: s.y }, end: { x: w.x, y: w.y }, width: 1.0 }]);
+            const snapW = findNearestPlacedPin(w, 2);
+            const wFinal = snapW ? { x: snapW.x, y: snapW.y } : w;
+            setLocalSegments((prev) => [...prev, { start: { x: s.x, y: s.y }, end: { x: wFinal.x, y: wFinal.y }, width: 1.0 }]);
           }
         }
         startRef.current = null;
@@ -787,11 +865,11 @@ export function RoutingCanvas({ tracks }: { tracks?: WireSegment[] }) {
             for (let i = 0; i < localSegments.length; i++) pts.push({ x: localSegments[i].end.x, y: localSegments[i].end.y });
             const start = pts[0];
             const end = pts[pts.length - 1];
-            const size = 10;
+            const size = 2;
             return (
               <>
-                <Rect x={start.x - size/2} y={start.y - size/2} width={size} height={size} fill={'transparent'} stroke={'#22c55e'} strokeWidth={1} cornerRadius={0.5} listening={true} onClick={(e:any)=>{try{e.cancelBubble=true}catch{}; try{ window.dispatchEvent(new CustomEvent('connect-wire-to-pin',{detail:{x:start.x,y:start.y,wireId:'local',end:'start'}})) }catch{}}} />
-                <Rect x={end.x - size/2} y={end.y - size/2} width={size} height={size} fill={'transparent'} stroke={'#22c55e'} strokeWidth={1} cornerRadius={0.5} listening={true} onClick={(e:any)=>{try{e.cancelBubble=true}catch{}; try{ window.dispatchEvent(new CustomEvent('connect-wire-to-pin',{detail:{x:end.x,y:end.y,wireId:'local',end:'end'}})) }catch{}}} />
+                <Rect x={start.x - size/2} y={start.y - size/2} width={size} height={size} fill={'transparent'} stroke={'#22c55e'} strokeWidth={0.5} cornerRadius={0.3} listening={true} onClick={(e:any)=>{try{e.cancelBubble=true}catch{}; try{ window.dispatchEvent(new CustomEvent('connect-wire-to-pin',{detail:{x:start.x,y:start.y,wireId:'local',end:'start'}})) }catch{}}} />
+                <Rect x={end.x - size/2} y={end.y - size/2} width={size} height={size} fill={'transparent'} stroke={'#22c55e'} strokeWidth={0.5} cornerRadius={0.3} listening={true} onClick={(e:any)=>{try{e.cancelBubble=true}catch{}; try{ window.dispatchEvent(new CustomEvent('connect-wire-to-pin',{detail:{x:end.x,y:end.y,wireId:'local',end:'end'}})) }catch{}}} />
               </>
             );
           })()}
@@ -819,16 +897,16 @@ export function RoutingCanvas({ tracks }: { tracks?: WireSegment[] }) {
           {/* {Array.isArray(previewTracks) && previewTracks.length >= 2 && (() => {
             const start = previewTracks[0];
             const end = previewTracks[previewTracks.length - 1];
-            const size = 8;
+            const size = 2;
             const startOnPin = isPointOnPlacedPin(start);
             const endOnPin = isPointOnPlacedPin(end);
             return (
               <>
                 {startOnPin && (
-                  <Rect x={start.x - size/2} y={start.y - size/2} width={size} height={size} fill={'transparent'} stroke={'#22c55e'} strokeWidth={2} cornerRadius={2} listening={true} onClick={(e:any)=>{try{e.cancelBubble=true}catch{}; try{ window.dispatchEvent(new CustomEvent('connect-wire-to-pin',{detail:{x:start.x,y:start.y,wireId:'preview',end:'start'}})) }catch{}}} />
+                  <Rect x={start.x - size/2} y={start.y - size/2} width={size} height={size} fill={'transparent'} stroke={'#22c55e'} strokeWidth={0.5} cornerRadius={0.3} listening={true} onClick={(e:any)=>{try{e.cancelBubble=true}catch{}; try{ window.dispatchEvent(new CustomEvent('connect-wire-to-pin',{detail:{x:start.x,y:start.y,wireId:'preview',end:'start'}})) }catch{}}} />
                 )}
                 {!endOnPin && (
-                  <Rect x={end.x - size/2} y={end.y - size/2} width={size} height={size} fill={'transparent'} stroke={'#22c55e'} strokeWidth={2} cornerRadius={2} listening={true} onClick={(e:any)=>{try{e.cancelBubble=true}catch{}; try{ window.dispatchEvent(new CustomEvent('connect-wire-to-pin',{detail:{x:end.x,y:end.y,wireId:'preview',end:'end'}})) }catch{}}} />
+                  <Rect x={end.x - size/2} y={end.y - size/2} width={size} height={size} fill={'transparent'} stroke={'#22c55e'} strokeWidth={0.5} cornerRadius={0.3} listening={true} onClick={(e:any)=>{try{e.cancelBubble=true}catch{}; try{ window.dispatchEvent(new CustomEvent('connect-wire-to-pin',{detail:{x:end.x,y:end.y,wireId:'preview',end:'end'}})) }catch{}}} />
                 )}
               </>
             );

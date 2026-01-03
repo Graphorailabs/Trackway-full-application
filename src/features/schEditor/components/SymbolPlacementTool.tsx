@@ -11,7 +11,7 @@ import CanvasStage from './CanvaStage';
 import { useCameraViewport } from './canvas/CameraViewPort';
 import { useRouting } from '../context/WireContext';
 
-const SCALE = 6;
+const SCALE = 1;
 
 export default function SymbolPlacementTool() {
   const { tool } = useTool();
@@ -178,7 +178,7 @@ export default function SymbolPlacementTool() {
           const last = r.previewTracks[r.previewTracks.length - 1];
           if (last) {
             // find nearest pin within threshold
-            const THRESH = 8; // world units / same units used for hit circles
+            const THRESH = 1.5; // world units / same units used for hit circles
             let nearest: any = null;
             let bestDist = Infinity;
             for (const p of pins) {

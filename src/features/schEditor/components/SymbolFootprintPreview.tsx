@@ -141,8 +141,8 @@ export const FootprintPreview: React.FC<Props> = ({ content }) => {
     return { minX, minY, maxX, maxY };
   })();
 
-  // compute scale to fit
-  const SCALE_FACTOR = 6; // rough pixel per mm
+  // compute scale to fit (use 1:1 mm world units)
+  const SCALE_FACTOR = 1; // world units are millimetres
 
   let draw = null as any;
 

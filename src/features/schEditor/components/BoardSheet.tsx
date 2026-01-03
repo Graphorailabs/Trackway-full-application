@@ -1,14 +1,29 @@
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
+import type { TitleBlock } from "trackway-parser-wasm";
+import { PAPER_PRESETS_MM } from "@/features/pcb_editor/constants";
 
-export default function BoardSheet() {
-  const A4_WIDTH = 900;
-  const A4_HEIGHT = 650;
+export default function BoardSheet({ titleBlock }: { titleBlock?: TitleBlock | null }) {
+  // Keep world units canonical: 1 world unit == 1 millimeter.
+  const MM_TO_PX = 1;
 
-  // When rendered inside `CanvasSurface`, the parent applies the world
-  // transform. Rendering a plain DOM/SVG block here in world coordinates
-  // avoids requiring a Konva `Stage`.
-  const left = -A4_WIDTH / 2;
-  const top = -A4_HEIGHT / 2;
+  const DEFAULT_PAGE = { size: "A4", portrait: false } as const;
+
+  const { widthPx, heightPx, widthMm, heightMm } = useMemo(() => {
+    const page = DEFAULT_PAGE;
+    let width = 297;
+    let height = 210;
+    if (typeof page.size === "string") {
+      const preset = PAPER_PRESETS_MM[page.size.toLowerCase()];
+      if (preset) {
+        ({ width, height } = page.portrait ? { width: preset.height, height: preset.width } : preset);
+      }
+    }
+    return { widthMm: width, heightMm: height, widthPx: width * MM_TO_PX, heightPx: height * MM_TO_PX };
+  }, []);
+
+  // Center the sheet in world coordinates
+  const left = -widthPx / 2;
+  const top = -heightPx / 2;
 
   useEffect(() => {
     const preventContextMenu = (e: any) => e.preventDefault();
@@ -17,7 +32,35 @@ export default function BoardSheet() {
   }, []);
 
   const borderColor = "#d70000ff";
-  const fontSize = 12;
+
+  const minDim = Math.min(widthPx, heightPx);
+  const padding = Math.max(6, Math.round(minDim * 0.03));
+  const innerPadding = Math.round(padding * 1.25);
+  const fontSize = Math.max(3, Math.round(minDim * 0.03));
+
+  const blockPadding = Math.max(4, Math.round(minDim * 0.01));
+  const entryHeight = Math.max(Math.round(fontSize * 1.4), fontSize + 6);
+  // Derive title-block entries from the supplied schematic `title_block`.
+  const tb = titleBlock ?? {};
+  const titleText = tb.title ?? "";
+  const company = tb.company ?? "";
+  const rev = tb.rev ?? "";
+  const date = tb.date ?? "";
+  const comments = Array.isArray(tb.comment)
+    ? tb.comment.map((c: any) => (typeof c === "string" ? c : Array.isArray(c) ? c[1] : String(c))).filter(Boolean)
+    : [];
+
+  const blockEntries = [
+    ["TITLE", titleText],
+    ["COMPANY", company],
+    ["DATE", date],
+    ["REV", rev],
+    ["COMMENT", comments.join(" — ")],
+  ] as const;
+  const titleBlockWidth = Math.min(widthPx * 0.32, Math.max(120, widthPx * 0.22));
+  const titleBlockHeight = blockPadding * 2 + entryHeight * blockEntries.length;
+  const titleBlockX = padding + 10;
+  const titleBlockY = heightPx - padding - titleBlockHeight - 10;
 
   return (
     <div
@@ -25,56 +68,65 @@ export default function BoardSheet() {
         position: "absolute",
         left: `${left}px`,
         top: `${top}px`,
-        width: `${A4_WIDTH}px`,
-        height: `${A4_HEIGHT}px`,
+        width: `${widthPx}px`,
+        height: `${heightPx}px`,
         pointerEvents: "none",
       }}
     >
-      <svg width={A4_WIDTH} height={A4_HEIGHT}>
-        <rect x={0} y={0} width={A4_WIDTH} height={A4_HEIGHT} fill="none" stroke={borderColor} strokeWidth={2} />
-        <rect x={10} y={10} width={A4_WIDTH - 20} height={A4_HEIGHT - 20} fill="none" stroke={borderColor} strokeWidth={1.2} />
+      <svg width={widthPx} height={heightPx} viewBox={`0 0 ${widthPx} ${heightPx}`}>
+        <rect x={0} y={0} width={widthPx} height={heightPx} fill="none" stroke={borderColor} strokeWidth={2} />
+        <rect x={padding} y={padding} width={widthPx - padding * 2} height={heightPx - padding * 2} fill="none" stroke={borderColor} strokeWidth={1.2} />
 
-        <g transform={`translate(70, ${A4_HEIGHT - 160})`}>
-          <rect x={0} y={0} width={A4_WIDTH - 80} height={150} fill="none" stroke={borderColor} strokeWidth={1.2} />
-          <line x1={0} y1={35} x2={A4_WIDTH - 80} y2={35} stroke={borderColor} />
-          <line x1={0} y1={70} x2={A4_WIDTH - 80} y2={70} stroke={borderColor} />
-          <line x1={0} y1={105} x2={A4_WIDTH - 80} y2={105} stroke={borderColor} />
-          <line x1={0} y1={130} x2={A4_WIDTH - 80} y2={130} stroke={borderColor} />
-
-          <line x1={120} y1={0} x2={120} y2={130} stroke={borderColor} />
-          <line x1={350} y1={0} x2={350} y2={105} stroke={borderColor} />
-          <line x1={480} y1={105} x2={480} y2={150} stroke={borderColor} />
-          <line x1={600} y1={105} x2={600} y2={150} stroke={borderColor} />
-
-          <line x1={A4_WIDTH - 240} y1={0} x2={A4_WIDTH - 240} y2={70} stroke={borderColor} />
-          <line x1={A4_WIDTH - 80} y1={0} x2={A4_WIDTH - 80} y2={105} stroke={borderColor} />
-
-          <text x={10} y={10} fontSize={fontSize} fill={borderColor}>Schematic</text>
-          <text x={10} y={45} fontSize={fontSize} fill={borderColor}>Board</text>
-          <text x={10} y={80} fontSize={fontSize} fill={borderColor}>Drawn</text>
-          <text x={10} y={115} fontSize={fontSize} fill={borderColor}>Reviewed</text>
-
-          <text x={160} y={10} fontSize={16} fontWeight="bold" fill={borderColor}>Schematic1</text>
-          <text x={160} y={45} fontSize={fontSize} fill={borderColor}>Board1</text>
-
-          <text x={350} y={80} fontSize={16} fontWeight="bold" fill={borderColor}>title name</text>
-
-          <text x={A4_WIDTH - 230} y={10} fontSize={fontSize} fill={borderColor}>Create at:</text>
-          <text x={A4_WIDTH - 170} y={10} fontSize={fontSize} fill={borderColor}>2025-10-28</text>
-
-          <text x={A4_WIDTH - 230} y={45} fontSize={fontSize} fill={borderColor}>Update at:</text>
-          <text x={A4_WIDTH - 170} y={45} fontSize={fontSize} fill={borderColor}>2025-10-28</text>
-
-          <text x={A4_WIDTH - 190} y={80} fontSize={fontSize} fill={borderColor}>Page</text>
-          <text x={A4_WIDTH - 110} y={80} fontSize={fontSize} fill={borderColor}>P1</text>
-
-          <text x={360} y={112} fontSize={fontSize} fill={borderColor}>Version</text>
-          <text x={500} y={112} fontSize={fontSize} fill={borderColor}>Size</text>
-          <text x={650} y={112} fontSize={fontSize} fill={borderColor}>Page 1   Total 1</text>
-
-          <text x={375} y={138} fontSize={fontSize} fill={borderColor}>V1.0</text>
-          <text x={505} y={138} fontSize={fontSize} fill={borderColor}>A4</text>
-          <text x={650} y={138} fontSize={fontSize} fill={borderColor}>trackway.com</text>
+        <g transform={`translate(${titleBlockX}, ${titleBlockY})`}>
+          <rect x={0} y={0} width={titleBlockWidth} height={titleBlockHeight} fill="none" stroke={borderColor} strokeWidth={1.2} />
+          {blockEntries.map((entry, index) => {
+            const rowY = blockPadding + index * entryHeight;
+            // horizontal separators (skip top line)
+            if (index > 0) {
+              /* eslint-disable react/no-array-index-key */
+            }
+            return (
+              <g key={`${entry[0]}-${index}`}>
+                {index > 0 && (
+                  <line
+                    x1={0}
+                    y1={rowY}
+                    x2={titleBlockWidth}
+                    y2={rowY}
+                    stroke={borderColor}
+                    strokeWidth={0.9}
+                  />
+                )}
+                {index === 0 ? (
+                  <text
+                    x={titleBlockWidth / 2}
+                    y={rowY + entryHeight * 0.65}
+                    fontSize={Math.max(fontSize + 2, 10)}
+                    fontWeight="700"
+                    fill={borderColor}
+                    textAnchor="middle"
+                  >
+                    {entry[1]}
+                  </text>
+                ) : (
+                  <>
+                    <text x={blockPadding} y={rowY + entryHeight * 0.65} fontSize={fontSize} fill={borderColor}>
+                      {entry[0].charAt(0) + entry[0].slice(1).toLowerCase()}
+                    </text>
+                    <text
+                      x={titleBlockWidth - blockPadding}
+                      y={rowY + entryHeight * 0.65}
+                      fontSize={fontSize}
+                      fill={borderColor}
+                      textAnchor="end"
+                    >
+                      {entry[1]}
+                    </text>
+                  </>
+                )}
+              </g>
+            );
+          })}
         </g>
       </svg>
     </div>

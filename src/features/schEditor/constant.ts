@@ -248,3 +248,13 @@ export const ENABLE_PAD_NUMBER_DEBUG = false;
 // Debug toggle: when true, show a `Log PCB` button in the top toolbar which
 // will `console.log` the current PCB state for debugging purposes.
 export const ENABLE_PCB_DEBUG_LOG_BUTTON = true;
+
+// Schematic editor: pin highlight config
+export const PIN_HIGHLIGHT_COLOR = '#f59e0b'; // amber highlight for hovered pins
+export const PIN_HIGHLIGHT_STROKE = '#cb0a0aff';
+export const PIN_HIGHLIGHT_STROKE_WIDTH = 0.3; // mm
+export const PIN_HIGHLIGHT_RADIUS_OFFSET = 0.1; // mm added around the pin circle
+// Radius used for pin hit-circles (world units, mm). Keep in sync with renderer.
+export const PIN_HIT_RADIUS = 1.8;
+// Visual opacity for pin highlight fill (0..1)
+export const PIN_HIGHLIGHT_OPACITY = 0.35;

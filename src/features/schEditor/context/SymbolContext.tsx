@@ -102,6 +102,24 @@ export const SymbolProvider = ({ children }: any) => {
         setPlacedSymbols: (s: any[]) => setPlacedSymbols(s),
         addPlacedSymbol: (item: any) => setPlacedSymbols((prev) => {
           const next = [...(prev || []), item];
+
+          // Populate livePinPositionsRef immediately so hover/snap works right after placement
+          try {
+            const placedId = item?.id;
+            const pins = Array.isArray(item?.pins) ? item.pins : [];
+            if (placedId && pins.length > 0) {
+              livePinPositionsRef.current[placedId] = livePinPositionsRef.current[placedId] || {};
+              pins.forEach((p: any) => {
+                const pinId = p?.id ?? `${placedId}-${Math.random().toString(36).slice(2,6)}`;
+                const absX = (typeof p.x === 'number') ? p.x : (typeof item.x === 'number' && typeof p.offsetX === 'number') ? (item.x + p.offsetX) : (p.offsetX || 0);
+                const absY = (typeof p.y === 'number') ? p.y : (typeof item.y === 'number' && typeof p.offsetY === 'number') ? (item.y + p.offsetY) : (p.offsetY || 0);
+                livePinPositionsRef.current[placedId][pinId] = { x: absX, y: absY };
+                });
+            }
+          } catch (e) {
+            // non-fatal (suppressed)
+          }
+
           // dispatch a save event on next tick so providers see the updated state
           setTimeout(() => { try { window.dispatchEvent(new Event('save-trackway')); } catch (e) {} }, 0);
           return next;

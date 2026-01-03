@@ -1,4 +1,5 @@
 import BoardSheet from "./BoardSheet";
+import { useKicadSchSafe } from "../context/KicadSchContext";
 import CameraViewport from "./canvas/CameraViewPort";
 import CanvasSurface from "./canvas/CanvasSurface";
 import PlacedSymbolsRenderer from "./PlacedSymbolsRenderer";
@@ -9,7 +10,7 @@ export const CanvasViewport = () => {
   return (
     <CameraViewport>
        <CanvasSurface>
-         <BoardSheet />
+         <BoardSheet titleBlock={useKicadSchSafe()?.kicad?.title_block ?? null} />
       </CanvasSurface>
 {/*    
          <PlacedSymbolsRenderer />

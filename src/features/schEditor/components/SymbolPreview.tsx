@@ -70,7 +70,12 @@ export const SymbolPreview = ({data, visible} : any) => {
   // const {symbolData} = useSymbol();
   
   // const data = symbolData;
-  const SCALE = 6;
+  // World unit scale: 1 unit == 1 mm. For the symbol manager preview we apply
+  // an additional UI scale so symbols are visible inside the small preview pane
+  // without changing canonical world units used elsewhere.
+  const WORLD_SCALE = 1;
+  const PREVIEW_SCALE = 6; // preview-only magnification (px per mm)
+  const SCALE = WORLD_SCALE * PREVIEW_SCALE;
 
 
   if (!data) return <div>No symbol data found</div>;
@@ -126,12 +131,13 @@ export const SymbolPreview = ({data, visible} : any) => {
     graphicsData.forEach((g: any) => {
       if (!g || !g.kind) return;
       if (g.kind === 'Rectangle') {
-        const { start, end } = g.data;
-        add(start[0], start[1]);
-        add(end[0], end[1]);
+        const start = g.data?.start ?? g.start ?? [0, 0];
+        const end = g.data?.end ?? g.end ?? [0, 0];
+        add(start[0] ?? 0, start[1] ?? 0);
+        add(end[0] ?? 0, end[1] ?? 0);
       } else if (g.kind === 'Polyline') {
-        const raw = g.data?.pts?.xy || [];
-        raw.forEach((pt: any) => add(pt[0], pt[1]));
+        const raw = g.data?.pts?.xy ?? g.pts?.xy ?? [];
+        raw.forEach((pt: any) => add((pt && pt[0]) ?? 0, (pt && pt[1]) ?? 0));
       }
     });
 
@@ -176,12 +182,13 @@ export const SymbolPreview = ({data, visible} : any) => {
     graphicsData.forEach((g: any) => {
       if (!g || !g.kind) return;
       if (g.kind === 'Rectangle') {
-        const { start, end } = g.data;
-        addPoint(start[0], start[1]);
-        addPoint(end[0], end[1]);
+        const start = g.data?.start ?? g.start ?? [0, 0];
+        const end = g.data?.end ?? g.end ?? [0, 0];
+        addPoint(start[0] ?? 0, start[1] ?? 0);
+        addPoint(end[0] ?? 0, end[1] ?? 0);
       } else if (g.kind === 'Polyline') {
-        const raw = g.data?.pts?.xy || [];
-        raw.forEach((pt: any) => addPoint(pt[0], pt[1]));
+        const raw = g.data?.pts?.xy ?? g.pts?.xy ?? [];
+        raw.forEach((pt: any) => addPoint((pt && pt[0]) ?? 0, (pt && pt[1]) ?? 0));
       }
     });
 
@@ -199,14 +206,17 @@ export const SymbolPreview = ({data, visible} : any) => {
 
     // -------- RECTANGLE ----------
     if (g.kind === "Rectangle") {
-      const { start, end, stroke, fill } = g.data;
+      const start = g.data?.start ?? g.start ?? [0, 0];
+      const end = g.data?.end ?? g.end ?? [0, 0];
+      const stroke = g.data?.stroke ?? g.stroke;
+      const fill = g.data?.fill ?? g.fill;
 
       return (
         <Rect
-          x={start[0] * SCALE}
-          y={start[1] * SCALE}
-          width={(end[0] - start[0]) * SCALE}
-          height={(end[1] - start[1]) * SCALE}
+          x={(start[0] ?? 0) * SCALE}
+          y={(start[1] ?? 0) * SCALE}
+          width={((end[0] ?? 0) - (start[0] ?? 0)) * SCALE}
+          height={((end[1] ?? 0) - (start[1] ?? 0)) * SCALE}
           stroke="#c2102a"
           strokeWidth={(stroke?.width || 0.254) * SCALE * 0.3}
           fill={fill?.type === "background" ? "#fff9d9" : ""}
@@ -216,14 +226,14 @@ export const SymbolPreview = ({data, visible} : any) => {
 
     // -------- POLYLINE ----------
     if (g.kind === "Polyline") {
-      const raw = g.data.pts.xy; // [[x,y],[x,y]...]
+      const raw = g.data?.pts?.xy ?? g.pts?.xy ?? [];
       const pts = raw.flat().map((v: number) => v * SCALE);
 
       return (
         <Line
           points={pts}
           stroke="#c2102a"
-          strokeWidth={(g.data.stroke?.width || 0.254) * SCALE * 0.45}
+          strokeWidth={(g.data?.stroke?.width || g.stroke?.width || 0.254) * SCALE * 0.45}
           closed={false}
         />
       );
@@ -261,7 +271,7 @@ export const SymbolPreview = ({data, visible} : any) => {
       if (circleType === 'outline') fillColor = '#c2102a';
       else if (circleType === 'nond') fillColor = '';
 
-      return <Circle x={cxN * SCALE} y={cyN * SCALE} radius={(rN || 0) * SCALE} stroke="#c2102a" strokeWidth={(g.data?.stroke?.width || 0.254) * SCALE * 0.45} fill={fillColor} />;
+      return <Circle x={cxN * SCALE} y={cyN * SCALE} radius={(rN || 0) * SCALE} stroke="#c2102a" strokeWidth={((g.data?.stroke?.width) || (g.stroke?.width) || 0.254) * SCALE * 0.45} fill={fillColor} />;
     }
 
     // -------- ARC ----------
@@ -447,15 +457,21 @@ export const SymbolPreview = ({data, visible} : any) => {
       }
     }
 
-    // Text positioning
-    const NAME_INSIDE_PAD = 6;
-    const NUMBER_OUTSIDE_PAD = 8;
+    // Text positioning (mm world units)
+    const NAME_INSIDE_PAD = 1.2;
+    const NUMBER_OUTSIDE_PAD = 1.4;
+    const NUM_INSIDE_X = 1.2; // small horizontal nudge to move number toward the symbol edge
+    const PIN_NAME_FONT = 1.6; // mm
+    const PIN_NUMBER_FONT = 1.2; // mm
+    // TEXT_Y_OFF is vertical offset in pixels -> apply SCALE
+    const TEXT_Y_OFF = Math.max(0.6, PIN_NAME_FONT * 0.3) * SCALE;
 
-    // const pinNumberX = ex;
-    // let pinNumberY: number;
-    //  const NAME_PAD = 6;
-    // const NUM_PAD = 8;
-    const NUM_INSIDE_X = 6; // small horizontal nudge to move number toward the symbol edge
+    // scaled helper values for px-space calculations (coordinates are already multiplied by SCALE)
+    const S_NAME_INSIDE_PAD = NAME_INSIDE_PAD * SCALE;
+    const S_NUMBER_OUTSIDE_PAD = NUMBER_OUTSIDE_PAD * SCALE;
+    const S_NUM_INSIDE_X = NUM_INSIDE_X * SCALE;
+    const S_PIN_NAME_FONT = PIN_NAME_FONT * SCALE;
+    const S_PIN_NUMBER_FONT = PIN_NUMBER_FONT * SCALE;
 
     let pinNumberX = ex;
     let pinNumberY: number;
@@ -466,7 +482,7 @@ export const SymbolPreview = ({data, visible} : any) => {
     
       // center number horizontally on the pin tip (reduce overlap)
       const txt = String(pin.number?.[''] ?? '');
-      const estNumWidth = Math.max(8, txt.length * 6 * 0.6);
+      const estNumWidth = Math.max(8 * SCALE, txt.length * (S_PIN_NUMBER_FONT * 0.6));
       pinNumberX = ex - estNumWidth / 2;
 
       // simple anti-overlap: gather nearby down-facing pins and spread numbers horizontally
@@ -477,10 +493,10 @@ export const SymbolPreview = ({data, visible} : any) => {
           .filter((it: any) => it.pp && it.pp.at && it.pp.at[2] === 90)
           .map((it: any) => ({ x: (it.pp.at[0] * SCALE), idx: it.j }));
 
-        const nearby = group.filter((g: any) => Math.abs(g.x - myX) < 20).sort((a: any, b: any) => a.x - b.x);
+        const nearby = group.filter((g: any) => Math.abs(g.x - myX) < (20 * SCALE)).sort((a: any, b: any) => a.x - b.x);
         if (nearby.length > 1) {
           const myPos = nearby.findIndex((n: any) => n.idx === idx);
-          const spacing = 12; // px spacing between numbers
+          const spacing = 12 * SCALE; // px spacing between numbers
           const center = (nearby.length - 1) / 2;
           const offset = (myPos - center) * spacing;
           pinNumberX += offset;
@@ -489,19 +505,19 @@ export const SymbolPreview = ({data, visible} : any) => {
     } else if (rot === 270) {
       // up-facing: place number above the outer end
 
-      pinNumberY = Math.min(iy, ey) - NUMBER_OUTSIDE_PAD + 10;
+      pinNumberY = Math.min(iy, ey) - S_NUMBER_OUTSIDE_PAD + (10 * SCALE);
     } else {
       // left/right: place number above the pin line
       const topY = Math.min(iy, ey);
-      pinNumberY = topY - NUMBER_OUTSIDE_PAD;
+      pinNumberY = topY - S_NUMBER_OUTSIDE_PAD;
     }
 
      if (rot === 0) {
-      pinNumberX = ex - NUM_INSIDE_X + 10;
+      pinNumberX = ex - S_NUM_INSIDE_X + (10 * SCALE);
     } else if (rot === 180) {
       // left-side pins: nudge the number a few pixels to the right so it sits
       // just inside the symbol and avoids overlapping the pin line.
-      pinNumberX = ex + NUM_INSIDE_X - 19;
+      pinNumberX = ex + S_NUM_INSIDE_X - (19 * SCALE);
     }
     let pinNameX = ix;
     let pinNameY = iy;
@@ -509,7 +525,7 @@ export const SymbolPreview = ({data, visible} : any) => {
     let pinNameRotation = 0;
     // optional manual offset (not usually needed) - keep for fine tuning
     let pinNameOffset: { x?: number; y?: number } = {};
-    const PIN_NAME_FONT = 6;
+    
 
     // Parse/normalize pin names (same behavior as canvas)
     const parsePinName = (raw: any) => {
@@ -536,14 +552,14 @@ export const SymbolPreview = ({data, visible} : any) => {
       if (ix > centerX) {
         // pin is on right half: place text so its RIGHT edge is NAME_INSIDE_PAD from the attach
         const txt = String(parsePinName(pin.name).text ?? '');
-        const estWidth = Math.max(8, txt.length * (PIN_NAME_FONT * 0.6));
-        pinNameX = ix - NAME_INSIDE_PAD - estWidth; // left edge so right edge = ix - pad
-        pinNameY = iy - 4;
+          const estWidth = Math.max(4 * SCALE, txt.length * (S_PIN_NAME_FONT * 0.6));
+          pinNameX = ix - S_NAME_INSIDE_PAD - estWidth; // left edge so right edge = ix - pad
+          pinNameY = iy - TEXT_Y_OFF;
         nameAlign = 'left';
       } else {
         // pin is on left half
-        pinNameX = ix + NAME_INSIDE_PAD - 4;
-        pinNameY = iy - 4;
+        pinNameX = ix + NAME_INSIDE_PAD - NUM_INSIDE_X;
+        pinNameY = iy - TEXT_Y_OFF;
         nameAlign = 'left';
       }
     } else if (rot === 90) {
@@ -552,23 +568,23 @@ export const SymbolPreview = ({data, visible} : any) => {
       nameAlign = 'center';
       // estimate text metrics so we can center the rotation pivot
       const txt = String(pin.name?.[''] ?? '');
-      const estWidth = Math.max(8, txt.length * (PIN_NAME_FONT * 0.6));
-      const estHeight = PIN_NAME_FONT * 1.2;
+      const estWidth = Math.max(4 * SCALE, txt.length * (S_PIN_NAME_FONT * 0.6));
+      const estHeight = S_PIN_NAME_FONT * 1.2;
       pinNameOffset = { x: estWidth / 2, y: estHeight / 2 };
       // shift left so vertical label sits closer to the symbol edge (match left-pin spacing)
-      pinNameX = ix - NAME_INSIDE_PAD + 7;
-      pinNameY = iy -  NAME_INSIDE_PAD - 4;
+      pinNameX = ix - S_NAME_INSIDE_PAD + (1.2 * SCALE);
+      pinNameY = iy - S_NAME_INSIDE_PAD - TEXT_Y_OFF;
     } else if (rot === 270) {
       // up-facing: vertical centered on inner attach
       pinNameRotation = -90;
       nameAlign = 'center';
       const txt = String(pin.name?.[''] ?? '');
-      const estWidth = Math.max(8, txt.length * (PIN_NAME_FONT * 0.6));
-      const estHeight = PIN_NAME_FONT * 1.2;
+      const estWidth = Math.max(4 * SCALE, txt.length * (S_PIN_NAME_FONT * 0.6));
+      const estHeight = S_PIN_NAME_FONT * 1.2;
       pinNameOffset = { x: estWidth / 2, y: estHeight / 2 };
       // shift left so vertical label sits closer to the symbol edge (match left-pin spacing)
-      pinNameX = ix - NAME_INSIDE_PAD + 7;
-      pinNameY = iy + NAME_INSIDE_PAD + 4;
+      pinNameX = ix - S_NAME_INSIDE_PAD + (1.2 * SCALE);
+      pinNameY = iy + S_NAME_INSIDE_PAD + TEXT_Y_OFF;
     }
 
     return (
@@ -577,14 +593,7 @@ export const SymbolPreview = ({data, visible} : any) => {
         <Line points={[ix, iy, ex, ey]} stroke="red" strokeWidth={PIN_THICKNESS} />
 
         {/* Pin number (always above the pin) */}
-        <Text
-          x={pinNumberX}
-          y={pinNumberY}
-          text={String(pin.number?.[''] ?? '')}
-          fontSize={8}
-          fill="red"
-          align="center"
-        />
+        <Text x={pinNumberX} y={pinNumberY} text={String(pin.number?.[''] ?? '')} fontSize={S_PIN_NUMBER_FONT} fill="red" align="center" />
 
         {/* inversion bar moved: it's drawn above the pin name below */}
 
@@ -593,7 +602,7 @@ export const SymbolPreview = ({data, visible} : any) => {
           x={pinNameX}
           y={pinNameY}
           text={String(parsePinName(pin.name).text ?? '')}
-          fontSize={PIN_NAME_FONT}
+          fontSize={S_PIN_NAME_FONT}
           fill="green"
           align={nameAlign}
           rotation={pinNameRotation}
@@ -606,7 +615,7 @@ export const SymbolPreview = ({data, visible} : any) => {
           const parsed = parsePinName(pin.name);
           if (!parsed.inverted) return null;
           const txt = String(parsed.text ?? '');
-          const estWidth = Math.max(8, txt.length * (PIN_NAME_FONT * 0.6));
+          const estWidth = Math.max(8 * SCALE, txt.length * (S_PIN_NAME_FONT * 0.6));
           let startX = pinNameX;
           let endX = pinNameX + estWidth;
           if (nameAlign === 'center') {
@@ -616,8 +625,20 @@ export const SymbolPreview = ({data, visible} : any) => {
             startX = pinNameX - estWidth;
             endX = pinNameX;
           }
-          const barY = pinNameY - (PIN_NAME_FONT * 0.9);
-          return <Line points={[startX, barY, endX, barY]} stroke="black" strokeWidth={1} dash={[4,3]} />;
+          const barY = pinNameY - (S_PIN_NAME_FONT * 0.9);
+          const dashA = Math.max(1, 4 * SCALE);
+          const dashB = Math.max(1, 3 * SCALE);
+          const strokeW = Math.max(0.5, 0.6 * SCALE);
+          // clamp bar length to estimated width
+          const maxLen = estWidth;
+          let sx = startX; let ex = endX;
+          if (Math.abs(ex - sx) > maxLen) {
+            // center the shortened bar around the label center
+            const cx = (startX + endX) / 2;
+            sx = cx - maxLen / 2;
+            ex = cx + maxLen / 2;
+          }
+          return <Line points={[sx, barY, ex, barY]} stroke="black" strokeWidth={strokeW} dash={[dashA, dashB]} />;
         })()}
       </>
     );
