@@ -10,11 +10,12 @@
  */
 
 import { useLayoutEffect, useRef, useState, useEffect } from "react";
-import { Layer, Line, Group, Circle, Rect, Text } from "react-konva";
+import { Layer, Line, Group, Circle, Rect } from "react-konva";
 import { usePlacedSymbol } from '../context/PlacedSymbolContext';
 import CanvasStage from "./CanvaStage";
 import { useCameraViewport } from "./canvas/CameraViewPort";
 import { useRouting } from "../context/WireContext";
+import { DISABLE_WIRE_HIGHLIGHT } from "../constants";
 import { useTool } from "../context/LeftToolbarContext";
 import type { WireSegment } from "@/types/project";
 
@@ -32,6 +33,8 @@ export interface Wire {
   width?: number;
   layer?: string;
 }
+
+type WirePoint = { x: number; y: number; pinId?: string };
 
 /**
  * RoutingCanvas (routing-only)
@@ -124,7 +127,6 @@ export function RoutingCanvas({ tracks }: { tracks?: WireSegment[] }) {
 
   // Hover state for auto-select behavior
   const [hoveredWireId, setHoveredWireId] = useState<string | null>(null);
-  const [hoverScreenPos, setHoverScreenPos] = useState<{ x: number; y: number } | null>(null);
 
   const toWorldFromClient = (clientX: number, clientY: number) => {
     const el = containerRef.current;
@@ -136,6 +138,7 @@ export function RoutingCanvas({ tracks }: { tracks?: WireSegment[] }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [size, setSize] = useState({ width: 1, height: 1 });
   const [wiresState, setWiresState] = useState<Wire[] | null>(null);
+  const requestedWiresOnceRef = useRef<boolean>(false);
 
   useLayoutEffect(() => {
     if (!containerRef.current) return;
@@ -153,7 +156,7 @@ export function RoutingCanvas({ tracks }: { tracks?: WireSegment[] }) {
   // Prefer `tracks` prop when provided (PCB editor). For schematic editor we
   // render canonical `wires` maintained by the Kicad provider; those are
   // published via window events (`set-wires` / `wire-committed` / `wire-added`).
-  const segsFromWires = (wiresState || []).flatMap((w: Wire) => {
+  const segsFromWires = (wiresState || []).flatMap((w: Wire, wi: number) => {
     // wire may expose `points` as {x,y}[] or `pts.xy` as [[x,y],...]
     let ptsArr: { x: number; y: number }[] = [];
     if (Array.isArray(w.points)) ptsArr = w.points as { x: number; y: number }[];
@@ -162,7 +165,9 @@ export function RoutingCanvas({ tracks }: { tracks?: WireSegment[] }) {
 
     const segsOut: any[] = [];
     for (let i = 0; i < ptsArr.length - 1; i++) {
-      segsOut.push({ start: [ptsArr[i].x, ptsArr[i].y], end: [ptsArr[i + 1].x, ptsArr[i + 1].y], uuid: (w.id ?? w.uuid ?? String(w.id)) as string, width: w.width ?? (w.stroke?.width ?? 1), layer: w.layer ?? 'F.Cu' });
+      const rawId: any = (w as any)?.id ?? (w as any)?.uuid;
+      const safeId = (rawId && rawId !== 'undefined' && rawId !== 'null') ? String(rawId) : `wire-${wi}`;
+      segsOut.push({ start: [ptsArr[i].x, ptsArr[i].y], end: [ptsArr[i + 1].x, ptsArr[i + 1].y], uuid: safeId, width: w.width ?? (w.stroke?.width ?? 1), layer: w.layer ?? 'F.Cu', __version: (w as any).__version || 0 });
     }
     return segsOut;
   });
@@ -222,7 +227,7 @@ export function RoutingCanvas({ tracks }: { tracks?: WireSegment[] }) {
     }
   });
 
-  const renderGroupedWire = (groupId: string, segments: any[], idx: number) => {
+  const renderGroupedWire = (groupId: string, segments: any[]) => {
     const layerStroke = (segments[0]?.layer === 'wire') ? '#09982aff' : '#e53935';
     // build a single points array: start of first, then end of each segment
     const points: number[] = [];
@@ -233,8 +238,12 @@ export function RoutingCanvas({ tracks }: { tracks?: WireSegment[] }) {
       });
     }
     const isSelected = selectedWireId === groupId;
-    const stroke = isSelected ? '#e53935' : layerStroke; // keep selected wire red
-    const strokeWidth = isSelected ? Math.max(2, (segments[0]?.width || 1) + 2) : (segments[0]?.width || 1);
+    const isHovered = hoveredWireId === groupId;
+    // Visual highlight: selected wires get the red accent; when using the
+    // select tool (`tool === 'none'`) hovering a wire should also provide
+    // visual feedback.
+    const stroke = (!DISABLE_WIRE_HIGHLIGHT && isSelected) ? '#e53935' : (!DISABLE_WIRE_HIGHLIGHT && isHovered && tool === 'none') ? '#ffb300' : layerStroke;
+    const strokeWidth = (!DISABLE_WIRE_HIGHLIGHT && isSelected) ? Math.max(2, (segments[0]?.width || 1) + 2) : (!DISABLE_WIRE_HIGHLIGHT && isHovered && tool === 'none') ? Math.max(1.5, (segments[0]?.width || 1) + 1) : (segments[0]?.width || 1);
     // build vertex list from points array
     const vertices: { x: number; y: number }[] = [];
     for (let i = 0; i < points.length; i += 2) {
@@ -275,8 +284,11 @@ export function RoutingCanvas({ tracks }: { tracks?: WireSegment[] }) {
       try { const clientX = e.evt?.clientX ?? e.clientX; const clientY = e.evt?.clientY ?? e.clientY; const world = toWorldFromClient(clientX, clientY); maybeStartDrawingFrom(world); } catch (err) {}
     };
 
+    // prefer a version from the segment so we can force remount on update
+    const version = segments[0]?.__version || 0;
+    const groupKey = `${groupId}::v${version}`;
     return (
-      <Group key={groupId || `group-${idx}`}>
+      <Group key={groupKey}>
         <Line
           id={`${groupId}-hit`}
           points={points}
@@ -299,7 +311,7 @@ export function RoutingCanvas({ tracks }: { tracks?: WireSegment[] }) {
           lineJoin="round"
           listening={false}
         />
-        {isSelected && vertices.map((v, i) => (
+        {!DISABLE_WIRE_HIGHLIGHT && (isSelected || (isHovered && tool === 'none')) && vertices.map((v, i) => (
               <Circle
                 key={`handle-${groupId}-${i}`}
                 x={v.x}
@@ -312,6 +324,7 @@ export function RoutingCanvas({ tracks }: { tracks?: WireSegment[] }) {
                 onClick={(e:any)=>{ try{ e.cancelBubble=true }catch{}; try{ setSelectedWireId(groupId); }catch{} }}
               />
             ))}
+        {/* endpoint debug marker removed */}
         {/* Show endpoint markers only when the endpoint is NOT connected to
             a placed pin or any other drawn wire. */}
         {vertices.length >= 2 && (() => {
@@ -432,6 +445,7 @@ export function RoutingCanvas({ tracks }: { tracks?: WireSegment[] }) {
   const preferredAxisRef = useRef<'h' | 'v' | null>(null);
   const startScreenRef = useRef<{ x: number; y: number } | null>(null);
   const shiftPressedRef = useRef<boolean>(false);
+  const wireIdCounterRef = useRef<number>(0);
   const AXIS_LOCK_THRESHOLD = 6; // pixels
   // Keep local `isDrawing` in sync with routing context for convenience.
   useEffect(() => {
@@ -582,21 +596,33 @@ export function RoutingCanvas({ tracks }: { tracks?: WireSegment[] }) {
 
       const w = toWorld(ev.clientX, ev.clientY);
       lastMousePosRef.current = w;
+      // Build a points array synchronously (avoid relying on pending state updates)
+      const pts: { x: number; y: number }[] = [];
+      if (localSegments && localSegments.length > 0) {
+        pts.push({ x: localSegments[0].start.x, y: localSegments[0].start.y });
+        for (let i = 0; i < localSegments.length; i++) pts.push({ x: localSegments[i].end.x, y: localSegments[i].end.y });
+      }
       if (Array.isArray(previewTracks) && previewTracks.length > 1) {
-        const parts: any[] = [];
-        for (let i = 0; i < previewTracks.length - 1; i++) parts.push({ start: previewTracks[i], end: previewTracks[i + 1], width: 1.0 });
-        setLocalSegments((prev) => [...prev, ...parts]);
+        // append preview, avoiding duplicate point
+        const firstPreview = previewTracks[0];
+        if (pts.length > 0 && pts[pts.length - 1].x === firstPreview.x && pts[pts.length - 1].y === firstPreview.y) {
+          for (let i = 1; i < previewTracks.length; i++) pts.push({ x: previewTracks[i].x, y: previewTracks[i].y });
+        } else {
+          for (let i = 0; i < previewTracks.length; i++) pts.push({ x: previewTracks[i].x, y: previewTracks[i].y });
+        }
       } else {
         const s = startRef.current;
         if (s) {
           const snapW = findNearestPlacedPin(w, 2);
           const wFinal = snapW ? { x: snapW.x, y: snapW.y } : w;
-          setLocalSegments((prev) => [...prev, { start: { x: s.x, y: s.y }, end: { x: wFinal.x, y: wFinal.y }, width: 1.0 }]);
+          if (pts.length === 0) pts.push({ x: s.x, y: s.y });
+          pts.push({ x: wFinal.x, y: wFinal.y });
         }
       }
       startRef.current = null;
       preferredAxisRef.current = null;
       startScreenRef.current = null;
+      try { finalizeLocalWire(pts); } catch (e) {}
       try { stopDrawing(); } catch (e) {}
     };
 
@@ -647,20 +673,31 @@ export function RoutingCanvas({ tracks }: { tracks?: WireSegment[] }) {
 
     const onKey = (ev: KeyboardEvent) => {
       if (ev.key === 'Escape') {
+        // Build synchronous pts array to finalize
+        const pts: { x: number; y: number }[] = [];
+        if (localSegments && localSegments.length > 0) {
+          pts.push({ x: localSegments[0].start.x, y: localSegments[0].start.y });
+          for (let i = 0; i < localSegments.length; i++) pts.push({ x: localSegments[i].end.x, y: localSegments[i].end.y });
+        }
         if (routingIsDrawing) {
           if (Array.isArray(previewTracks) && previewTracks.length > 1) {
-            const parts: any[] = [];
-            for (let i = 0; i < previewTracks.length - 1; i++) parts.push({ start: previewTracks[i], end: previewTracks[i + 1], width: 1.0 });
-            setLocalSegments((prev) => [...prev, ...parts]);
+            const firstPreview = previewTracks[0];
+            if (pts.length > 0 && pts[pts.length - 1].x === firstPreview.x && pts[pts.length - 1].y === firstPreview.y) {
+              for (let i = 1; i < previewTracks.length; i++) pts.push({ x: previewTracks[i].x, y: previewTracks[i].y });
+            } else {
+              for (let i = 0; i < previewTracks.length; i++) pts.push({ x: previewTracks[i].x, y: previewTracks[i].y });
+            }
           } else if (startRef.current && lastMousePosRef.current) {
             const s = startRef.current; const w = lastMousePosRef.current;
             const snapW = findNearestPlacedPin(w, 2);
             const wFinal = snapW ? { x: snapW.x, y: snapW.y } : w;
-            setLocalSegments((prev) => [...prev, { start: { x: s.x, y: s.y }, end: { x: wFinal.x, y: wFinal.y }, width: 1.0 }]);
+            if (pts.length === 0) pts.push({ x: s.x, y: s.y });
+            pts.push({ x: wFinal.x, y: wFinal.y });
           }
         }
         startRef.current = null;
         preferredAxisRef.current = null;
+        try { finalizeLocalWire(pts); } catch (e) {}
         try { stopDrawing(); } catch (e) {}
       }
 
@@ -758,17 +795,20 @@ export function RoutingCanvas({ tracks }: { tracks?: WireSegment[] }) {
           }
         });
         if (bestDist <= TH) {
-          // only set hovered when not already selected
-          if (bestId && bestId !== selectedWireId) {
-            setHoveredWireId(bestId);
-            setHoverScreenPos(world);
+          if (bestId) {
+            // allow hover when using the select tool even if another wire
+            // is currently selected. For other tools, preserve previous
+            // behavior (don't hover when already selected).
+            if (tool === 'none' || bestId !== selectedWireId) {
+              setHoveredWireId(bestId);
+            } else {
+              setHoveredWireId(null);
+            }
           } else {
             setHoveredWireId(null);
-            setHoverScreenPos(null);
           }
         } else {
           setHoveredWireId(null);
-          setHoverScreenPos(null);
         }
       } catch (err) {}
     };
@@ -778,35 +818,6 @@ export function RoutingCanvas({ tracks }: { tracks?: WireSegment[] }) {
     window.addEventListener('keyup', onShiftUp);
     window.addEventListener('start-wire', onStartWire as EventListener);
     window.addEventListener('connect-wire-to-pin', onConnectToPin as EventListener);
-
-    // listen for wire lifecycle events so this canvas can render canonical wires
-    const onSetWires = (ev: Event) => {
-      const detail: any = (ev as CustomEvent).detail || {};
-      const list = Array.isArray(detail) ? detail : (detail.wires || detail.list || null);
-      if (Array.isArray(list)) setWiresState(list);
-    };
-    const onWireCommit = (ev: Event) => {
-      const detail: any = (ev as CustomEvent).detail || {};
-      if (detail && detail.wire) {
-        // merge/replace single wire
-        setWiresState((prev) => {
-          const arr = Array.isArray(prev) ? [...prev] : [];
-          const idx = arr.findIndex((x) => x.id === detail.wire.id || x.uuid === detail.wire.id);
-          if (idx >= 0) arr[idx] = detail.wire; else arr.push(detail.wire);
-          return arr;
-        });
-      }
-    };
-    const onWireRemoved = (ev: Event) => {
-      const detail: any = (ev as CustomEvent).detail || {};
-      const wid = detail?.wireId;
-      if (!wid) return;
-      setWiresState((prev) => (Array.isArray(prev) ? prev.filter((w) => (w.id ?? w.uuid) !== wid) : prev));
-    };
-    window.addEventListener('set-wires', onSetWires as EventListener);
-    window.addEventListener('wire-committed', onWireCommit as EventListener);
-    window.addEventListener('wire-added', onWireCommit as EventListener);
-    window.addEventListener('wire-removed', onWireRemoved as EventListener);
 
     return () => {
       el.removeEventListener('click', onClick);
@@ -818,12 +829,85 @@ export function RoutingCanvas({ tracks }: { tracks?: WireSegment[] }) {
       window.removeEventListener('keyup', onShiftUp);
       window.removeEventListener('start-wire', onStartWire as EventListener);
       window.removeEventListener('connect-wire-to-pin', onConnectToPin as EventListener);
-        window.removeEventListener('set-wires', onSetWires as EventListener);
-        window.removeEventListener('wire-committed', onWireCommit as EventListener);
-        window.removeEventListener('wire-added', onWireCommit as EventListener);
-        window.removeEventListener('wire-removed', onWireRemoved as EventListener);
     };
   }, [isDrawing, routingIsDrawing, tool, screenToWorld, startDrawing, stopDrawing, setPreviewTracks, postWorkerMessage, grouped, selectedWireId]);
+
+  // Wire lifecycle listeners should be stable (registered once) so we don't
+  // miss events or lose state due to effect churn.
+  useEffect(() => {
+    const onSetWires = (ev: Event) => {
+      const detail: any = (ev as CustomEvent).detail || {};
+      const list = Array.isArray(detail) ? detail : (detail.wires || detail.list || null);
+      if (!Array.isArray(list)) return;
+      try { console.info('[wireCanvas] onSetWires received', { incomingCount: list.length, sample: list.slice(0, 3) }); } catch (err) {}
+      // Merge incoming canonical wires with any existing local state to avoid
+      // partial payloads (or races) causing previously-drawn wires to vanish.
+      setWiresState((prev: any) => {
+        const base = Array.isArray(prev) ? prev.slice() : [];
+        const byId: Record<string, number> = {};
+        for (let i = 0; i < base.length; i++) {
+          const w = base[i];
+          const key = String(w?.id ?? w?.uuid ?? `__idx:${i}`);
+          byId[key] = i;
+        }
+        for (const inc of list) {
+          const key = String(inc?.id ?? inc?.uuid ?? '');
+          if (!key) continue;
+          if (typeof byId[key] === 'number') base[byId[key]] = inc;
+          else base.push(inc);
+        }
+        return base;
+      });
+    };
+
+    const onWireCommit = (ev: Event) => {
+      const detail: any = (ev as CustomEvent).detail || {};
+      const wire = detail?.wire;
+      if (!wire) return;
+      try { console.info('[wireCanvas] onWireCommit incoming', { wireId: wire.id ?? wire.uuid, points: wire.points?.length }); } catch (err) {}
+      setWiresState((prev) => {
+        const arr = Array.isArray(prev) ? [...prev] : [];
+        const idx = arr.findIndex((x: any) => x.id === wire.id || x.uuid === wire.id || x.id === wire.uuid || x.uuid === wire.uuid);
+        if (idx >= 0) {
+          const oldVer = (arr[idx] as any).__version || 0;
+          arr[idx] = { ...wire, __version: oldVer + 1 };
+        } else {
+          arr.push({ ...wire, __version: 1 });
+        }
+        try { console.info('[wireCanvas] wiresState size after commit', { size: arr.length }); } catch (e) {}
+        return arr;
+      });
+    };
+
+    const onWireRemoved = (ev: Event) => {
+      const detail: any = (ev as CustomEvent).detail || {};
+      const wid = detail?.wireId;
+      if (!wid) return;
+      setWiresState((prev) => (Array.isArray(prev) ? prev.filter((w: any) => (w.id ?? w.uuid) !== wid) : prev));
+    };
+
+    window.addEventListener('set-wires', onSetWires as EventListener);
+    window.addEventListener('wire-committed', onWireCommit as EventListener);
+    window.addEventListener('wire-added', onWireCommit as EventListener);
+    window.addEventListener('wire-removed', onWireRemoved as EventListener);
+
+    // Always request canonical wires on mount. This fixes cases where the
+    // canvas remounts (or its state resets) and would otherwise only show
+    // wires committed after remount.
+    try {
+      if (!requestedWiresOnceRef.current) {
+        requestedWiresOnceRef.current = true;
+        window.dispatchEvent(new CustomEvent('request-wires'));
+      }
+    } catch (e) {}
+
+    return () => {
+      window.removeEventListener('set-wires', onSetWires as EventListener);
+      window.removeEventListener('wire-committed', onWireCommit as EventListener);
+      window.removeEventListener('wire-added', onWireCommit as EventListener);
+      window.removeEventListener('wire-removed', onWireRemoved as EventListener);
+    };
+  }, []);
 
   // Helper: shortest distance from point p to segment ab
   const pointToSegmentDistance = (p: { x: number; y: number }, a: { x: number; y: number }, b: { x: number; y: number }) => {
@@ -838,15 +922,122 @@ export function RoutingCanvas({ tracks }: { tracks?: WireSegment[] }) {
     return Math.hypot(p.x - projx, p.y - projy);
   };
 
+  // Finalize locally-drawn segments into a canonical wire and dispatch
+  // an event so the `KicadSchProvider` can absorb it into the canonical
+  // wire list. This keeps the provider as the single source-of-truth.
+  const finalizeLocalWire = (ptsArg?: { x: number; y: number }[]) => {
+    try {
+      const pts: { x: number; y: number }[] = Array.isArray(ptsArg) && ptsArg.length > 0 ? ptsArg.slice() : [];
+      if (!pts.length) {
+        if (localSegments && localSegments.length > 0) {
+          pts.push({ x: localSegments[0].start.x, y: localSegments[0].start.y });
+          for (let i = 0; i < localSegments.length; i++) pts.push({ x: localSegments[i].end.x, y: localSegments[i].end.y });
+        } else if (Array.isArray(previewTracks) && previewTracks.length > 1) {
+          for (const p of previewTracks) pts.push({ x: p.x, y: p.y });
+        }
+      }
+      if (!pts.length) return;
+
+      const snap = (p: { x: number; y: number }) => ({ x: Math.round(p.x), y: Math.round(p.y) });
+      let normalized = pts.map(snap);
+      // remove consecutive duplicate points that can appear when merging
+      // localSegments + previewTracks or due to rounding
+      const dedupeConsecutive = (arr: { x: number; y: number }[]) => {
+        const out: { x: number; y: number }[] = [];
+        for (const p of arr) {
+          if (!p) continue;
+          const last = out[out.length - 1];
+          if (last && Math.abs(last.x - p.x) < 1e-6 && Math.abs(last.y - p.y) < 1e-6) continue;
+          out.push(p);
+        }
+        return out;
+      };
+      normalized = dedupeConsecutive(normalized);
+      let manhattan: WirePoint[] = [];
+      for (let i = 0; i < normalized.length; i++) {
+        const A = normalized[i];
+        if (i === 0) manhattan.push(A);
+        if (i + 1 >= normalized.length) break;
+        const B = normalized[i + 1];
+        if (A.x === B.x || A.y === B.y) {
+          manhattan.push(B);
+        } else {
+          const corner = { x: B.x, y: A.y };
+          const last = manhattan[manhattan.length - 1];
+          if (!last || last.x !== corner.x || last.y !== corner.y) manhattan.push(corner);
+          manhattan.push(B);
+        }
+      }
+
+      // dedupe consecutive corners that may have been introduced
+      manhattan = dedupeConsecutive(manhattan);
+
+      // Important: this id must be unique across wires. If we fall back to
+      // Date.now() alone, two commits in the same millisecond can collide,
+      // causing the previous wire to be replaced (appears as "disappearing").
+      const id = (typeof crypto !== 'undefined' && (crypto as any).randomUUID)
+        ? (crypto as any).randomUUID()
+        : `w-${Date.now()}-${Math.random().toString(36).slice(2, 10)}-${++wireIdCounterRef.current}`;
+      // tag endpoints with pinId when close to a placed pin so future moves
+      // can reliably update them.
+      try {
+        if (Array.isArray(manhattan) && manhattan.length >= 1) {
+          // For each moved endpoint, find the nearest vertex in `manhattan`
+          // and tag THAT vertex with the `pinId`. This avoids off-by-one
+          // situations when a corner was inserted near the endpoint.
+          const ATTACH_TH = 2; // world units
+          try {
+            const firstPt = manhattan[0];
+            const snapFirst = findNearestPlacedPin(firstPt, ATTACH_TH);
+            if (snapFirst) {
+              // find closest manhattan index to the snapped pin
+              let bestIdx = -1; let bestD = Infinity;
+              for (let i = 0; i < manhattan.length; i++) {
+                const p = manhattan[i]; const dx = p.x - snapFirst.x; const dy = p.y - snapFirst.y; const d = Math.hypot(dx, dy);
+                if (d < bestD) { bestD = d; bestIdx = i; }
+              }
+              if (bestIdx >= 0 && bestD <= ATTACH_TH) {
+                manhattan[bestIdx] = { ...(manhattan[bestIdx] || {}), x: snapFirst.x, y: snapFirst.y, pinId: snapFirst.id };
+              }
+            }
+          } catch (e) {}
+          try {
+            const lastPt = manhattan[manhattan.length - 1];
+            const snapLast = findNearestPlacedPin(lastPt, ATTACH_TH);
+            if (snapLast) {
+              let bestIdx = -1; let bestD = Infinity;
+              for (let i = 0; i < manhattan.length; i++) {
+                const p = manhattan[i]; const dx = p.x - snapLast.x; const dy = p.y - snapLast.y; const d = Math.hypot(dx, dy);
+                if (d < bestD) { bestD = d; bestIdx = i; }
+              }
+              if (bestIdx >= 0 && bestD <= ATTACH_TH) {
+                manhattan[bestIdx] = { ...(manhattan[bestIdx] || {}), x: snapLast.x, y: snapLast.y, pinId: snapLast.id };
+              }
+            }
+          } catch (e) {}
+        }
+      } catch (e) {}
+      const newWire = { id, points: manhattan, __version: 1, layer: 'wire' } as any;
+      try { window.dispatchEvent(new CustomEvent('wire-committed', { detail: { wire: newWire } })); } catch (e) {}
+      try { window.dispatchEvent(new CustomEvent('wire-added', { detail: { wire: newWire } })); } catch (e) {}
+    } catch (e) {
+      try { console.warn('[wireCanvas] finalizeLocalWire failed', e); } catch (err) {}
+    } finally {
+      try { setLocalSegments([]); } catch (e) {}
+      try { setPreviewTracks([]); } catch (e) {}
+      try { setSelectedWireId && setSelectedWireId(null); } catch (e) {}
+      try { stopDrawing(); } catch (e) {}
+    }
+  };
+
   return (
     <div className="absolute inset-0" ref={containerRef} style={{ pointerEvents: 'auto' }}>
       <CanvasStage width={size.width} height={size.height} zoom={zoom} viewportCenter={viewportCenter} camera={camera}>
         <Layer>
           {/* finalized tracks: render each grouped wire as a single polyline */}
-          {Object.entries(grouped).map(([gid, segments], idx) => renderGroupedWire(gid, segments, idx))}
+          {Object.entries(grouped).map(([gid, segments]) => renderGroupedWire(gid, segments))}
           {/* local finalized wires created by click interactions */}
           {localSegments.map((seg, i) => (
-            console.log(seg,i),
             <Line
               key={`local-${i}`}
               points={[seg.start.x, seg.start.y, seg.end.x, seg.end.y]}
@@ -913,10 +1104,6 @@ export function RoutingCanvas({ tracks }: { tracks?: WireSegment[] }) {
           })()} */}
 
           {/* dynamic preview from local click-draw removed — use gray dashed `previewTracks` only */}
-          {/* Pencil indicator when hovering a wire to suggest starting a draw */}
-          {hoveredWireId && hoverScreenPos && !routingIsDrawing && !selectedWireId && (
-            <Text x={hoverScreenPos.x + 6} y={hoverScreenPos.y + 6} text={'✏️'} fontSize={16} listening={false} />
-          )}
         </Layer>
       </CanvasStage>
     </div>
