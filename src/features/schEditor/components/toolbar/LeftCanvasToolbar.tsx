@@ -26,7 +26,7 @@ export default function LeftCanvasToolbar() {
    const saveTimeoutRef = useRef<number | null>(null);
 
 
-   console.log("previewtracks in left toolbar", previewTracks);
+   // console.log("previewtracks in left toolbar", previewTracks);
    useEffect(() => {
       return () => {
          if (saveTimeoutRef.current) window.clearTimeout(saveTimeoutRef.current);
