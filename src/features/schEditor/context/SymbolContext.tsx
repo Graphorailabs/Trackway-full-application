@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect, useRef } from "react";
+import { DISABLE_AUTOSAVE } from "../constants";
 
 export type selectsymbol = {
       id: string;
@@ -99,7 +100,7 @@ export const SymbolProvider = ({ children }: any) => {
         setSelectedSymbol,
 
         placedSymbols,
-        setPlacedSymbols: (s: any[]) => setPlacedSymbols(s),
+        setPlacedSymbols,
         addPlacedSymbol: (item: any) => setPlacedSymbols((prev) => {
           const next = [...(prev || []), item];
 
@@ -121,17 +122,17 @@ export const SymbolProvider = ({ children }: any) => {
           }
 
           // dispatch a save event on next tick so providers see the updated state
-          setTimeout(() => { try { window.dispatchEvent(new Event('save-trackway')); } catch (e) {} }, 0);
+          setTimeout(() => { try { if (!DISABLE_AUTOSAVE) window.dispatchEvent(new Event('save-trackway')); } catch (e) {} }, 0);
           return next;
         }),
         updatePlacedSymbol: (id: string, patch: any) => setPlacedSymbols((prev) => {
           const next = (prev || []).map((p) => (p.id === id ? { ...p, ...patch } : p));
-          setTimeout(() => { try { window.dispatchEvent(new Event('save-trackway')); } catch (e) {} }, 0);
+          setTimeout(() => { try { if (!DISABLE_AUTOSAVE) window.dispatchEvent(new Event('save-trackway')); } catch (e) {} }, 0);
           return next;
         }),
         removePlacedSymbol: (id: string) => setPlacedSymbols((prev) => {
           const next = (prev || []).filter((p) => p.id !== id);
-          setTimeout(() => { try { window.dispatchEvent(new Event('save-trackway')); } catch (e) {} }, 0);
+          setTimeout(() => { try { if (!DISABLE_AUTOSAVE) window.dispatchEvent(new Event('save-trackway')); } catch (e) {} }, 0);
           return next;
         }),
                         
