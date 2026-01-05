@@ -4,6 +4,7 @@ import { X } from "lucide-react";
 import { usePcb } from "@/features/pcb_editor/contexts/PcbContext";
 import { gerberExportZipFromPcbValue } from "trackway-parser-wasm";
 import type { Pcb } from "trackway-parser-wasm";
+import GerberExportErrorModal from "./GerberExportErrorModal";
 
 type GerberExportModalProps = {
   open: boolean;
@@ -16,11 +17,13 @@ export function GerberExportModal({ open, onClose, onExport }: GerberExportModal
   const { pcb } = usePcb();
   const [busy, setBusy] = useState(false);
   const [lastAction, setLastAction] = useState<string | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) {
       setBusy(false);
       setLastAction(null);
+      setExportError(null);
     }
   }, [open]);
 
@@ -29,6 +32,8 @@ export function GerberExportModal({ open, onClose, onExport }: GerberExportModal
   const handleExport = async (validate: boolean) => {
     setBusy(true);
     setLastAction(validate ? "validating" : "exporting");
+    setExportError(null);
+    let failed = false;
 
     try {
       if (!validate) {
@@ -306,10 +311,19 @@ export function GerberExportModal({ open, onClose, onExport }: GerberExportModal
           await new Promise((r) => setTimeout(r, 600));
         }
       }
+    } catch (e) {
+      failed = true;
+      // Prefer .message when available, fall back to string
+      const msg = (e && (e as any).message) || String(e);
+      // eslint-disable-next-line no-console
+      console.error("[gerber-export] export error", e);
+      setExportError(msg);
     } finally {
       setBusy(false);
       setLastAction(null);
-      onClose();
+      if (!failed) {
+        onClose();
+      }
     }
   };
 
@@ -374,6 +388,7 @@ export function GerberExportModal({ open, onClose, onExport }: GerberExportModal
           </div>
         </div>
       </div>
+      <GerberExportErrorModal open={Boolean(exportError)} error={exportError} onClose={() => setExportError(null)} />
     </div>
   );
 }

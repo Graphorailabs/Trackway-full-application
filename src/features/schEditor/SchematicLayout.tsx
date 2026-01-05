@@ -5,6 +5,7 @@ import { SymbolProvider } from "./context/SymbolContext"
 import { ZoomProvider } from "./context/ZoomContext"
 import { PlacedSymbolProvider } from "./context/PlacedSymbolContext"
 import { RoutingProvider } from "./context/WireContext"
+import { KicadSchProvider } from "./context/KicadSchContext"
 import { PcbProvider, usePcb } from "@/features/pcb_editor/contexts/PcbContext"
 import { useEffect } from "react"
 
@@ -17,11 +18,13 @@ export const SchematicLayout = () => {
           <GridProvider>
             <SymbolProvider>
               <PlacedSymbolProvider>
-                <RoutingProvider >
-                  <ToolProvider>
-                    <CanvasViewport />
-                  </ToolProvider>
-                </RoutingProvider>
+                <KicadSchProvider>
+                  <RoutingProvider>
+                    <ToolProvider>
+                      <CanvasViewport />
+                    </ToolProvider>
+                  </RoutingProvider>
+                </KicadSchProvider>
               </PlacedSymbolProvider>
             </SymbolProvider>
           </GridProvider>

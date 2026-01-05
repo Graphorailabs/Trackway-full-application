@@ -12,7 +12,7 @@
  *   canvas-like features without bringing heavy logic.
  */
 import { Stage } from "react-konva";
-import React from "react";
+import React, { useRef, useEffect } from "react";
 import type { KonvaEventObject } from "konva/lib/Node";
 
 type Props = {
@@ -29,8 +29,22 @@ type Props = {
 };
 
 export default function CanvasStage({ width, height, zoom, viewportCenter, camera, onMouseDown, onMouseMove, onMouseUp, onContextMenu, children }: Props) {
+  const stageRef = useRef<any>(null);
+  useEffect(() => {
+    try {
+      // expose a small helper so other modules can force a Konva redraw
+      // when needed (some environments require an explicit batchDraw).
+      (window as any).__trackway_stage = stageRef.current;
+      (window as any).__trackway_batch_draw = () => { try { stageRef.current?.batchDraw(); } catch (err) {} };
+    } catch (err) {}
+    return () => {
+      try { delete (window as any).__trackway_batch_draw; delete (window as any).__trackway_stage; } catch (err) {}
+    };
+  }, []);
+
   return (
     <Stage
+      ref={stageRef}
       width={width}
       height={height}
       scaleX={zoom}

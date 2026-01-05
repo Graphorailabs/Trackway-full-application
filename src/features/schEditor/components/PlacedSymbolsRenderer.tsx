@@ -15,6 +15,7 @@ export default function PlacedSymbolsRenderer() {
   const [size, setSize] = useState({ width: window.innerWidth, height: window.innerHeight });
 
   useEffect(() => {
+    try { console.info('[PlacedSymbolsRenderer] placedSymbols changed', { count: Array.isArray(placedSymbols) ? placedSymbols.length : 0, ids: Array.isArray(placedSymbols) ? placedSymbols.slice(0,5).map((p:any)=>p.id) : null }); } catch (e) {}
     const onResize = () => setSize({ width: window.innerWidth, height: window.innerHeight });
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
@@ -125,15 +126,16 @@ export default function PlacedSymbolsRenderer() {
   };
 
   // Manual drag state for fallback dragging when Konva draggable doesn't fire
-  const manualDragRef = useRef<{ id: string | null; offsetX: number; offsetY: number } | null>(null);
+  const manualDragRef = useRef<{ id: string | null; offsetX: number; offsetY: number; initX?: number; initY?: number } | null>(null);
   const startManualDrag = (placed: any, clientX: number, clientY: number) => {
     try {
       const world = screenToWorld({ x: clientX, y: clientY });
       const pos = placed.position || { x: 0, y: 0 };
       const offsetX = world.x - pos.x;
       const offsetY = world.y - pos.y;
-      manualDragRef.current = { id: placed.id, offsetX, offsetY };
+      manualDragRef.current = { id: placed.id, offsetX, offsetY, initX: pos.x, initY: pos.y };
       
+      let lastPos: { x: number; y: number } | null = null;
       const onMove = (ev: PointerEvent) => {
         try {
           const w = screenToWorld({ x: ev.clientX, y: ev.clientY });
@@ -141,6 +143,7 @@ export default function PlacedSymbolsRenderer() {
           if (!st || !st.id) return;
           const nx = w.x - st.offsetX; const ny = w.y - st.offsetY;
           try { updatePlacedSymbol(st.id, { position: { x: nx, y: ny } }); } catch (err) { /* ignore */ }
+          lastPos = { x: nx, y: ny };
           // update livePinPositionsRef for immediate snap/hover accuracy
           try {
             const ref = livePinPositionsRef as any;
@@ -158,7 +161,26 @@ export default function PlacedSymbolsRenderer() {
           } catch (err) {}
         } catch (err) {}
       };
-      const onUp = (_ev: PointerEvent) => {
+        const onUp = (_ev: PointerEvent) => {
+        try {
+          // dispatch final placed-symbol-moved with pin absolute positions
+          const st = manualDragRef.current;
+          if (st && st.id && lastPos) {
+            try {
+              const placedObj = placedSymbols.find((p: any) => p.id === st.id) || placed;
+              const pins = Array.isArray(placedObj.pins) ? placedObj.pins.map((p: any) => {
+                const ox = p.offsetX ?? ((p.x ?? 0) - (placedObj.position?.x ?? 0));
+                const oy = p.offsetY ?? ((p.y ?? 0) - (placedObj.position?.y ?? 0));
+                const newX = lastPos!.x + ox;
+                const newY = lastPos!.y + oy;
+                const prevX = (st.initX ?? (placedObj.position?.x ?? 0)) + ox;
+                const prevY = (st.initY ?? (placedObj.position?.y ?? 0)) + oy;
+                return { id: p.id, x: newX, y: newY, prevX, prevY };
+              }) : [];
+              try { window.dispatchEvent(new CustomEvent('placed-symbol-moved', { detail: { placedId: st.id, pins } })); } catch (err) {}
+            } catch (err) {}
+          }
+        } catch {}
         try { manualDragRef.current = null; } catch {}
         try { window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerup', onUp); } catch {}
       };
@@ -187,7 +209,6 @@ export default function PlacedSymbolsRenderer() {
     try {
       // diagnostic: print placedSymbols ids and pin counts
       try {
-        const debugList: any = (Array.isArray(placedSymbols) ? placedSymbols.map((ps: any) => ({ id: ps.id, pins: Array.isArray(ps.pins) ? ps.pins.length : 0 })) : placedSymbols);
         // placedSymbols diagnostic suppressed
       } catch (err) { /* suppressed */ }
       const ref = (livePinPositionsRef as any);
@@ -229,9 +250,7 @@ export default function PlacedSymbolsRenderer() {
 
   // Fallback hover detection using mouse position -> world coords -> livePinPositionsRef
   useEffect(() => {
-    let last = { x: NaN, y: NaN };
-    // detection threshold: pin radius + highlight offset + small tolerance
-    const THRESH = PIN_HIT_RADIUS + PIN_HIGHLIGHT_RADIUS_OFFSET + 0.4; // mm
+    // Fallback hover detection (no local debug vars required)
       const onMove = (ev: MouseEvent) => {
       try {
         const el = document.querySelector('main[role="presentation"]') as HTMLElement | null;
@@ -315,7 +334,7 @@ export default function PlacedSymbolsRenderer() {
     };
     window.addEventListener('pointerdown', onPointerDown, { passive: false });
     return () => window.removeEventListener('pointerdown', onPointerDown);
-  }, [placedSymbols, screenToWorld, setSelectedSymbol]);
+  }, [placedSymbols, screenToWorld, setSelectedSymbol, tool]);
 
 
   return (
@@ -354,7 +373,18 @@ export default function PlacedSymbolsRenderer() {
                                 if (node && typeof node.startDrag === 'function') {
                                   // ensure draggable flag is enabled on the Konva node then start drag
                                   try { node.draggable(true); } catch {}
-                                  try { node.startDrag(); return; } catch {}
+                                    try { node.startDrag();
+                                      // if native drag didn't begin, fallback to manual drag shortly after
+                                      setTimeout(() => {
+                                        try {
+                                          const n2 = stage ? stage.findOne('#' + placed.id) : null;
+                                          if (!n2 || (typeof n2.isDragging === 'function' && !n2.isDragging())) {
+                                            if (typeof clientX === 'number' && typeof clientY === 'number') startManualDrag(placed, clientX, clientY);
+                                          }
+                                        } catch (err) {}
+                                      }, 60);
+                                      return;
+                                    } catch {}
                                 }
                               } catch (err) {}
                               if (typeof clientX === 'number' && typeof clientY === 'number') startManualDrag(placed, clientX, clientY);
@@ -367,7 +397,16 @@ export default function PlacedSymbolsRenderer() {
                           const stage = (e && e.target && typeof e.target.getStage === 'function') ? e.target.getStage() : null;
                           const node = stage ? stage.findOne('#' + placed.id) : null;
                           if (node && typeof node.startDrag === 'function') {
-                            try { node.startDrag(); } catch (err) { if (typeof clientX === 'number' && typeof clientY === 'number') startManualDrag(placed, clientX, clientY); }
+                              try { node.startDrag();
+                                setTimeout(() => {
+                                  try {
+                                    const n2 = stage ? stage.findOne('#' + placed.id) : null;
+                                    if (!n2 || (typeof n2.isDragging === 'function' && !n2.isDragging())) {
+                                      if (typeof clientX === 'number' && typeof clientY === 'number') startManualDrag(placed, clientX, clientY);
+                                    }
+                                  } catch (err) {}
+                                }, 60);
+                              } catch (err) { if (typeof clientX === 'number' && typeof clientY === 'number') startManualDrag(placed, clientX, clientY); }
                           } else {
                             if (typeof clientX === 'number' && typeof clientY === 'number') startManualDrag(placed, clientX, clientY);
                           }
@@ -390,7 +429,17 @@ export default function PlacedSymbolsRenderer() {
                               const node = stage ? stage.findOne('#' + placed.id) : null;
                               if (node && typeof node.startDrag === 'function') {
                                 try { node.draggable(true); } catch {}
-                                try { node.startDrag(); return; } catch {}
+                                try { node.startDrag();
+                                  setTimeout(() => {
+                                    try {
+                                      const n2 = stage ? stage.findOne('#' + placed.id) : null;
+                                      if (!n2 || (typeof n2.isDragging === 'function' && !n2.isDragging())) {
+                                        if (typeof clientX === 'number' && typeof clientY === 'number') startManualDrag(placed, clientX, clientY);
+                                      }
+                                    } catch (err) {}
+                                  }, 60);
+                                  return;
+                                } catch {}
                               }
                             } catch (err) {}
                             if (typeof clientX === 'number' && typeof clientY === 'number') startManualDrag(placed, clientX, clientY);
@@ -402,7 +451,16 @@ export default function PlacedSymbolsRenderer() {
                         const stage = (e && e.target && typeof e.target.getStage === 'function') ? e.target.getStage() : null;
                         const node = stage ? stage.findOne('#' + placed.id) : null;
                         if (node && typeof node.startDrag === 'function') {
-                          try { node.startDrag(); } catch (err) { if (typeof clientX === 'number' && typeof clientY === 'number') startManualDrag(placed, clientX, clientY); }
+                          try { node.startDrag();
+                            setTimeout(() => {
+                              try {
+                                const n2 = stage ? stage.findOne('#' + placed.id) : null;
+                                if (!n2 || (typeof n2.isDragging === 'function' && !n2.isDragging())) {
+                                  if (typeof clientX === 'number' && typeof clientY === 'number') startManualDrag(placed, clientX, clientY);
+                                }
+                              } catch (err) {}
+                            }, 60);
+                          } catch (err) { if (typeof clientX === 'number' && typeof clientY === 'number') startManualDrag(placed, clientX, clientY); }
                         } else {
                           if (typeof clientX === 'number' && typeof clientY === 'number') startManualDrag(placed, clientX, clientY);
                         }
@@ -450,6 +508,11 @@ export default function PlacedSymbolsRenderer() {
                         return { ...p, x: nx + ox, y: ny + oy };
                       });
                       updatePlacedSymbol(placed.id, { pins: newPins });
+                      try {
+                        const prevPos = placed.position || { x: 0, y: 0 };
+                        const pinsWithPrev = newPins.map((pp: any) => ({ id: pp.id, x: pp.x, y: pp.y, prevX: (prevPos.x + ((pp.offsetX ?? ((pp.x ?? 0) - (placed.position?.x ?? 0))))), prevY: (prevPos.y + ((pp.offsetY ?? ((pp.y ?? 0) - (placed.position?.y ?? 0)))) ) }));
+                        window.dispatchEvent(new CustomEvent('placed-symbol-moved', { detail: { placedId: placed.id, pins: pinsWithPrev } }));
+                      } catch (err) {}
                     }
                     // update livePinPositionsRef with final positions
                     try {
