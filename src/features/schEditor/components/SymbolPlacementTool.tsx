@@ -109,7 +109,7 @@ export default function SymbolPlacementTool() {
       };
 
       addPlacedSymbol(placed);
-      setSelectedSymbol(placed);
+      setSelectedSymbol(placed); 
       // Try to resolve and add matching footprint to PCB context (best-effort)
       // (async () => {
       //   try {

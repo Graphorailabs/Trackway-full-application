@@ -1,13 +1,23 @@
+import { FastForward } from "lucide-react";
 import { useTool } from "../../context/LeftToolbarContext";
 import { ErcChecker } from "../ErcChecker";
 import { LoadSymbol } from "../LoadSymbol";
+import { FaSave } from "react-icons/fa";
+
 
 export default function LeftCanvasToolbar() {
    const { tool, setTool, setSelectedComponent } = useTool();
-   
    const baseBtn =
       "w-12 h-12 rounded-lg flex items-center justify-center text-gray-700 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-400 transition";
 
+
+   const handleSave = () => {
+      setTool("save");
+      // Implement save functionality here
+      console.log("Save tool selected");
+      
+   }
+      
    return (
       <aside className="flex flex-col items-center gap-2 p-2 bg-white border-r h-full w-16 shadow-sm">
          <div className="w-full flex justify-center pt-1">
@@ -54,7 +64,14 @@ export default function LeftCanvasToolbar() {
         <ErcChecker/>
       </div>
 
-
+    {/* saving functionality */}
+     <div>
+         <button
+          onClick={handleSave}
+         >
+            <FaSave size={20} color="#4B5563" title="Save Schematic"/>
+         </button>
+     </div>
          </div>
 
          <div className="mt-auto mb-3 text-xs text-gray-500">Canvas Tools</div>
