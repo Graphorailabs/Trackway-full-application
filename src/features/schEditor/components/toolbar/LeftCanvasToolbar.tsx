@@ -3,20 +3,145 @@ import { useTool } from "../../context/LeftToolbarContext";
 import { ErcChecker } from "../ErcChecker";
 import { LoadSymbol } from "../LoadSymbol";
 import { FaSave } from "react-icons/fa";
+import { useKicadSchSafe } from "../../context/KicadSchContext";
+import { useProject } from "@/hooks/useProject";
+import * as parser from "trackway-parser-wasm";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useSymbol } from "../../context/SymbolContext";
+import { useRouting } from "../../context/WireContext";
 
 
 export default function LeftCanvasToolbar() {
-   const { tool, setTool, setSelectedComponent } = useTool();
-   const baseBtn =
-      "w-12 h-12 rounded-lg flex items-center justify-center text-gray-700 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-400 transition";
+    const { tool, setTool, setSelectedComponent } = useTool();
+    const baseBtn =
+         "w-12 h-12 rounded-lg flex items-center justify-center text-gray-700 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-400 transition";
 
+   const { kicad } = useKicadSchSafe() ?? ({} as any);
+   const { currentProject, updateCurrentProjectFiles } = useProject();
+   const { placedSymbols } = useSymbol();
+  const {previewTracks} = useRouting();
+   const [isSaving, setIsSaving] = useState(false);
+   const [saveError, setSaveError] = useState<string | null>(null);
+   const [saveSuccess, setSaveSuccess] = useState(false);
+   const saveTimeoutRef = useRef<number | null>(null);
+
+
+   console.log("previewtracks in left toolbar", previewTracks);
+   useEffect(() => {
+      return () => {
+         if (saveTimeoutRef.current) window.clearTimeout(saveTimeoutRef.current);
+      };
+   }, []);
+
+   const deriveDefaultSchematicPath = useCallback((projectName?: string | null) => {
+      const base = (projectName ?? "schematic").trim() || "schematic";
+      const dashed = base.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+      const safe = dashed || "schematic";
+      return `${safe}.kicad_sch`;
+   }, []);
+
+   const saveSchematic = useCallback(async () => {
+      setSaveError(null);
+      if (!kicad) {
+         setSaveError("No schematic context available");
+         return;
+      }
+      if (!currentProject) {
+         setSaveError("No project loaded");
+         return;
+      }
+
+      setIsSaving(true);
+      try {
+         const filePath = deriveDefaultSchematicPath(currentProject.name);
+
+         // deep clone so we can sanitize without mutating provider state
+         const kicadCopy: any = JSON.parse(JSON.stringify(kicad));
+
+         // sanitize symbol pin numbers if missing (avoid wasm parser errors)
+         if (Array.isArray(kicadCopy.symbol)) {
+            for (const sym of kicadCopy.symbol) {
+               try {
+                  const units = Array.isArray(sym.raw?.symbolData)
+                     ? sym.raw.symbolData
+                     : sym.raw?.symbolData?.unit ?? sym.raw?.symbolData;
+
+                  if (Array.isArray(units)) {
+                     units.forEach((u: any) => {
+                        if (Array.isArray(u?.pin)) {
+                           u.pin.forEach((pd: any, idx: number) => {
+                              if (pd && (pd.number === undefined || pd.number === null || pd.number === "")) {
+                                 pd.number = String(idx + 1);
+                              }
+                           });
+                        }
+                     });
+                  }
+               } catch (e) {
+                  // ignore symbol-level sanitization errors
+                  // eslint-disable-next-line no-console
+                  console.warn("Failed to sanitize symbol for serialization", e, sym?.id);
+               }
+            }
+         }
+
+         let serialized: string;
+         try {
+            // eslint-disable-next-line no-console
+            console.debug("[LeftCanvasToolbar] schematic payload preview:", JSON.stringify(kicadCopy, (_k, v) => (typeof v === 'function' ? undefined : v), 2).slice(0, 2000));
+            serialized = parser.schematicValueToSexpr(kicadCopy as any, true);
+         } catch (e) {
+            // eslint-disable-next-line no-console
+            console.error("[LeftCanvasToolbar] serialization failed for payload:", kicadCopy);
+            throw e;
+         }
+
+         // Use the canonical per-project companion filename so the Kicad
+         // rehydration logic (which looks for any `*.trackway.json`) will
+         // reliably find the editor state on load. Use project id for scope.
+         const companionPath = `${currentProject.id}.trackway.json`;
+
+         const updatedFiles = { ...(currentProject.files ?? {}) };
+         updatedFiles[filePath] = serialized;
+
+         // save placedSymbols and include current preview wire(s) from routing context
+         try {
+            let wires: any[] = [];
+            if (Array.isArray(previewTracks) && previewTracks.length > 0) {
+               wires = [{ id: 'preview', points: previewTracks.map((p: any) => ({ x: p.x, y: p.y })) }];
+            }
+            if (Array.isArray(placedSymbols) || Array.isArray(wires)) {
+               const editorState = { placedSymbols: placedSymbols ?? [], wires: wires ?? [] } as any;
+               updatedFiles[companionPath] = JSON.stringify(editorState, null, 2);
+            }
+         } catch (e) {
+            // ignore companion persistence failures
+         }
+
+         const updatedProject = await updateCurrentProjectFiles(updatedFiles);
+         const persisted = updatedProject.files?.[filePath];
+         if (persisted !== serialized) throw new Error("Saved content mismatch");
+
+         setSaveSuccess(true);
+         if (saveTimeoutRef.current) window.clearTimeout(saveTimeoutRef.current);
+         saveTimeoutRef.current = window.setTimeout(() => {
+            setSaveSuccess(false);
+            saveTimeoutRef.current = null;
+         }, 2000) as unknown as number;
+      } catch (err: any) {
+         const msg = err instanceof Error ? err.message : String(err);
+         // eslint-disable-next-line no-console
+         console.error("Failed to serialize/save schematic:", err);
+         setSaveError(msg.includes("missing field") ? `Serialization failed: ${msg}` : msg);
+      } finally {
+         setIsSaving(false);
+      }
+   }, [kicad, currentProject, updateCurrentProjectFiles, deriveDefaultSchematicPath, placedSymbols, previewTracks]);
 
    const handleSave = () => {
       setTool("save");
-      // Implement save functionality here
-      console.log("Save tool selected");
-      
-   }
+      void saveSchematic();
+   };
       
    return (
       <aside className="flex flex-col items-center gap-2 p-2 bg-white border-r h-full w-16 shadow-sm">

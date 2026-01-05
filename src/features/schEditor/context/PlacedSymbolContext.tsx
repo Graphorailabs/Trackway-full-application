@@ -10,6 +10,8 @@ type PlacedSymbolContextType = {
   livePinPositionsRef: React.MutableRefObject<{ [symbolId: string]: { [pinId: string]: { x: number; y: number } } }>;
 };
 
+
+
 const PlacedSymbolContext = createContext<PlacedSymbolContextType | null>(null);
 
 export const PlacedSymbolProvider = ({ children }: { children: React.ReactNode }) => {
@@ -26,8 +28,11 @@ export const PlacedSymbolProvider = ({ children }: { children: React.ReactNode }
     livePinPositionsRef: symbol.livePinPositionsRef,
   };
 
+  console.log('value',value);
+
   return <PlacedSymbolContext.Provider value={value}>{children}</PlacedSymbolContext.Provider>;
 };
+
 
 export const usePlacedSymbol = () => {
   const ctx = useContext(PlacedSymbolContext);

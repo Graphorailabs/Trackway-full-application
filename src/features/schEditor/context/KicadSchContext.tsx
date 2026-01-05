@@ -1,8 +1,41 @@
+
+// import { createContext, useContext, useMemo, useEffect, useRef, useState } from "react";
+// import { useSymbol } from "./SymbolContext";
+// import { useProject } from "@/hooks/useProject";
+// import type { ErcIssue, KicadSch } from "trackway-parser-wasm";
+// import { useRouting } from "./WireContext";
+
+/* ========================= TYPES ========================= */
+
+// export type Uuid = string;
+// export type Paper = any;
+// export type TitleBlock = any;
+// export type Polyline = any;
+// export type GraphText = any;
+// export type LocalLabel = any;
+// export type GlobalLabel = any;
+// export type RootPath = any;
+
+export type SchematicSymbol = {
+  id: string;
+  symbolId?: string;
+  position?: { x: number; y: number };
+  pins?: Array<{ id: string; x?: number; y?: number; net?: string }>;
+  raw?: any;
+};
+
+// export type LibSymbols = any;
+// export type Junction = any;
+// export type NoConnect = any;
+// export type BusEntry = any;
+// export type Bus = any;
+
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { ErcIssue, KicadSch } from "trackway-parser-wasm";
 import { useProject } from "@/hooks/useProject";
 import { DISABLE_AUTOSAVE } from "../constants";
 import { useSymbol } from "./SymbolContext";
+
 
 type KicadSchContextType = {
   kicad: KicadSch;
@@ -87,6 +120,9 @@ const anchorsFromPoints = (points: any[]) => {
 
 export const KicadSchProvider = ({ children }: any) => {
   const [wires, setWires] = useState<any[]>([]);
+
+  const {previewTracks:[], setPreviewTracks} = useRouting();
+
   const { placedSymbols, setPlacedSymbols } = useSymbol();
   const { currentProject, updateCurrentProjectFiles } = useProject();
 

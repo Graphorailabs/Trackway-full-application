@@ -74,7 +74,7 @@ export const SymbolProvider = ({ children }: any) => {
         setPlacedSymbols((prev) =>
           (prev || []).map((s: any) => ({
             ...s,
-            pins: (s.pins || []).map((p: any) => (pinIds.includes(p.id) ? { ...p, connected: false } : p)),
+           pins: (s.pins || []).map((p: any) => (pinIds.includes(p.id) ? { ...p, connected: false } : p)),
           }))
         );
       } catch (e) {

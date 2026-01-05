@@ -7,15 +7,16 @@ import SymbolPlacementTool from "./SymbolPlacementTool";
 import RoutingCanvas from "./wireCanvas";
 
 export const CanvasViewport = () => {
+
   return (
     <CameraViewport>
        <CanvasSurface>
          <BoardSheet titleBlock={useKicadSchSafe()?.kicad?.title_block ?? null} />
-      </CanvasSurface>
+       </CanvasSurface>
       <PlacedSymbolsRenderer />
       <SymbolPlacementTool />
       <RoutingCanvas />
     </CameraViewport>
   );
-}
 
+}
