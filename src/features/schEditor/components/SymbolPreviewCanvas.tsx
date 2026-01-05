@@ -108,11 +108,17 @@ export const SymbolPreviewCanvas = ({ symbolData, selected = false, ownerId, pre
     // `onPinClick`/`previewPins` handler is provided. For placed symbols the
     // canonical hit-circles in `PlacedSymbolsRenderer` dispatch world coords.
     const canAutoConnect = Boolean(onPinClick && Array.isArray(previewPins)) || ownerId === 'preview';
-    const [px_raw, py_raw, rot] = pin.at; const px = px_raw * SCALE; const py = py_raw * SCALE;
+    const [px_raw, py_raw, rot] = pin.at; 
+    const px = px_raw * SCALE; 
+    const py = py_raw * SCALE;
 
-    const PIN_LENGTH_MULTIPLIER = 1; const PIN_THICKNESS = 0.8; const len = (pin.length || 1) * SCALE * PIN_LENGTH_MULTIPLIER;
+    const PIN_LENGTH_MULTIPLIER = 1; 
+    const PIN_THICKNESS = 0.3; 
+    const len = (pin.length || 1) * SCALE * PIN_LENGTH_MULTIPLIER;
 
     let ix = px; let iy = py;
+    let ex = ix; let ey = iy;
+
     if (gfxBounds) {
       if (rot === 0) { ix = gfxBounds.minX; iy = py; }
       else if (rot === 180) { ix = gfxBounds.maxX; iy = py; }
@@ -120,7 +126,6 @@ export const SymbolPreviewCanvas = ({ symbolData, selected = false, ownerId, pre
       else if (rot === 270) { ix = px; iy = gfxBounds.minY; }
     }
 
-    let ex = ix; let ey = iy;
     if (gfxBounds) {
       if (rot === 0 || rot === 180) {
         if (ix === gfxBounds.minX) { ex = ix - len; } else { ex = ix + len; }
@@ -137,24 +142,41 @@ export const SymbolPreviewCanvas = ({ symbolData, selected = false, ownerId, pre
     }
 
     // Text placement logic (adapted from preview)
-    const NAME_INSIDE_PAD = 1.2; const NUMBER_OUTSIDE_PAD = 1.4; const NUM_INSIDE_X = 1.2;
+    const NAME_INSIDE_PAD = 1.2;
+     const NUMBER_OUTSIDE_PAD = 1.4; 
+     const NUM_INSIDE_X = 1.2;
     const PIN_NAME_FONT = 1.6; // mm (world units)
     const PIN_NUMBER_FONT = 1.2; // mm
     const TEXT_Y_OFF = Math.max(0.6, PIN_NAME_FONT * 0.3);
     let pinNumberX = ex; let pinNumberY: number;
     if (rot === 90) {
       pinNumberY = Math.max(iy, ey) + NUMBER_OUTSIDE_PAD;
-      const txt = String(pin.number?.[''] ?? ''); const estNumWidth = Math.max(8, txt.length * 6 * 0.6); pinNumberX = ex - estNumWidth / 2;
+      const txt = String(pin.number?.[''] ?? ''); 
+      const estNumWidth = Math.max(8, txt.length * 6 * 0.6); pinNumberX = ex - estNumWidth / 2;
       if (Array.isArray(pins)) {
-        const myX = ex; const group = pins.map((pp: any, j: number) => ({ pp, j })).filter((it: any) => it.pp && it.pp.at && it.pp.at[2] === 90).map((it: any) => ({ x: (it.pp.at[0] * SCALE), idx: it.j }));
+        const myX = ex; 
+        const group = pins.map((pp: any, j: number) => ({ pp, j })).filter((it: any) => it.pp && it.pp.at && it.pp.at[2] === 90).map((it: any) => ({ x: (it.pp.at[0] * SCALE), idx: it.j }));
         const nearby = group.filter((g: any) => Math.abs(g.x - myX) < 20).sort((a: any, b: any) => a.x - b.x);
-        if (nearby.length > 1) { const myPos = nearby.findIndex((n: any) => n.idx === idx); const spacing = 12; const center = (nearby.length - 1) / 2; const offset = (myPos - center) * spacing; pinNumberX += offset; }
+        if (nearby.length > 1) { 
+          const myPos = nearby.findIndex((n: any) => n.idx === idx); 
+          const spacing = 12; 
+          const center = (nearby.length - 1) / 2; 
+          const offset = (myPos - center) * spacing; pinNumberX += offset; 
+        }
       }
-    } else if (rot === 270) { pinNumberY = Math.min(iy, ey) - NUMBER_OUTSIDE_PAD + 10; } else { const topY = Math.min(iy, ey); pinNumberY = topY - NUMBER_OUTSIDE_PAD; }
-    if (rot === 0) { pinNumberX = ex - NUM_INSIDE_X + 10; } else if (rot === 180) { pinNumberX = ex + NUM_INSIDE_X - 19; }
+    } else if (rot === 270) { 
+      pinNumberY = Math.min(iy, ey) - NUMBER_OUTSIDE_PAD + (2 * SCALE);
+     } else { 
+      const topY = Math.min(iy, ey); 
+      pinNumberY = topY - NUMBER_OUTSIDE_PAD; 
+    } if (rot === 0) {
+       pinNumberX = ex - NUM_INSIDE_X + (2 * SCALE); 
+      } else if (rot === 180) {
+         pinNumberX = ex + NUM_INSIDE_X - (3 * SCALE); 
+    }
 
-    let pinNameX = ix; let pinNameY = iy; let nameAlign: 'left' | 'center' | 'right' = 'left'; let pinNameRotation = 0; let pinNameOffset: { x?: number; y?: number } = {};
-    
+    let pinNameX = ix; let pinNameY = iy; let nameAlign: 'left' | 'center' | 'right' = 'left'; 
+    let pinNameRotation = 0; let pinNameOffset: { x?: number; y?: number } = {};
 
     const parsePinName = (raw: any) => {
       const s = (raw?.[''] ?? raw ?? '').toString(); let inverted = false; let out = s.trim(); const mInv = out.match(/^~\{(.+)\}$/); if (mInv) { inverted = true; out = mInv[1]; } out = out.replace(/([A-Za-z])_\{([^}]+)\}/g, (_: any, a: string, b: string) => a + b.toLowerCase()); out = out.replace(/^\{(.+)\}$/, "$1"); if (out.length > 0) out = out.charAt(0).toUpperCase() + out.slice(1); return { text: out, inverted };
@@ -163,12 +185,32 @@ export const SymbolPreviewCanvas = ({ symbolData, selected = false, ownerId, pre
     if (rot === 0 || rot === 180) {
       const centerX = bbox ? (bbox.minX + bbox.maxX) / 2 : px;
       if (ix > centerX) {
-        const txt = String(parsePinName(pin.name).text ?? ''); const estWidth = Math.max(4, txt.length * (PIN_NAME_FONT * 0.6)); pinNameX = ix - NAME_INSIDE_PAD - estWidth; pinNameY = iy - TEXT_Y_OFF; nameAlign = 'left';
-      } else { pinNameX = ix + NAME_INSIDE_PAD - 4; pinNameY = iy - 4; nameAlign = 'left'; }
+        const txt = String(parsePinName(pin.name).text ?? ''); 
+        const estWidth = Math.max(4, txt.length * (PIN_NAME_FONT * 0.6)); 
+        pinNameX = ix - NAME_INSIDE_PAD - estWidth; 
+        pinNameY = iy - TEXT_Y_OFF; 
+        nameAlign = 'left';
+      } else { 
+        pinNameX = ix + NAME_INSIDE_PAD -  NUM_INSIDE_X; 
+        pinNameY = iy - TEXT_Y_OFF; 
+        nameAlign = 'left'; 
+      }
     } else if (rot === 90) {
-      pinNameRotation = -90; nameAlign = 'center'; const txt = String(pin.name?.[''] ?? ''); const estWidth = Math.max(4, txt.length * (PIN_NAME_FONT * 0.6)); const estHeight = PIN_NAME_FONT * 1.2; pinNameOffset = { x: estWidth / 2, y: estHeight / 2 }; pinNameX = ix - NAME_INSIDE_PAD + 1.2; pinNameY = iy - NAME_INSIDE_PAD - TEXT_Y_OFF;
+      pinNameRotation = -90; nameAlign = 'center'; 
+      const txt = String(pin.name?.[''] ?? ''); 
+      const estWidth = Math.max(4, txt.length * (PIN_NAME_FONT * 0.6)); 
+      const estHeight = PIN_NAME_FONT * 1.2; 
+      pinNameOffset = { x: estWidth / 2, y: estHeight / 2 }; 
+      pinNameX = ix - NAME_INSIDE_PAD + 1.2; 
+      pinNameY = iy - NAME_INSIDE_PAD - TEXT_Y_OFF;
     } else if (rot === 270) {
-      pinNameRotation = -90; nameAlign = 'center'; const txt = String(pin.name?.[''] ?? ''); const estWidth = Math.max(4, txt.length * (PIN_NAME_FONT * 0.6)); const estHeight = PIN_NAME_FONT * 1.2; pinNameOffset = { x: estWidth / 2, y: estHeight / 2 }; pinNameX = ix - NAME_INSIDE_PAD + 1.2; pinNameY = iy + NAME_INSIDE_PAD + TEXT_Y_OFF;
+      pinNameRotation = -90; nameAlign = 'center'; 
+      const txt = String(pin.name?.[''] ?? ''); 
+      const estWidth = Math.max(4, txt.length * (PIN_NAME_FONT * 0.6)); 
+      const estHeight = PIN_NAME_FONT * 1.2; 
+      pinNameOffset = { x: estWidth / 2, y: estHeight / 2 }; 
+      pinNameX = ix - NAME_INSIDE_PAD + 1.2; 
+      pinNameY = iy + NAME_INSIDE_PAD + TEXT_Y_OFF;
     }
 
     return (
@@ -214,9 +256,9 @@ export const SymbolPreviewCanvas = ({ symbolData, selected = false, ownerId, pre
             x={ex}
             y={ey}
             radius={0.9}
-            fill="#ffffff"
+            fill="transparent"
             stroke="#c2102a"
-            strokeWidth={0.8}
+            strokeWidth={0.3}
             listening={canAutoConnect && (Boolean(onPinClick && Array.isArray(previewPins)) || Boolean(routing && routing.isDrawing))}
             onClick={(e: any) => {
               try { e.cancelBubble = true; } catch (err) {}
@@ -251,7 +293,7 @@ export const SymbolPreviewCanvas = ({ symbolData, selected = false, ownerId, pre
     if (!selected) return null;
     const box = bbox || gfxBounds;
     if (!box) return null;
-    const padding = 1.5; // mm; extra space around symbol
+    const padding = 1; // mm; extra space around symbol
     const x = box.minX - padding;
     const y = box.minY - padding;
     const w = (box.maxX - box.minX) + padding * 2;

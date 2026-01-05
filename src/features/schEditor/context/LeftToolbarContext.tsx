@@ -7,7 +7,7 @@ import {
 } from "react";
 import { useRouting } from "./WireContext";
 
-export type Tool = "none" | "wire" | "component" | "symbol";
+export type Tool = "none" | "wire" | "component" | "symbol" | "save";
 
 export type ComponentKey =
   | "resistor"

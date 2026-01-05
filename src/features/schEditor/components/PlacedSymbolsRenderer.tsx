@@ -168,8 +168,8 @@ export default function PlacedSymbolsRenderer() {
   };
 
   // Hovered pin state for rendering highlight
-  const [hoveredPin, setHoveredPin] = useState<{ x: number; y: number; pinId?: string } | null>(null);
-
+  const [hoveredPin, setHoveredPin] = useState<{ x: number; y: number;  pinId?: string } | null>(null);
+   console.log("[PlacedSymbolsRenderer] hoveredPin ->", hoveredPin);
   useEffect(() => {
     // short-lived debug: dump a sample of livePinPositionsRef.current for 10s
     try {
@@ -191,6 +191,7 @@ export default function PlacedSymbolsRenderer() {
         // placedSymbols diagnostic suppressed
       } catch (err) { /* suppressed */ }
       const ref = (livePinPositionsRef as any);
+      console.log
       if (ref && ref.current && Array.isArray(placedSymbols)) {
         let total = 0;
         for (const placed of placedSymbols) {
@@ -252,7 +253,13 @@ export default function PlacedSymbolsRenderer() {
             const screenY = viewportCenter.y + (p.y - camera.y) * zoom;
             const dx = screenX - local.x; const dy = screenY - local.y;
             const dpx = Math.hypot(dx, dy);
-              if (dpx < bestDistPx) { bestDistPx = dpx; best = { x: p.x, y: p.y, pinId: pid }; }
+              if (dpx < bestDistPx) { 
+                  bestDistPx = dpx;
+                  best = { 
+                  x: p.x, y: p.y, 
+                  pinId: pid
+                };
+               }
           }
         }
           if (lpCount === 0) {
@@ -309,6 +316,7 @@ export default function PlacedSymbolsRenderer() {
     window.addEventListener('pointerdown', onPointerDown, { passive: false });
     return () => window.removeEventListener('pointerdown', onPointerDown);
   }, [placedSymbols, screenToWorld, setSelectedSymbol]);
+
 
   return (
     <div style={{ position: 'absolute', inset: 0, pointerEvents: 'auto' }}>
@@ -420,7 +428,9 @@ export default function PlacedSymbolsRenderer() {
                       for (const p of pins) {
                         const ox = p.offsetX ?? ((p.x ?? 0) - (placed.position?.x ?? 0));
                         const oy = p.offsetY ?? ((p.y ?? 0) - (placed.position?.y ?? 0));
-                        ref.current[placed.id][p.id] = { x: nx + ox, y: ny + oy };
+                        ref.current[placed.id][p.id] = { 
+                          x: nx + ox, y: ny + oy,
+                        };
                       }
                     }
                   } catch (err) {}
@@ -518,6 +528,8 @@ export default function PlacedSymbolsRenderer() {
             );
           })}
           {/* Pin hover highlight (render on top of all placed symbols) */}
+         
+          
           {hoveredPin && (
             <Circle
               x={hoveredPin.x}

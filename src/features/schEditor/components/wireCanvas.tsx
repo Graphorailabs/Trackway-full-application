@@ -43,6 +43,8 @@ export interface Wire {
 export function RoutingCanvas({ tracks }: { tracks?: WireSegment[] }) {
   // Draw finalized track segments (if provided) and routing preview from context
   const routing = useRouting() as any;
+  // const { selectedWireId, setSelectedWireId, removeWire } = useRouting();
+
   const { previewTracks, previewIncompatibleWithPad: _previewIncompatibleWithPad, setPreviewTracks, isDrawing: routingIsDrawing, startDrawing, stopDrawing, prepareWorker: _prepareWorker, postWorkerMessage, selectedWireId, setSelectedWireId, removeWire } = routing;
   const { camera, zoom, viewportCenter, screenToWorld } = useCameraViewport();
   const { tool } = useTool();
@@ -851,7 +853,7 @@ export function RoutingCanvas({ tracks }: { tracks?: WireSegment[] }) {
               key={`local-${i}`}
               points={[seg.start.x, seg.start.y, seg.end.x, seg.end.y]}
               stroke="#06a13fff" /* green */
-              strokeWidth={seg.width}
+              strokeWidth={0.5}
               lineCap="round"
               lineJoin="round"
               listening={false}
@@ -884,7 +886,7 @@ export function RoutingCanvas({ tracks }: { tracks?: WireSegment[] }) {
                 key={`preview-${i}`}
                 points={[line.start.x, line.start.y, line.end.x, line.end.y]}
                 stroke={stroke}
-                strokeWidth={1.5}
+                strokeWidth={0.5}
                 opacity={opacity}
                 lineCap="round"
                 lineJoin="round"

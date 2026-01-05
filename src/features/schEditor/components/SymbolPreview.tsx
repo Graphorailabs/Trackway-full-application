@@ -478,7 +478,7 @@ export const SymbolPreview = ({data, visible} : any) => {
     // place the pin number outside the symbol for down-facing pins
     if (rot === 90) {
       // down-facing: place number below the outer end
-      pinNumberY = Math.max(iy, ey) + NUMBER_OUTSIDE_PAD;
+      pinNumberY = Math.max(iy, ey) + NUMBER_OUTSIDE_PAD + (-2 * SCALE);
     
       // center number horizontally on the pin tip (reduce overlap)
       const txt = String(pin.number?.[''] ?? '');
@@ -505,7 +505,7 @@ export const SymbolPreview = ({data, visible} : any) => {
     } else if (rot === 270) {
       // up-facing: place number above the outer end
 
-      pinNumberY = Math.min(iy, ey) - S_NUMBER_OUTSIDE_PAD + (10 * SCALE);
+      pinNumberY = Math.min(iy, ey) - S_NUMBER_OUTSIDE_PAD + (2 * SCALE);
     } else {
       // left/right: place number above the pin line
       const topY = Math.min(iy, ey);
@@ -513,12 +513,13 @@ export const SymbolPreview = ({data, visible} : any) => {
     }
 
      if (rot === 0) {
-      pinNumberX = ex - S_NUM_INSIDE_X + (10 * SCALE);
+      pinNumberX = ex - S_NUM_INSIDE_X + (2 * SCALE);
     } else if (rot === 180) {
       // left-side pins: nudge the number a few pixels to the right so it sits
       // just inside the symbol and avoids overlapping the pin line.
-      pinNumberX = ex + S_NUM_INSIDE_X - (19 * SCALE);
+      pinNumberX = ex + S_NUM_INSIDE_X - (3 * SCALE);
     }
+
     let pinNameX = ix;
     let pinNameY = iy;
     let nameAlign: 'left' | 'center' | 'right' = 'left';

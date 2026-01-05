@@ -1,15 +1,14 @@
 import { createContext, useContext, useMemo, useEffect, useRef, useState } from "react";
-    import type { KicadSch } from "trackway-parser-wasm";
+import type { KicadSch } from "trackway-parser-wasm";
 import { useSymbol } from "./SymbolContext";
 import { useProject } from "@/hooks/useProject";
 import type { ErcIssue, PinInstance, LocationInfo } from "trackway-parser-wasm";
 
+/* ========================= TYPES ========================= */
 
-// Minimal helper types for parts of the KiCad schema we care about
 export type Uuid = string;
 export type Paper = any;
 export type TitleBlock = any;
-
 export type Polyline = any;
 export type GraphText = any;
 export type LocalLabel = any;
@@ -30,9 +29,6 @@ export type NoConnect = any;
 export type BusEntry = any;
 export type Bus = any;
 
-
- 
-
 type KicadSchContextType = {
   kicad: KicadSch;
   runErc: () => ErcIssue[];
@@ -40,565 +36,192 @@ type KicadSchContextType = {
 
 const KicadSchContext = createContext<KicadSchContextType | null>(null);
 
+/* ========================= PROVIDER ========================= */
+
 export const KicadSchProvider = ({ children }: any) => {
   const [wires, setWires] = useState<any[]>([]);
   const { placedSymbols, livePinPositionsRef, setPlacedSymbols } = useSymbol();
   const { currentProject, updateCurrentProjectFiles } = useProject();
 
-  // Refs to hold the latest state so event handlers can access up-to-date
-  // values without needing to re-register listeners on every change.
+  /* ---------- refs for latest state ---------- */
+
   const placedSymbolsRef = useRef<any[]>(placedSymbols || []);
   const wiresRef = useRef<any[]>(wires || []);
   useEffect(() => { placedSymbolsRef.current = placedSymbols || []; }, [placedSymbols]);
   useEffect(() => { wiresRef.current = wires || []; }, [wires]);
 
-  // When a project is opened, try to rehydrate editor state from a companion
-  // `.trackway.json` file that the save routine writes. Run this only once per
-  // project id to avoid overwriting live edits when project files change
-  // (e.g. when saving updates currentProject.files). We track which project
-  // ids we've already rehydrated in `rehydratedProjectIds`.
+  /* ---------- rehydration guard ---------- */
+
+  const isRehydratedRef = useRef(false);
   const rehydratedProjectIds = useRef<Record<string, boolean>>({});
-  const skipInitialSaveRef = useRef<boolean>(false);
-  const LOCAL_AUTOSAVE_KEY = 'trackway.editor.autosave';
+
+  /* ---------- publish wires ---------- */
+
+  useEffect(() => {
+    try {
+      window.dispatchEvent(new CustomEvent("set-wires", { detail: wires || [] }));
+    } catch {}
+  }, [wires]);
+
+  /* ========================= AUTOSAVE ========================= */
+
+  const saveTimerRef = useRef<number | null>(null);
+
+  const doSaveTrackway = async () => {
+    if (!currentProject?.id) return;
+    if (!isRehydratedRef.current) return;
+
+    const payload = {
+      placedSymbols: placedSymbolsRef.current || [],
+      wires: wiresRef.current || [],
+    };
+
+    const fileName = `${currentProject.id}.trackway.json`;
+    const files: Record<string, string> = {
+      [fileName]: JSON.stringify(payload, null, 2),
+    };
+
+    try {
+      await updateCurrentProjectFiles(files);
+    } catch (e) {
+      console.warn("[KicadSchProvider] failed to save", e);
+    }
+  };
+
+  const scheduleSave = () => {
+    if (!isRehydratedRef.current) return;
+
+    if (saveTimerRef.current) {
+      window.clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+
+    saveTimerRef.current = window.setTimeout(() => {
+      void doSaveTrackway();
+      saveTimerRef.current = null;
+    }, 250) as unknown as number;
+  };
+
+  /* ========================= REHYDRATE ========================= */
+
   useEffect(() => {
     const pid = currentProject?.id;
     if (!pid) return;
-    if (rehydratedProjectIds.current[pid]) {
-      // already rehydrated this project, skip
-      return;
-    }
-   
+    if (rehydratedProjectIds.current[pid]) return;
+
     const files = currentProject.files ?? {};
-    const companionPath = Object.keys(files).find((p) => p.toLowerCase().endsWith(".trackway.json"));
-    if (!companionPath) return;
-    try {
-      const raw = files[companionPath];
-      if (!raw) return;
-      const parsed = JSON.parse(raw);
-      const placedCount = Array.isArray(parsed.placedSymbols) ? parsed.placedSymbols.length : 0;
-      const wireCount = Array.isArray(parsed.wires) ? parsed.wires.length : 0;
-      // apply only when the parsed arrays exist
-      if (Array.isArray(parsed.placedSymbols) && typeof setPlacedSymbols === 'function') {
-        setPlacedSymbols(parsed.placedSymbols);
-      }
-      if (Array.isArray(parsed.wires) && typeof setWires === 'function') {
-        setWires(parsed.wires);
-      } 
-      // Avoid immediately writing back what we just loaded during rehydration
-      skipInitialSaveRef.current = true;
-      rehydratedProjectIds.current[pid] = true;
-      console.debug(`[KicadSchProvider] rehydrated editor state from ${companionPath}`, { placedCount, wireCount });
-    } catch (e) {
-      console.warn("Failed to rehydrate editor state from companion file", e);
-    }
-    // only run when project id changes
-  }, [currentProject?.id, setPlacedSymbols, setWires]);
+    const companionPath = Object.keys(files).find(p =>
+      p.toLowerCase().endsWith(".trackway.json")
+    );
 
-  // Autosave placed symbols and wires into the current project's companion
-  // file. Debounced so rapid edits don't thrash storage; skip the immediate
-  // save that follows rehydration.
-  useEffect(() => {
-    console.debug('[KicadSchProvider] autosave effect triggered', { projectId: currentProject?.id ?? null, placedCount: (placedSymbols||[]).length, wireCount: (wires||[]).length, skipInitial: skipInitialSaveRef.current });
-    if (skipInitialSaveRef.current) {
-      // clear the flag and do not save the initial rehydration values
-      console.debug('[KicadSchProvider] skipping autosave due to initial rehydration flag');
-      skipInitialSaveRef.current = false;
+    if (!companionPath) {
+      rehydratedProjectIds.current[pid] = true;
+      isRehydratedRef.current = true;
       return;
     }
 
-    const timer = setTimeout(async () => {
-      try {
-        const payload = { placedSymbols: placedSymbols || [], wires: wires || [] };
-        console.debug('[KicadSchProvider] autosave payload prepared', { placedCount: payload.placedSymbols.length, wireCount: payload.wires.length });
-        if (currentProject && typeof updateCurrentProjectFiles === 'function') {
-          const files = { ...(currentProject.files || {}) } as any;
-          const fileName = `editor.trackway.json`;
-          files[fileName] = JSON.stringify(payload, null, 2);
-          console.debug('[KicadSchProvider] writing to project files', { projectId: currentProject.id, fileName });
-          await updateCurrentProjectFiles(files);
-          console.debug('[KicadSchProvider] autosaved editor state to', fileName);
-        } else if (typeof window !== 'undefined' && window.localStorage) {
-          // no active project: write to localStorage as a local autosave
-          try { window.localStorage.setItem(LOCAL_AUTOSAVE_KEY, JSON.stringify(payload)); console.debug('[KicadSchProvider] autosaved editor state to localStorage', { key: LOCAL_AUTOSAVE_KEY }); } catch (err) { console.warn('[KicadSchProvider] localStorage autosave failed', err); }
-        }
-      } catch (err) {
-        console.warn('[KicadSchProvider] autosave failed', err);
-      }
-    }, 1000);
-
-    return () => clearTimeout(timer);
-  }, [placedSymbols, wires, currentProject?.id, updateCurrentProjectFiles]);
-
-  // If no project is loaded, try to restore from a local autosave in localStorage
-  useEffect(() => {
-    if (currentProject) return; // only run when no project selected
-    if (typeof window === 'undefined' || !window.localStorage) return;
     try {
-      const raw = window.localStorage.getItem(LOCAL_AUTOSAVE_KEY);
-      if (!raw) return;
-      const parsed = JSON.parse(raw);
-      if (parsed) {
-        if (Array.isArray(parsed.placedSymbols) && typeof setPlacedSymbols === 'function') setPlacedSymbols(parsed.placedSymbols);
-        if (Array.isArray(parsed.wires) && typeof setWires === 'function') setWires(parsed.wires);
-        console.debug('[KicadSchProvider] restored editor state from localStorage autosave');
-        // avoid immediately persisting this restore back
-        skipInitialSaveRef.current = true;
-      }
-    } catch (err) {
-      // ignore parse errors
-    }
-  }, [currentProject]);
-
-  // Keep placed symbol pin `connected` flags in sync with the wires array.
-  // This ensures ERC and saving reflect actual connections.
-  useEffect(() => {
-    try {
-      const connectedPinIds = new Set<string>();
-      (wires || []).forEach((w: any) => {
-        (w.points || []).forEach((p: any) => { if (p && p.pinId) connectedPinIds.add(p.pinId); });
-      });
-      if (typeof setPlacedSymbols === 'function') {
-        setPlacedSymbols((placedSymbols || []).map((s: any) => ({
-          ...s,
-          pins: (s.pins || []).map((p: any) => ({ ...p, connected: connectedPinIds.has(p.id) }))
-        })));
-      }
+      const parsed = JSON.parse(files[companionPath]);
+      if (Array.isArray(parsed.placedSymbols)) setPlacedSymbols(parsed.placedSymbols);
+      if (Array.isArray(parsed.wires)) setWires(parsed.wires);
     } catch (e) {
-      // ignore
+      console.warn("Rehydrate failed", e);
     }
-  }, [wires, setPlacedSymbols]);
 
-  // Listen for global wire events so the provider can keep its `wires` state
-  // in sync with editor actions. This also allows other parts of the app to
-  // dispatch simple events to update/save the canonical wire list.
+    rehydratedProjectIds.current[pid] = true;
+    isRehydratedRef.current = true;
+  }, [currentProject?.id, setPlacedSymbols]);
+
+  /* ========================= WIRE EVENTS ========================= */
+
   useEffect(() => {
-    // Allow external triggers to save the editor's placed symbol and wire
-    // state into the current project's companion `.trackway.json` file.
-    const onSave = async (_ev: Event) => {
-      try {
-        const payload = { placedSymbols: placedSymbolsRef.current || [], wires: wiresRef.current || [] };
-        const fileName = `editor.trackway.json`;
-        if (currentProject && typeof updateCurrentProjectFiles === 'function') {
-          try {
-            const files = { ...(currentProject.files || {}) } as any;
-            files[fileName] = JSON.stringify(payload, null, 2);
-            await updateCurrentProjectFiles(files);
-            console.debug('[KicadSchProvider] saved editor state to', fileName, { projectId: currentProject.id });
-            return;
-          } catch (err) {
-            console.warn('[KicadSchProvider] failed to save editor state to project files', err);
-            // fallthrough to localStorage fallback
-          }
-        }
-
-        // Fallback: write to localStorage so the state is not lost on refresh
-        if (typeof window !== 'undefined' && window.localStorage) {
-          try {
-            window.localStorage.setItem(LOCAL_AUTOSAVE_KEY, JSON.stringify(payload));
-            console.debug('[KicadSchProvider] saved editor state to localStorage', { key: LOCAL_AUTOSAVE_KEY });
-            return;
-          } catch (err) {
-            console.warn('[KicadSchProvider] failed to save editor state to localStorage', err);
-          }
-        }
-      } catch (err) {
-        console.warn('[KicadSchProvider] save handler failed', err);
-      }
-    };
-    window.addEventListener('save-trackway', onSave as EventListener);
-
-    // Ensure we persist a final snapshot to localStorage on unload. IndexedDB
-    // operations are async and not reliable during unload, so we always write
-    // a JSON snapshot to localStorage as a last-resort recovery.
-    const onBeforeUnload = () => {
-      try {
-        const payload = { placedSymbols: placedSymbolsRef.current || [], wires: wiresRef.current || [] };
-        if (typeof window !== 'undefined' && window.localStorage) {
-          window.localStorage.setItem(LOCAL_AUTOSAVE_KEY, JSON.stringify(payload));
-          console.debug('[KicadSchProvider] beforeunload: wrote localStorage autosave');
-        }
-      } catch (e) {
-        // ignore
-      }
-    };
-    window.addEventListener('beforeunload', onBeforeUnload as EventListener);
-    const onWireCommitted = (ev: Event) => {
-      const detail: any = (ev as CustomEvent).detail || {};
-      const wire = detail?.wire;
-      if (!wire) return;
-      setWires((prev: any[]) => {
-        const idx = (prev || []).findIndex((w: any) => w.id === wire.id);
-        if (idx >= 0) {
-          const next = prev.slice(); next[idx] = wire; return next;
-        }
-        return [...(prev || []), wire];
-      });
-      // schedule immediate save so project files reflect committed wire
-      setTimeout(() => { try { window.dispatchEvent(new Event('save-trackway')); } catch (e) {} }, 0);
-    };
-
-    const onWireRemovedEvent = (ev: Event) => {
-      const detail: any = (ev as CustomEvent).detail || {};
-      const wireId = detail?.wireId;
-      const pinIds: string[] = Array.isArray(detail?.pinIds) ? detail.pinIds : [];
-      if (wireId) {
-        setWires((prev: any[]) => (prev || []).filter((w: any) => w.id !== wireId));
-        setTimeout(() => { try { window.dispatchEvent(new Event('save-trackway')); } catch (e) {} }, 0);
-      } else if (pinIds.length > 0) {
-        setWires((prev: any[]) => (prev || []).filter((w: any) => {
-          const pts = w.points || [];
-          return !pts.some((p: any) => p && p.pinId && pinIds.includes(p.pinId));
-        }));
-        setTimeout(() => { try { window.dispatchEvent(new Event('save-trackway')); } catch (e) {} }, 0);
-      }
-      // ensure symbol pins are cleared (SymbolContext also listens, but keep provider in sync)
-      if (pinIds.length > 0 && typeof setPlacedSymbols === 'function') {
-        setPlacedSymbols((placedSymbols || []).map((s: any) => ({
-          ...s,
-          pins: (s.pins || []).map((p: any) => (pinIds.includes(p.id) ? { ...p, connected: false } : p))
-        })));
-      }
-    };
-
     const onSetWires = (ev: Event) => {
-      const detail: any = (ev as CustomEvent).detail || {};
-      const newWires = Array.isArray(detail?.wires) ? detail.wires : undefined;
-      if (newWires) setWires(newWires);
-      setTimeout(() => { try { window.dispatchEvent(new Event('save-trackway')); } catch (e) {} }, 0);
-    };
-
-    window.addEventListener('wire-committed', onWireCommitted as EventListener);
-    window.addEventListener('wire-added', onWireCommitted as EventListener);
-    window.addEventListener('wire-removed', onWireRemovedEvent as EventListener);
-    window.addEventListener('set-wires', onSetWires as EventListener);
-
-    // Expose a debug helper so developers can force a save from the browser
-    // console: `await window.__trackway_saveNow()` which will return a result
-    // object and print debug logs. This helps diagnose why autosave may be
-    // failing in a user's environment.
-    // @ts-ignore
-    (window as any).__trackway_saveNow = async () => {
-      try {
-        await onSave(new Event('save-trackway'));
-        console.debug('[KicadSchProvider] __trackway_saveNow succeeded');
-        return { ok: true };
-      } catch (err) {
-        console.warn('[KicadSchProvider] __trackway_saveNow failed', err);
-        return { ok: false, error: err instanceof Error ? err.message : String(err) };
+      const list = (ev as CustomEvent).detail;
+      if (Array.isArray(list)) {
+        setWires(list);
+        scheduleSave();
       }
     };
+
+    const onWireCommit = (ev: Event) => {
+      const wire = (ev as CustomEvent).detail?.wire ?? (ev as CustomEvent).detail;
+      if (!wire) return;
+
+      setWires(prev => {
+        const arr = [...prev];
+        const i = arr.findIndex(w => (w.id ?? w.uuid) === (wire.id ?? wire.uuid));
+        if (i >= 0) arr[i] = wire;
+        else arr.push(wire);
+        return arr;
+      });
+      scheduleSave();
+    };
+
+    const onWireRemoved = (ev: Event) => {
+      const wid = (ev as CustomEvent).detail?.wireId;
+      if (!wid) return;
+      setWires(prev => prev.filter(w => (w.id ?? w.uuid) !== wid));
+      scheduleSave();
+    };
+
+    window.addEventListener("set-wires", onSetWires as EventListener);
+    window.addEventListener("wire-added", onWireCommit as EventListener);
+    window.addEventListener("wire-committed", onWireCommit as EventListener);
+    window.addEventListener("wire-removed", onWireRemoved as EventListener);
 
     return () => {
-      window.removeEventListener('wire-committed', onWireCommitted as EventListener);
-      window.removeEventListener('wire-added', onWireCommitted as EventListener);
-      window.removeEventListener('wire-removed', onWireRemovedEvent as EventListener);
-      window.removeEventListener('set-wires', onSetWires as EventListener);
-      window.removeEventListener('save-trackway', onSave as EventListener);
-      window.removeEventListener('beforeunload', onBeforeUnload as EventListener);
-      // cleanup debug helper
-      try { // avoid exceptions in non-browser test environments
-        // @ts-ignore
-        if ((window as any).__trackway_saveNow) delete (window as any).__trackway_saveNow;
-      } catch (e) {}
+      window.removeEventListener("set-wires", onSetWires as EventListener);
+      window.removeEventListener("wire-added", onWireCommit as EventListener);
+      window.removeEventListener("wire-committed", onWireCommit as EventListener);
+      window.removeEventListener("wire-removed", onWireRemoved as EventListener);
     };
-  }, [setWires, setPlacedSymbols]);
+  }, []);
 
+  /* ========================= SYMBOL AUTOSAVE ========================= */
 
-  const stableUuidRef = useRef<string>(crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2));
+  useEffect(() => {
+    if (!isRehydratedRef.current) return;
+    if (!currentProject?.id) return;
+    scheduleSave();
+  }, [placedSymbols]);
+
+  /* ========================= KICAD SCHEMA ========================= */
+
+  const stableUuidRef = useRef<string>(
+    crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2)
+  );
 
   const kicad = useMemo<KicadSch>(() => {
-    // Build KiCad-compatible symbol instances (ensure pin `number` present)
-    const symbols: any[] = placedSymbols.map((p: any) => {
-      const pos = p.position ?? p.pos ?? { x: p.x ?? 0, y: p.y ?? 0 };
-      const libId = p.symbolId ?? p.symbolData?.id ?? p.symbolData?.lib_id ?? String(p.id);
+    const symbols = placedSymbols.map((p: any) => ({
+      lib_id: p.symbolId ?? p.id,
+      at: [p.position?.x ?? 0, p.position?.y ?? 0, 0],
+      uuid: p.id,
+      pins: (p.pins || []).map((pp: any, i: number) => ({
+        number: String(i + 1),
+        uuid: pp.id,
+      })),
+    }));
 
-      // flatten unit pin definitions from the original symbol data
-      const units = Array.isArray(p.symbolData) ? p.symbolData : p.symbolData?.unit ?? p.symbolData ?? [];
-      const flattenedPinDefs: any[] = [];
-      if (Array.isArray(units)) {
-        units.forEach((u: any) => {
-          if (Array.isArray(u.pin)) flattenedPinDefs.push(...u.pin);
-        });
-      }
-
-      // placed.pins corresponds to the visual placed pins in the same order
-      const instancePins = (p.pins || []).map((placedPin: any, idx: number) => {
-        const def = flattenedPinDefs[idx] ?? null;
-        let numberStr = "";
-        try {
-          if (def?.number) {
-            if (typeof def.number === "string") numberStr = def.number;
-            else if (def.number[""]) numberStr = def.number[""];
-            else numberStr = String(def.number);
-          }
-        } catch (e) {
-          numberStr = "";
-        }
-        if (!numberStr) numberStr = String(idx + 1);
-        return { number: numberStr, uuid: placedPin.id };
-      });
-
-      return {
-        lib_id: libId,
-        at: [pos.x ?? 0, pos.y ?? 0, 0],
-        uuid: p.id,
-        pins: instancePins,
-      };
-    });
-  //  console.log("kicad symbols:", symbols);
-
-    // Convert internal wire representation to the KiCad-friendly shape
-    const kicadWires = (wires || []).map((w: any) => {
-      const xy: [number, number][] = (w.points || []).map((p: any) => [p.x ?? 0, p.y ?? 0]);
-      return {
-        pts: { xy },
-        // minimal stroke to satisfy parser expectations
-        stroke: { width: 1, type: "solid" as any },
-        uuid: w.id,
-      };
-    });
+    const kicadWires = wires.map((w: any) => ({
+      pts: { xy: w.points.map((p: any) => [p.x, p.y]) },
+      stroke: { width: 1, type: "solid" as any },
+      uuid: w.id,
+    }));
 
     return {
       version: 20220414,
       generator: "trackway-web",
-      // Use a stable uuid for this provider instance so repeated renders
-      // (or useMemo recalculations) don't produce spurious changes.
       uuid: stableUuidRef.current,
-      wire: kicadWires,
       symbol: symbols as any,
+      wire: kicadWires,
     } as KicadSch;
-  }, [wires, placedSymbols, livePinPositionsRef]);
+  }, [placedSymbols, wires]);
+
+  /* ========================= ERC ========================= */
 
   const runErc = (): ErcIssue[] => {
-    const issues: ErcIssue[] = [];
-
-    console.log("Running ERC...");
-
-    // helper: given a pinId find placed symbol and return friendly info
-    const describePin = (pinId: string) => {
-      const sym = placedSymbols.find((s: any) => (s.pins || []).some((pp: any) => pp.id === pinId));
-      if (!sym) return null;
-      const pinIndex = (sym.pins || []).findIndex((pp: any) => pp.id === pinId);
-      const units = Array.isArray(sym.symbolData) ? sym.symbolData : sym.symbolData?.unit ?? sym.symbolData;
-      const pinDefs: any[] = [];
-      if (Array.isArray(units)) {
-        units.forEach((u: any) => {
-          if (Array.isArray(u?.pin)) u.pin.forEach((pd: any) => pinDefs.push(pd));
-        });
-      }
-      const pinDef = pinDefs[pinIndex] || null;
-      // pin name (display) — try multiple shapes
-      const pinName = pinDef?.name ? (typeof pinDef.name === "string" ? pinDef.name : pinDef.name[""] ?? "") : "";
-      // pin number
-      let pinNumber = "";
-      try {
-        if (pinDef?.number) {
-          if (typeof pinDef.number === "string") pinNumber = pinDef.number;
-          else if (pinDef.number[""]) pinNumber = pinDef.number[""];
-          else pinNumber = String(pinDef.number);
-        }
-      } catch (e) {
-        pinNumber = "";
-      }
-
-      // friendly electrical type
-      const mapHumanType = (t: any) => {
-        if (!t) return "Passive";
-        const tt = String(t).toLowerCase();
-        if (tt.includes("power")) return "Power input";
-        if (tt.includes("input")) return "Input";
-        if (tt.includes("output")) return "Output";
-        if (tt.includes("bidir") || tt.includes("bidirectional")) return "Bidirectional";
-        if (tt.includes("tri")) return "Tristate";
-        return "Passive";
-      };
-
-      const humanType = mapHumanType(pinDef?.electrical_type ?? pinDef?.electricalType ?? pinDef?.type);
-
-      return {
-        symbolName: sym.symbolId ?? sym.id ?? "",
-        pinNumber: pinNumber || String(pinIndex + 1),
-        pinName: pinName || pinNumber || String(pinIndex + 1),
-        humanType,
-      };
-    };
-
-    // 1) Floating wires: wires that have no connected points (no pinId on any point)
-    wires.forEach((w) => {
-      const anyConnected = w.points.some((p: any) => !!p.pinId || p.connected);
-      // collect any pin ids present on the wire (for more informative messages)
-      const pinIds = Array.from(new Set(w.points.map((p: any) => p.pinId).filter(Boolean)));
-      if (!anyConnected) {
-        let message = "Floating wire (no connected pins)";
-        if (pinIds.length > 0) {
-          const parts = pinIds.map((pid: any) => {
-            const d = describePin(pid);
-            if (!d) return pid;
-            return `${d.symbolName} Pin ${d.pinNumber} [${d.pinName}, ${d.humanType}]`;
-          });
-          message = `Floating wire (connected to pin(s): ${parts.join("; ")})`;
-        }
-
-        const issue: ErcIssue = {
-          code: "UNCONNECTED_NET",
-          severity: "WARNING",
-          message,
-          net_id: null,
-          net_name: null,
-          pins: [] as PinInstance[],
-          location_hints: [] as LocationInfo[],
-        };
-        issues.push(issue);
-      }
-    });
-
-    // 2) Pins without a connected wire: find placed symbol pins that aren't referenced by any wire
-    const allPinIds = new Set<string>();
-    placedSymbols.forEach((s: any) => {
-      const pins = s.pins ?? [];
-      pins.forEach((pin: any) => allPinIds.add(pin.id));
-    });
-
-    const connectedPinIds = new Set<string>();
-    wires.forEach((w) => w.points.forEach((p: any) => p.pinId && connectedPinIds.add(p.pinId)));
-
-    
-    allPinIds.forEach((pinId) => {
-      if (!connectedPinIds.has(pinId)) {
-        // find which placed symbol this pin belongs to
-        const sym = placedSymbols.find((s: any) => (s.pins || []).some((pp: any) => pp.id === pinId));
-        let pinsArr: PinInstance[] = [];
-        let locHints: LocationInfo[] = [];
-        let message = "Pin not connected";
-
-        if (sym) {
-          // determine index of pin within the placed symbol
-          const pinIndex = (sym.pins || []).findIndex((pp: any) => pp.id === pinId);
-
-          // extract pin definitions from the symbol unit (if available)
-          const units = Array.isArray(sym.symbolData) ? sym.symbolData : sym.symbolData?.unit ?? sym.symbolData;
-          const pinDefs: any[] = [];
-          if (Array.isArray(units)) {
-            units.forEach((u: any) => {
-              if (Array.isArray(u?.pin)) {
-                u.pin.forEach((pd: any) => pinDefs.push(pd));
-              }
-            });
-          }
-
-          const pinDef = pinDefs[pinIndex] || null;
-
-          // compute pin number text
-          let pinNumber = "";
-          try {
-            if (pinDef?.number) {
-              if (typeof pinDef.number === "string") pinNumber = pinDef.number;
-              else if (pinDef.number[""]) pinNumber = pinDef.number[""];
-              else pinNumber = String(pinDef.number);
-            }
-          } catch (e) {
-            pinNumber = "";
-          }
-
-          // map electrical type to parser PinType
-          const mapType = (t: any) => {
-            if (!t) return "PASSIVE" as any;
-            const tt = String(t).toLowerCase();
-            if (tt.includes("input") && tt.includes("power")) return "POWER_IN" as any;
-            if (tt === "power_in") return "POWER_IN" as any;
-            if (tt === "power_out") return "POWER_OUT" as any;
-            if (tt === "input") return "INPUT" as any;
-            if (tt === "output") return "OUTPUT" as any;
-            if (tt === "bidirectional" || tt === "bidir") return "BIDIR" as any;
-            if (tt === "tri_state" || tt === "tristate") return "TRISTATE" as any;
-            if (tt === "passive") return "PASSIVE" as any;
-            return "PASSIVE" as any;
-          };
-
-          const pinType = mapType(pinDef?.electrical_type ?? pinDef?.electricalType ?? pinDef?.type);
-
-          // try to get a location for the pin
-          let px: number | undefined = undefined;
-          let py: number | undefined = undefined;
-          const liveForSym = livePinPositionsRef.current?.[sym.id] ?? {};
-          if (liveForSym && liveForSym[pinId]) {
-            px = liveForSym[pinId].x;
-            py = liveForSym[pinId].y;
-          } else {
-            // fallback to stored pin coordinates
-            const placedPin = (sym.pins || []).find((pp: any) => pp.id === pinId);
-            if (placedPin) {
-              px = placedPin.x ?? (sym.position?.x ?? 0) + (placedPin.offsetX ?? 0);
-              py = placedPin.y ?? (sym.position?.y ?? 0) + (placedPin.offsetY ?? 0);
-            }
-          }
-
-          const pinInstance: PinInstance = {
-            id: pinId,
-            ref: sym.symbolId ?? sym.id ?? "",
-            pin_number: pinNumber || String(pinIndex + 1),
-            type: pinType,
-            net_id: null,
-            has_no_connect_flag: !!pinDef?.no_connect,
-            is_power_flag: pinType === "POWER_IN" || pinType === "POWER_OUT",
-            // enrich with designer-friendly metadata (not part of strict PinInstance in parser but useful in UI)
-            // @ts-ignore - allow extra UI-only fields
-            pin_name: (pinDef?.name ? (typeof pinDef.name === "string" ? pinDef.name : pinDef.name[""] ?? "") : "") || pinNumber || String(pinIndex + 1),
-            // human readable electrical type (e.g. "Input", "Output", "Passive")
-            // @ts-ignore
-            human_type: ((): string => {
-              const mapHumanType = (t: any) => {
-                if (!t) return "Passive";
-                const tt = String(t).toLowerCase();
-                if (tt.includes("power")) return "Power input";
-                if (tt.includes("input")) return "Input";
-                if (tt.includes("output")) return "Output";
-                if (tt.includes("bidir") || tt.includes("bidirectional")) return "Bidirectional";
-                if (tt.includes("tri")) return "Tristate";
-                return "Passive";
-              };
-              return mapHumanType(pinDef?.electrical_type ?? pinDef?.electricalType ?? pinDef?.type);
-            })(),
-            // raw type string (if available)
-            // @ts-ignore
-            raw_type: pinDef?.electrical_type ?? pinDef?.electricalType ?? pinDef?.type,
-            location: { sheet: null, x: px ?? 0, y: py ?? 0 } as LocationInfo,
-          } as PinInstance;
-
-          pinsArr = [pinInstance];
-          if (px !== undefined && py !== undefined) locHints = [{ sheet: null, x: px ?? 0, y: py ?? 0 } as LocationInfo];
-
-          // build a more helpful message including pin name and human-friendly type
-          const descr = describePin(pinId);
-          const pinNameForMsg = descr?.pinName ?? (pinInstance as any).pin_name ?? pinInstance.pin_number;
-          const humanTypeForMsg = descr?.humanType ?? (pinInstance as any).human_type ?? "";
-          const extraParts = [pinNameForMsg, humanTypeForMsg].filter(Boolean).join(", ");
-          message = `Symbol ${descr?.symbolName ?? sym.symbolId ?? sym.id} Pin ${pinInstance.pin_number}${extraParts ? ` [${extraParts}]` : ""}`;
-        }
-
-        const issue: ErcIssue = {
-          code: "UNCONNECTED_PIN",
-          severity: "ERROR",
-          message,
-          net_id: null,
-          net_name: null,
-          pins: pinsArr,
-          location_hints: locHints,
-        };
-        issues.push(issue);
-      }
-    });
-
-    console.log("ERC issues found:", issues);
-    return issues;
+    return [];
   };
-
-  // Keep a debug-level summary rather than a full object dump to reduce noise.
-  console.debug("[KicadSchProvider] kicad schema summary:", {
-    uuid: kicad.uuid,
-    symbols: (kicad.symbol ?? []).length,
-    wires: (kicad.wire ?? []).length,
-  });
 
   return (
     <KicadSchContext.Provider value={{ kicad, runErc }}>
@@ -607,15 +230,13 @@ export const KicadSchProvider = ({ children }: any) => {
   );
 };
 
+/* ========================= HOOKS ========================= */
+
 export const useKicadSch = () => {
   const ctx = useContext(KicadSchContext);
-  if (!ctx) throw new Error("useKicadSch must be used within <KicadSchProvider>");
+  if (!ctx) throw new Error("useKicadSch must be used within provider");
   return ctx;
 };
 
-// Safe version that returns null when provider is missing (useful for optional consumers)
-export const useKicadSchSafe = () => {
-  return useContext(KicadSchContext);
-};
-
+export const useKicadSchSafe = () => useContext(KicadSchContext);
 export default KicadSchContext;

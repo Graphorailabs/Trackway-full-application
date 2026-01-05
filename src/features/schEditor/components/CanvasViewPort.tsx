@@ -12,9 +12,6 @@ export const CanvasViewport = () => {
        <CanvasSurface>
          <BoardSheet titleBlock={useKicadSchSafe()?.kicad?.title_block ?? null} />
       </CanvasSurface>
-{/*    
-         <PlacedSymbolsRenderer />
-         <SymbolPlacementTool /> */}
       <PlacedSymbolsRenderer />
       <SymbolPlacementTool />
       <RoutingCanvas />
