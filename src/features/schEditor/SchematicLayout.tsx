@@ -7,6 +7,7 @@ import { PlacedSymbolProvider } from "./context/PlacedSymbolContext"
 import { RoutingProvider } from "./context/WireContext"
 import { PcbProvider, usePcb } from "@/features/pcb_editor/contexts/PcbContext"
 import { useEffect } from "react"
+import { KicadSchProvider } from "./context/KicadSchContext"
 
 export const SchematicLayout = () => {
   return (
@@ -18,9 +19,11 @@ export const SchematicLayout = () => {
             <SymbolProvider>
               <PlacedSymbolProvider>
                 <RoutingProvider >
+            <KicadSchProvider>
                   <ToolProvider>
                     <CanvasViewport />
                   </ToolProvider>
+            </KicadSchProvider>
                 </RoutingProvider>
               </PlacedSymbolProvider>
             </SymbolProvider>

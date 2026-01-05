@@ -542,7 +542,7 @@ export default function PlacedSymbolsRenderer() {
               shadowBlur={6}
               listening={false}
             />
-          )}
+          )} 
         </Layer>
       </CanvasStage>
     </div>

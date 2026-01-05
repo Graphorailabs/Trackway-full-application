@@ -1,19 +1,19 @@
 import { createContext, useContext, useMemo, useEffect, useRef, useState } from "react";
-import type { KicadSch } from "trackway-parser-wasm";
 import { useSymbol } from "./SymbolContext";
 import { useProject } from "@/hooks/useProject";
-import type { ErcIssue, PinInstance, LocationInfo } from "trackway-parser-wasm";
+import type { ErcIssue, KicadSch } from "trackway-parser-wasm";
+import { useRouting } from "./WireContext";
 
 /* ========================= TYPES ========================= */
 
-export type Uuid = string;
-export type Paper = any;
-export type TitleBlock = any;
-export type Polyline = any;
-export type GraphText = any;
-export type LocalLabel = any;
-export type GlobalLabel = any;
-export type RootPath = any;
+// export type Uuid = string;
+// export type Paper = any;
+// export type TitleBlock = any;
+// export type Polyline = any;
+// export type GraphText = any;
+// export type LocalLabel = any;
+// export type GlobalLabel = any;
+// export type RootPath = any;
 
 export type SchematicSymbol = {
   id: string;
@@ -23,11 +23,11 @@ export type SchematicSymbol = {
   raw?: any;
 };
 
-export type LibSymbols = any;
-export type Junction = any;
-export type NoConnect = any;
-export type BusEntry = any;
-export type Bus = any;
+// export type LibSymbols = any;
+// export type Junction = any;
+// export type NoConnect = any;
+// export type BusEntry = any;
+// export type Bus = any;
 
 type KicadSchContextType = {
   kicad: KicadSch;
@@ -40,7 +40,8 @@ const KicadSchContext = createContext<KicadSchContextType | null>(null);
 
 export const KicadSchProvider = ({ children }: any) => {
   const [wires, setWires] = useState<any[]>([]);
-  const { placedSymbols, livePinPositionsRef, setPlacedSymbols } = useSymbol();
+  const {previewTracks:[], setPreviewTracks} = useRouting();
+  const { placedSymbols, setPlacedSymbols } = useSymbol();
   const { currentProject, updateCurrentProjectFiles } = useProject();
 
   /* ---------- refs for latest state ---------- */
