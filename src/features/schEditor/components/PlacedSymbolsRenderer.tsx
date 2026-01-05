@@ -191,7 +191,7 @@ export default function PlacedSymbolsRenderer() {
 
   // Hovered pin state for rendering highlight
   const [hoveredPin, setHoveredPin] = useState<{ x: number; y: number;  pinId?: string } | null>(null);
-   console.log("[PlacedSymbolsRenderer] hoveredPin ->", hoveredPin);
+   //console.log("[PlacedSymbolsRenderer] hoveredPin ->", hoveredPin);
   useEffect(() => {
     // short-lived debug: dump a sample of livePinPositionsRef.current for 10s
     try {

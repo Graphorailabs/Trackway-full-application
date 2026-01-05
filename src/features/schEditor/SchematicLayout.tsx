@@ -8,7 +8,7 @@ import { RoutingProvider } from "./context/WireContext"
 import { KicadSchProvider } from "./context/KicadSchContext"
 import { PcbProvider, usePcb } from "@/features/pcb_editor/contexts/PcbContext"
 import { useEffect } from "react"
-import { KicadSchProvider } from "./context/KicadSchContext"
+// import { KicadSchProvider } from "./context/KicadSchContext"
 
 export const SchematicLayout = () => {
   return (

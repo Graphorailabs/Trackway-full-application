@@ -35,6 +35,7 @@ import type { ErcIssue, KicadSch } from "trackway-parser-wasm";
 import { useProject } from "@/hooks/useProject";
 import { DISABLE_AUTOSAVE } from "../constants";
 import { useSymbol } from "./SymbolContext";
+import { useRouting } from "./WireContext";
 
 
 type KicadSchContextType = {
