@@ -8,13 +8,40 @@ import { RoutingProvider } from "./context/WireContext"
 import { KicadSchProvider } from "./context/KicadSchContext"
 import { PcbProvider, usePcb } from "@/features/pcb_editor/contexts/PcbContext"
 import { useEffect } from "react"
+import { useNavigate } from "react-router-dom"
 // import { KicadSchProvider } from "./context/KicadSchContext"
+
+function SchematicToolbar() {
+  const navigate = useNavigate();
+  const { persistPcb } = usePcb();
+
+  const handleOpenPcbEditor = async () => {
+    try {
+      // Save any pending PCB changes before navigating
+      await persistPcb();
+      navigate('/pcb-editor');
+    } catch (e) {
+      console.error('Failed to save PCB before opening editor', e);
+      // Still navigate even if save fails
+      navigate('/pcb-editor');
+    }
+  };
+
+  return (
+    <div style={{ padding: '10px', background: '#f0f0f0', borderBottom: '1px solid #ccc' }}>
+      <button onClick={handleOpenPcbEditor} style={{ padding: '5px 10px' }}>
+        Open PCB Editor
+      </button>
+    </div>
+  );
+}
 
 export const SchematicLayout = () => {
   return (
- 
+    <div style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
      <ZoomProvider>
        <PcbProvider>
+         <SchematicToolbar />
          <PcbLogger />
           <GridProvider>
             <SymbolProvider>
@@ -33,7 +60,7 @@ export const SchematicLayout = () => {
           </GridProvider>
        </PcbProvider>
      </ZoomProvider>
-  
+    </div>
   )
 }
 

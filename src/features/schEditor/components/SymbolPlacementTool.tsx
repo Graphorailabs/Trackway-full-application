@@ -2,9 +2,9 @@ import { useEffect, useState, useRef } from 'react';
 import { Layer, Group } from 'react-konva';
 import { useSymbol } from '../context/SymbolContext';
 import { useTool } from '../context/LeftToolbarContext';
-// import { api } from '@/api/api';
-// import { footprintLibSexprToValue, footprintLibJsonToValue } from 'trackway-parser-wasm';
-// import { usePcb } from '@/features/pcb_editor/contexts/PcbContext';
+import { api } from '@/api/api';
+import { footprintLibSexprToValue, footprintLibJsonToValue } from 'trackway-parser-wasm';
+import { usePcb } from '@/features/pcb_editor/contexts/PcbContext';
 // use built-in UUID when available
 import SymbolPreviewCanvas from './SymbolPreviewCanvas';
 import CanvasStage from './CanvaStage';
@@ -14,17 +14,17 @@ import { useRouting } from '../context/WireContext';
 const SCALE = 1;
 
 export default function SymbolPlacementTool() {
-  const { tool } = useTool();
-  const { pendingSymbol, setPendingSymbol, addPlacedSymbol, setSelectedSymbol } = useSymbol();
-  // call hook unconditionally
-  // let pcbCtx: any = null;
-  // try {
-  //   pcbCtx = usePcb();
-  // } catch (e) {
-  //   // if PCB provider isn't present, pcbCtx remains null — placement will be best-effort
-  //   pcbCtx = null;
-  // }
-  // const placeFootprint = pcbCtx?.placeFootprint ?? ((_fp: any, _at: any) => "");
+  const { tool, selectedSymbolId } = useTool();
+  const { pendingSymbol, setPendingSymbol, addPlacedSymbol, setSelectedSymbol, symbolData } = useSymbol();
+  // call hook unconditionally (wrap in try/catch so component still works without PCB provider)
+  let pcbCtx: any = null;
+  try {
+    pcbCtx = usePcb();
+  } catch (e) {
+    // if PCB provider isn't present, pcbCtx remains null — placement will be best-effort
+    pcbCtx = null;
+  }
+  const placeFootprint = pcbCtx?.placeFootprint ?? ((_fp: any, _at: any) => "");
 
   const [pos, setPos] = useState({ x: 0, y: 0 }); // world coordinates
   const [_dragging, setDragging] = useState(false);
@@ -100,9 +100,16 @@ export default function SymbolPlacementTool() {
             });
           });
 
+      // try to capture symbol properties from the loaded symbol list when available
+      const symbolProps = (selectedSymbolId && Array.isArray(symbolData)) ? (symbolData.find((s: any) => s.id === selectedSymbolId)?.properties ?? null) : null;
+
       const placed = {
         id,
         symbolData: { unit: unit },
+        // preserve the library symbol id (if selected from the modal)
+        symbolId: selectedSymbolId ?? undefined,
+        // preserve symbol properties (if available)
+        symbolProperties: symbolProps ?? undefined,
         position: { x: pos.x, y: pos.y }, // world coords
         pins,
         rotation: 0,
@@ -198,6 +205,58 @@ export default function SymbolPlacementTool() {
       }
       setPendingSymbol(null);
       armedAtRef.current = null;
+
+      // Best-effort: if the placed symbol declares a Footprint, try to fetch and place it on the PCB
+      (async () => {
+        try {
+          if (!pcbCtx) return;
+          const fpRaw = placed.symbolProperties?.Footprint ?? placed.symbolProperties?.footprint ?? null;
+          if (!fpRaw) return;
+          const parts = (typeof fpRaw === 'string' ? fpRaw : '').split(":");
+          const nameOnly = parts.length > 1 ? parts[1].trim() : (parts[0] || '').trim();
+          if (!nameOnly) return;
+
+          // search categories for a matching footprint base name
+          let found: any = null;
+          try {
+            const catsRes = await api.get(`/footprints/categories`);
+            const categories = catsRes.data?.data ?? [];
+            for (const c of categories) {
+              try {
+                const list = await api.get(`/footprints/categories/${c.slug}`);
+                const fps = list.data?.footprints ?? list.data?.data ?? [];
+                const match = (fps || []).find((f: any) => {
+                  const base = (f.name || '').split('.').slice(0, -1).join('.') || f.name || '';
+                  return base.trim().toLowerCase() === nameOnly.trim().toLowerCase();
+                });
+                if (match) { found = match; break; }
+              } catch (e) {
+                // ignore per-category errors
+              }
+            }
+          } catch (e) {
+            // ignore categories fetch error
+          }
+
+          if (!found || !found.id) return;
+          try {
+            const contentRes = await api.get(`/footprints/${found.id}/content`);
+            const txt = contentRes.data?.content ?? contentRes.data;
+            if (!txt) return;
+            let parsed: any = null;
+            try { parsed = footprintLibSexprToValue(txt as string); } catch (e) { try { parsed = footprintLibJsonToValue(txt as string); } catch (e2) { parsed = null; } }
+            const fpModel = parsed ? (parsed.footprint ?? parsed) : null;
+            if (!fpModel) return;
+            const instance = { ...fpModel, uuid: crypto.randomUUID(), at: { x: placed.position.x, y: placed.position.y, angle: 0 } } as import('trackway-parser-wasm').Footprint;
+            try { placeFootprint(instance, { x: placed.position.x, y: placed.position.y, angle: 0 }); } catch (e) {}
+            try { if (typeof pcbCtx.savePcb === 'function') await pcbCtx.savePcb(); } catch (e) {}
+          } catch (e) {
+            // ignore fetching/parsing/placing errors
+          }
+        } catch (e) {
+          // swallow
+        }
+      })();
     };
 
     window.addEventListener('mousemove', onMove);

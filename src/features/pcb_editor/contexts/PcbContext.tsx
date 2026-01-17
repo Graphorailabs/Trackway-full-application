@@ -22,7 +22,7 @@ import flipFootprintService from "@/features/pcb_editor/services/flipFootprint";
 import type { SheetMetadata } from "@/features/pcb_editor/types";
 import { createBlankPcb, deriveMetadata } from "@/features/pcb_editor/state/pcbDocumentUtils";
 import { usePcbSourceManager, type PcbSource } from "@/features/pcb_editor/state/usePcbSourceManager";
-import { type CanonicalLayer, type Paper, type Pcb, type PcbGraphicItem } from "trackway-parser-wasm";
+import { type CanonicalLayer, type Paper, type Pcb, type PcbGraphicItem, type Footprint, type Track, type TrackVia } from "trackway-parser-wasm";
 
 /**
  * Public API surfaced to any component inside the PCB editor tree.
@@ -44,19 +44,19 @@ export type PcbContextValue = {
   updatePcb: (updater: (current: Pcb) => Pcb) => void;
   addGraphicItem: (item: PcbGraphicItem) => void;
   // Via helpers: operate on `pcb.tracks` where kind === 'via'
-  addVia: (via: import("trackway-parser-wasm").TrackVia) => void;
-  updateVia: (uuid: string, updater: (current: import("trackway-parser-wasm").TrackVia) => import("trackway-parser-wasm").TrackVia) => void;
+  addVia: (via: TrackVia) => void;
+  updateVia: (uuid: string, updater: (current: TrackVia) => TrackVia) => void;
   updateViaPosition: (uuid: string, at: { x: number; y: number }) => void;
   removeVia: (uuid: string) => void;
   // Track helpers: add/update/remove arbitrary track entries (segments, arcs, vias)
-  addTrack: (track: import("trackway-parser-wasm").Track) => void;
-  updateTrack: (uuid: string, updater: (current: import("trackway-parser-wasm").Track) => import("trackway-parser-wasm").Track) => void;
+  addTrack: (track: Track) => void;
+  updateTrack: (uuid: string, updater: (current: Track) => Track) => void;
   removeTrack: (uuid: string) => void;
   // Footprint helpers: operate on the `pcb.footprints` array
-  addFootprint: (fp: import("trackway-parser-wasm").Footprint) => void;
-  updateFootprint: (uuid: string, updater: (current: import("trackway-parser-wasm").Footprint) => import("trackway-parser-wasm").Footprint) => void;
+  addFootprint: (fp: Footprint) => void;
+  updateFootprint: (uuid: string, updater: (current: Footprint) => Footprint) => void;
   removeFootprint: (uuid: string) => void;
-  placeFootprint: (fp: import("trackway-parser-wasm").Footprint, at: { x: number; y: number; angle?: number }, layerOverride?: CanonicalLayer) => string;
+  placeFootprint: (fp: Footprint, at: { x: number; y: number; angle?: number }, layerOverride?: CanonicalLayer) => string;
   flipFootprint: (uuid: string) => void;
   highlightFootprint: (uuid: string) => void;
   flashHighlightUuid: string | null;
@@ -237,7 +237,7 @@ export function PcbProvider({ children }: PropsWithChildren) {
 
   // VIA helpers
   const addVia = useCallback(
-    (via: import("trackway-parser-wasm").TrackVia) => {
+    (via: TrackVia) => {
       updatePcb((current) => ({
         ...current,
         tracks: [...(current.tracks ?? []), { kind: "via" as const, data: via }],
@@ -247,10 +247,10 @@ export function PcbProvider({ children }: PropsWithChildren) {
   );
 
   const updateVia = useCallback(
-    (uuid: string, updater: (current: import("trackway-parser-wasm").TrackVia) => import("trackway-parser-wasm").TrackVia) => {
+    (uuid: string, updater: (current: TrackVia) => TrackVia) => {
       updatePcb((current) => ({
         ...current,
-        tracks: (current.tracks ?? []).map((t) => (t.kind === "via" && (t.data as any).uuid === uuid ? ({ kind: "via" as const, data: updater(t.data as import("trackway-parser-wasm").TrackVia) }) : t)),
+        tracks: (current.tracks ?? []).map((t) => (t.kind === "via" && (t.data as any).uuid === uuid ? ({ kind: "via" as const, data: updater(t.data as TrackVia) }) : t)),
       }));
     },
     [updatePcb],
@@ -258,7 +258,7 @@ export function PcbProvider({ children }: PropsWithChildren) {
 
   const updateViaPosition = useCallback(
     (uuid: string, at: { x: number; y: number }) => {
-      updateVia(uuid, (current) => ({ ...current, at: [at.x, at.y] } as import("trackway-parser-wasm").TrackVia));
+      updateVia(uuid, (current) => ({ ...current, at: [at.x, at.y] } as TrackVia));
     },
     [updateVia],
   );
@@ -275,7 +275,7 @@ export function PcbProvider({ children }: PropsWithChildren) {
 
   // Track helpers (segments, arcs, vias)
   const addTrack = useCallback(
-    (track: import("trackway-parser-wasm").Track) => {
+    (track: Track) => {
       updatePcb((current) => ({
         ...current,
         tracks: [...(current.tracks ?? []), track],
@@ -285,10 +285,10 @@ export function PcbProvider({ children }: PropsWithChildren) {
   );
 
   const updateTrack = useCallback(
-    (uuid: string, updater: (current: import("trackway-parser-wasm").Track) => import("trackway-parser-wasm").Track) => {
+    (uuid: string, updater: (current: Track) => Track) => {
       updatePcb((current) => ({
         ...current,
-        tracks: (current.tracks ?? []).map((t) => ((t.data as any)?.uuid === uuid ? updater(t as import("trackway-parser-wasm").Track) : t)),
+        tracks: (current.tracks ?? []).map((t) => ((t.data as any)?.uuid === uuid ? updater(t as Track) : t)),
       }));
     },
     [updatePcb],
@@ -305,7 +305,7 @@ export function PcbProvider({ children }: PropsWithChildren) {
   );
 
   const addFootprint = useCallback(
-    (fp: import("trackway-parser-wasm").Footprint) => {
+    (fp: Footprint) => {
       updatePcb((current) => ({
         ...current,
         footprints: [...(current.footprints ?? []), fp],
@@ -315,7 +315,7 @@ export function PcbProvider({ children }: PropsWithChildren) {
   );
 
   const updateFootprint = useCallback(
-    (uuid: string, updater: (current: import("trackway-parser-wasm").Footprint) => import("trackway-parser-wasm").Footprint) => {
+    (uuid: string, updater: (current: Footprint) => Footprint) => {
       updatePcb((current) => ({
         ...current,
         footprints: (current.footprints ?? []).map((f) => (f.uuid === uuid ? updater(f) : f)),
@@ -335,7 +335,7 @@ export function PcbProvider({ children }: PropsWithChildren) {
   );
 
   const placeFootprint = useCallback(
-    (fp: import("trackway-parser-wasm").Footprint, at: { x: number; y: number; angle?: number }, layerOverride?: CanonicalLayer) => {
+    (fp: Footprint, at: { x: number; y: number; angle?: number }, layerOverride?: CanonicalLayer) => {
       const targetLayer = (layerOverride ?? (fp.layer as CanonicalLayer | undefined) ?? DEFAULT_FRONT_LAYER) as CanonicalLayer;
       // Ensure the placed instance contains the expected arrays and avoid
       // accidental missing properties by normalizing the model. We also
@@ -350,7 +350,8 @@ export function PcbProvider({ children }: PropsWithChildren) {
         at: { x: at.x, y: at.y, angle: at.angle ?? 0 },
         placed: true,
         layer: targetLayer,
-      } as import("trackway-parser-wasm").Footprint;
+        name: (fp as any).name || (fp as any).library_link || (fp as any).properties?.find((p: any) => p.name === 'Reference')?.value || 'REF**',
+      } as Footprint;
 
       // Debug logging removed: placement details were previously emitted here.
 
@@ -364,6 +365,39 @@ export function PcbProvider({ children }: PropsWithChildren) {
     },
     [addFootprint, highlightFootprint],
   );
+
+  // Listen for schematic requests to place footprints (dispatched by the schematic provider)
+  useEffect(() => {
+    const onSchematicPlace = async (ev: Event) => {
+      try {
+        const detail: any = (ev as CustomEvent).detail || {};
+        const instance: any = detail?.instance;
+        if (!instance) return;
+        // Use placeFootprint helper to add to PCB state and collect placed items
+        const placedItems: Array<{ uuid: string; footprintId?: any; schematicSymbolId?: any }> = [];
+        try {
+          const uuid = placeFootprint(instance as Footprint, { x: instance.at?.x ?? 0, y: instance.at?.y ?? 0, angle: instance.at?.angle ?? 0 });
+          placedItems.push({ uuid, footprintId: detail.footprintId, schematicSymbolId: detail.schematicSymbolId });
+          try { console.log('[PcbProvider] placed footprint requested by schematic', { uuid, schematicSymbolId: detail.schematicSymbolId, footprintId: detail.footprintId }); } catch (e) {}
+        } catch (e) {
+          try { console.warn('[PcbProvider] failed to place footprint from schematic', e); } catch (e) {}
+        }
+
+        // Persist PCB after placement and log the list of placed footprints
+        try {
+          await persistPcb();
+          try { console.log('[PcbProvider] saved PCB after schematic footprint placement', { placed: placedItems }); } catch (e) {}
+        } catch (e) {
+          try { console.warn('[PcbProvider] failed to save PCB after schematic footprint placement', e, { attempted: placedItems }); } catch (e) {}
+        }
+      } catch (e) {
+        // ignore
+      }
+    };
+
+    window.addEventListener('schematic-place-footprint', onSchematicPlace as EventListener);
+    return () => window.removeEventListener('schematic-place-footprint', onSchematicPlace as EventListener);
+  }, [placeFootprint, persistPcb]);
 
     // Flip a footprint in-place on the PCB. Uses the shared service to
     // produce a flipped clone then replaces the footprint entry so React
