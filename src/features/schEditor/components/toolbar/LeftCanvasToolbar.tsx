@@ -1,4 +1,4 @@
-import { FastForward } from "lucide-react";
+// removed unused import FastForward
 import { useTool } from "../../context/LeftToolbarContext";
 import { ErcChecker } from "../ErcChecker";
 import { LoadSymbol } from "../LoadSymbol";
@@ -9,6 +9,9 @@ import * as parser from "trackway-parser-wasm";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSymbol } from "../../context/SymbolContext";
 import { useRouting } from "../../context/WireContext";
+import { useNavigate } from "react-router-dom";
+import { usePcb } from "@/features/pcb_editor/contexts/PcbContext";
+import { FaExternalLinkAlt } from "react-icons/fa";
 
 
 export default function LeftCanvasToolbar() {
@@ -20,9 +23,11 @@ export default function LeftCanvasToolbar() {
    const { currentProject, updateCurrentProjectFiles } = useProject();
    const { placedSymbols } = useSymbol();
   const {previewTracks} = useRouting();
-   const [isSaving, setIsSaving] = useState(false);
-   const [saveError, setSaveError] = useState<string | null>(null);
-   const [saveSuccess, setSaveSuccess] = useState(false);
+   const navigate = useNavigate();
+   const { savePcb: persistPcb } = usePcb();
+   const [_v, setIsSaving] = useState(false);
+   const [_e, setSaveError] = useState<string | null>(null);
+   const [_s, setSaveSuccess] = useState(false);
    const saveTimeoutRef = useRef<number | null>(null);
 
 
@@ -190,13 +195,29 @@ export default function LeftCanvasToolbar() {
       </div>
 
     {/* saving functionality */}
-     <div>
-         <button
-          onClick={handleSave}
-         >
-            <FaSave size={20} color="#4B5563" title="Save Schematic"/>
-         </button>
-     </div>
+       <div>
+             <button
+               onClick={handleSave}
+             >
+                  <FaSave size={20} color="#4B5563" title="Save Schematic"/>
+             </button>
+       </div>
+      <div>
+            <button
+               title="Open PCB Editor"
+               className={baseBtn}
+               onClick={async () => {
+                  try {
+                     await persistPcb();
+                  } catch (e) {
+                     console.error('Failed to persist PCB before navigating', e);
+                  }
+                  navigate('/pcb-editor');
+               }}
+            >
+               <FaExternalLinkAlt size={18} color="#4B5563" />
+            </button>
+      </div>
          </div>
 
          <div className="mt-auto mb-3 text-xs text-gray-500">Canvas Tools</div>
