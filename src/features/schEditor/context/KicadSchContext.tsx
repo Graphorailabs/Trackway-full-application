@@ -37,11 +37,6 @@ import { DISABLE_AUTOSAVE } from "../constants";
 import { useSymbol } from "./SymbolContext";
 import { useRouting } from "./WireContext";
 import { usePcb } from "@/features/pcb_editor/contexts/PcbContext";
-import { api } from '@/api/api';
-import { footprintLibSexprToValue, footprintLibJsonToValue } from 'trackway-parser-wasm';
-import { BASE_BACKEND_URL, CATEGOTIES_ENDPOINT } from '@/features/footprint_manager/constants';
-
-
 type KicadSchContextType = {
   kicad: KicadSch;
   runErc: () => ErcIssue[];
@@ -162,165 +157,12 @@ export const KicadSchProvider = ({ children }: any) => {
       try {
         // Log autosave occurrence (kicad memo is created later in render)
         try { console.log('[KicadSchProvider] autosave triggered', { placedCount: (placedSymbolsRef.current || []).length, wireCount: (wiresRef.current || []).length }); } catch (e) {}
-
-      // For each placed symbol with a Footprint property, request the PCB layer
-      // place the parsed footprint by dispatching an event. The PCB provider will
-      // listen for `schematic-place-footprint` and perform placement+save.
-      const placed = placedSymbolsRef.current || [];
-      let anyRequested = false;
-      for (const p of placed) {
-        try {
-          const fpRaw = p.symbolProperties?.Footprint ?? p.symbolProperties?.footprint ?? (Array.isArray(p.symbolData?.unit) ? p.symbolData.unit[0]?.properties?.Footprint ?? p.symbolData.unit[0]?.properties?.footprint : null);
-          if (!fpRaw) continue;
-          const parts = (typeof fpRaw === 'string' ? fpRaw : '').split(":");
-          const categoryHint = parts.length > 1 ? (parts[0] || '').trim() : null;
-          const nameOnly = parts.length > 1 ? (parts[1] || '').trim() : (parts[0] || '').trim();
-          const nameOnlyLower = (nameOnly || '').toLowerCase();
-          if (!nameOnly) continue;
-
-          // find footprint metadata: prefer category hint (prefix before ':') when present
-          let found: any = null;
-          try {
-            console.log('[KicadSchProvider] resolving footprint metadata for', { nameOnly, categoryHint });
-            const tryMatchInList = (fps: any[]) => {
-              return (fps || []).find((f: any) => {
-                const base = (f.name || '').split('.').slice(0, -1).join('.') || f.name || '';
-                return base.trim().toLowerCase() === nameOnlyLower;
-              });
-            };
-
-            let categories: any[] = [];
-
-            if (categoryHint) {
-              // Normalize the hint into a slug-like form (lowercase, spaces/underscores -> hyphens)
-              const slugHint = (categoryHint || "")
-                .toLowerCase()
-                .replace(/\s+/g, "-")
-                .replace(/_+/g, "-")
-                .replace(/[^a-z0-9-]/g, "");
-
-              // Try direct category fetch using the normalized slug first.
-              try {
-                const list = await api.get(`${BASE_BACKEND_URL}${CATEGOTIES_ENDPOINT}/${encodeURIComponent(slugHint)}`);
-                const fps = list.data?.footprints ?? list.data?.data ?? [];
-                const match = tryMatchInList(fps);
-                if (match) found = match;
-              } catch (e) {
-                // direct fetch failed — will fall back to scanning categories
-              }
-
-              // If still not found, fetch categories list and try to resolve hint to a slug/name
-              if (!found) {
-                try {
-                  const catsRes = await api.get(`${BASE_BACKEND_URL}${CATEGOTIES_ENDPOINT}`);
-                  categories = catsRes.data?.data ?? [];
-                  const catMatch = categories.find((c: any) => {
-                    const slug = (c.slug || '').toLowerCase();
-                    const name = (c.name || '').toLowerCase();
-                    return slug === slugHint || slug === (categoryHint || '').toLowerCase() || name === (categoryHint || '').toLowerCase();
-                  });
-                  if (catMatch) {
-                    try {
-                      const list = await api.get(`${BASE_BACKEND_URL}${CATEGOTIES_ENDPOINT}/${catMatch.slug}`);
-                      const fps = list.data?.footprints ?? list.data?.data ?? [];
-                      const match = tryMatchInList(fps);
-                      if (match) found = match;
-                    } catch (e) {
-                      // ignore per-category error
-                    }
-                  }
-                } catch (e) {
-                  // ignore categories fetch error
-                }
-              }
-            }
-
-            // If still not found, scan all categories
-            if (!found) {
-              try {
-                if (!categories.length) {
-                  const catsRes = await api.get(`${BASE_BACKEND_URL}${CATEGOTIES_ENDPOINT}`);
-                  categories = catsRes.data?.data ?? [];
-                }
-                for (const c of categories) {
-                  try {
-                    const list = await api.get(`${BASE_BACKEND_URL}${CATEGOTIES_ENDPOINT}/${c.slug}`);
-                    const fps = list.data?.footprints ?? list.data?.data ?? [];
-                    const match = tryMatchInList(fps);
-                    if (match) { found = match; break; }
-                  } catch (e) {
-                    // ignore per-category errors
-                  }
-                }
-              } catch (e) {
-                // ignore categories fetch error
-              }
-            }
-          } catch (e) {
-            // ignore overall errors
-          }
-
-            if (!found || !found.id) {
-              try { console.log('[KicadSchProvider] no matching footprint metadata found for', { nameOnly }); } catch (e) {}
-              continue;
-            }
-
-          try {
-            const contentRes = await api.get(`${BASE_BACKEND_URL}/${found.id}/content`);
-            const txt = contentRes.data?.content ?? contentRes.data;
-            if (!txt) {
-              try { console.log('[KicadSchProvider] footprint content empty for', { footprintId: found.id }); } catch (e) {}
-              continue;
-            }
-            try { console.log('[KicadSchProvider] fetched footprint content', { footprintId: found.id, size: typeof txt === 'string' ? txt.length : null }); } catch (e) {}
-            let parsed: any = null;
-            let parseError: any = null;
-            try {
-              parsed = footprintLibSexprToValue(txt as string);
-              parseError = null;
-            } catch (e) {
-              parseError = e;
-              try {
-                parsed = footprintLibJsonToValue(txt as string);
-                parseError = null;
-              } catch (e2) {
-                parseError = e2;
-                parsed = null;
-              }
-            }
-            const fpModel = parsed ? (parsed.footprint ?? parsed) : null;
-            if (!fpModel) {
-              try {
-                console.warn('[KicadSchProvider] failed to parse footprint content', {
-                  footprintId: found.id,
-                  error: parseError ? (parseError?.stack ?? parseError?.message ?? String(parseError)) : null,
-                  snippet: typeof txt === 'string' ? txt.slice(0, 400) : null,
-                });
-              } catch (e) {}
-              continue;
-            }
-            try { console.log('[KicadSchProvider] parsed footprint model', { footprintId: found.id, name: fpModel?.name ?? null }); } catch (e) {}
-
-            const instance = { ...fpModel, uuid: crypto.randomUUID(), at: { x: p.position?.x ?? p.x ?? 0, y: p.position?.y ?? p.y ?? 0, angle: 0 } } as import('trackway-parser-wasm').Footprint;
-            instance.properties = Array.isArray(instance.properties) ? instance.properties.slice() : [];
-            // Cast to any because FootprintProperty shape varies across parser versions.
-            instance.properties.push({ name: 'schematicSymbolId', value: p.id });
-
-            try {
-              window.dispatchEvent(new CustomEvent('schematic-place-footprint', { detail: { instance, footprintId: found.id, schematicSymbolId: p.id } }));
-              anyRequested = true;
-              try { console.log('[KicadSchProvider] requested placing footprint on PCB', { footprintId: found.id, schematicSymbolId: p.id }); } catch (e) {}
-            } catch (e) {
-              try { console.warn('[KicadSchProvider] failed to dispatch schematic-place-footprint', e); } catch (e2) {}
-            }
-          } catch (e) {
-            // ignore fetch/parse errors
-          }
-        } catch (e) {
-          // ignore per-symbol errors
-        }
-      }
-      if (anyRequested) try { console.log('[KicadSchProvider] autosave: requested footprint placements for PCB'); } catch (e) {}
+      // NOTE: previously this autosave path attempted to resolve and fetch
+      // footprints for placed symbols. That caused background network
+      // activity on every autosave tick. Footprint resolution should only
+      // occur as a direct result of user actions (e.g. placing a symbol).
+      // Skip any automatic footprint fetching here and only persist the
+      // schematic snapshot.
     } catch (e) {
       // ignore autosave placement errors
     }
