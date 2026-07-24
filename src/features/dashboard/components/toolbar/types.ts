@@ -13,6 +13,11 @@ export interface ToolItemDescriptor {
 	hint?: string;
 	shortcut?: string;
 	badge?: ReactNode;
+	/** Override the icon wrapper's Tailwind text-color class (default "text-sky-500"). */
+	iconClassName?: string;
+	/** Give this item a persistent soft glow + subtle pulse, for items that need to
+	 * stand out from the rest of the toolbar (e.g. AI-agent-sourced actions). */
+	glow?: boolean;
 }
 
 export interface ToolItemProps {

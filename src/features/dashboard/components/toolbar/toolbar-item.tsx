@@ -24,13 +24,20 @@ const ToolItem = memo(function ToolItem({
 
 	if (compact) {
 		const compactClasses = [
-			'group flex h-12 w-12 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 transition-colors duration-150',
+			'group flex h-12 w-12 items-center justify-center rounded-md border transition-colors duration-150',
+			descriptor.glow ? 'border-violet-200 bg-violet-50' : 'border-slate-200 bg-white text-slate-600',
 			disabled
 				? 'cursor-not-allowed opacity-50'
-				: 'cursor-pointer hover:border-sky-300 hover:bg-sky-50 hover:text-sky-600',
+				: descriptor.glow
+					? 'cursor-pointer hover:border-violet-300 hover:bg-violet-100'
+					: 'cursor-pointer hover:border-sky-300 hover:bg-sky-50 hover:text-sky-600',
 		]
 			.filter(Boolean)
 			.join(' ');
+
+		const glowStyle = descriptor.glow && !disabled
+			? { boxShadow: '0 0 0 1px rgba(139,92,246,0.25), 0 0 14px 2px rgba(139,92,246,0.35)' }
+			: undefined;
 
 		return (
 			<button
@@ -40,10 +47,11 @@ const ToolItem = memo(function ToolItem({
 				aria-disabled={disabled}
 				disabled={disabled}
 				data-orientation={orientation}
-				className={`${compactClasses} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300`}
+				style={glowStyle}
+				className={`${compactClasses} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300 ${descriptor.glow ? 'animate-pulse' : ''}`}
 			>
 				{descriptor.icon ? (
-					<span className="h-6 w-6 text-sky-500">{descriptor.icon}</span>
+					<span className={`h-6 w-6 ${descriptor.iconClassName ?? 'text-sky-500'}`}>{descriptor.icon}</span>
 				) : (
 					<span className="h-2 w-2 rounded-full bg-slate-400" />
 				)}
@@ -52,10 +60,13 @@ const ToolItem = memo(function ToolItem({
 	}
 
 	const baseClasses = [
-		'group relative inline-flex select-none items-center rounded-lg border border-slate-200 bg-white text-[12px] font-semibold uppercase tracking-[0.12em] text-slate-700 shadow-[0_1px_2px_rgba(15,23,42,0.1)] transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-300',
+		'group relative inline-flex select-none items-center rounded-lg border text-[12px] font-semibold uppercase tracking-[0.12em] shadow-[0_1px_2px_rgba(15,23,42,0.1)] transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-300',
+		descriptor.glow ? 'border-violet-200 bg-white text-slate-700' : 'border-slate-200 bg-white text-slate-700',
 		disabled
 			? 'cursor-not-allowed opacity-45'
-			: 'cursor-pointer hover:border-sky-300 hover:bg-sky-50 hover:text-sky-600',
+			: descriptor.glow
+				? 'cursor-pointer hover:border-violet-300 hover:bg-violet-50 hover:text-violet-700'
+				: 'cursor-pointer hover:border-sky-300 hover:bg-sky-50 hover:text-sky-600',
 		orientation === 'horizontal'
 			? 'flex-row items-center gap-3 px-4 py-3'
 			: 'w-full flex-row items-center justify-start gap-3 px-4 py-3',
@@ -67,6 +78,10 @@ const ToolItem = memo(function ToolItem({
 		? 'text-[10px] uppercase tracking-[0.12em] text-slate-400'
 		: 'ml-auto text-[10px] tracking-[0.18em] text-slate-400';
 
+	const expandedGlowStyle = descriptor.glow && !disabled
+		? { boxShadow: '0 0 0 1px rgba(139,92,246,0.2), 0 0 14px 2px rgba(139,92,246,0.3)' }
+		: undefined;
+
 	return (
 		<button
 			type="button"
@@ -75,10 +90,13 @@ const ToolItem = memo(function ToolItem({
 			aria-disabled={disabled}
 			disabled={disabled}
 			data-orientation={orientation}
-			className={baseClasses}
+			style={expandedGlowStyle}
+			className={`${baseClasses} ${descriptor.glow ? 'animate-pulse' : ''}`}
 		>
 			{descriptor.icon ? (
-				<span className="grid h-6 w-6 place-items-center text-sky-500 transition-colors duration-200 group-hover:text-sky-600">
+				<span
+					className={`grid h-6 w-6 place-items-center transition-colors duration-200 ${descriptor.iconClassName ?? 'text-sky-500 group-hover:text-sky-600'}`}
+				>
 					{descriptor.icon}
 				</span>
 			) : null}

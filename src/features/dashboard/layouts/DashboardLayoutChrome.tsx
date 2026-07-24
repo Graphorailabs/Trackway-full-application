@@ -266,17 +266,6 @@ function DashboardLayoutChrome({
 						) : null}
 					</div>
 					<div className="flex items-center gap-3">
-						<button
-							type="button"
-							onClick={() =>
-								requireAuth()
-									.then(() => setImportFromFlowOpen(true))
-									.catch(() => {})
-							}
-							className="rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-medium text-sky-700 shadow-sm transition-colors duration-150 hover:bg-sky-100"
-						>
-							Import from Flow
-						</button>
 						<StorageUsageSummary
 							estimate={storageEstimate}
 							refreshing={estimateRefreshing}
