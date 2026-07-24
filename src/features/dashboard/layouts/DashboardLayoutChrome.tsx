@@ -6,7 +6,10 @@ import Toolbar from '../components/toolbat';
 import type { ToolbarAttachment, ToolItemDescriptor } from '../components/toolbat';
 import ConfirmDeleteProjectModal from '../components/confirm-delete-project-modal';
 import CreateProjectModal from '../components/create-project-modal';
+import ImportFromFlowModal from '../components/import-from-flow-modal';
+import AccountStatus from '@/components/auth/AccountStatus';
 import { useProject } from '@/hooks/useProject';
+import { useAuthModal } from '@/hooks/useAuthModal';
 import { pickProjectArchive } from '@/utils/file-picker';
 import DashboardHomeContent from '../contexts/DashboardHomeContent.tsx';
 import StorageUsageSummary from './StorageUsageSummary.tsx';
@@ -54,10 +57,12 @@ function DashboardLayoutChrome({
 }: DashboardLayoutChromeProps) {
 	const toolbarHint = toolbarItems[0]?.hint;
 	const navigate = useNavigate();
-	const { createProject, deleteProject, importProject, storageEstimate, getStorageEstimate } = useProject();
+	const { createProject, deleteProject, importProject, importRemoteFiles, storageEstimate, getStorageEstimate } = useProject();
+	const { requireAuth } = useAuthModal();
 	const [createModalOpen, setCreateModalOpen] = useState(false);
 	const [createBusy, setCreateBusy] = useState(false);
 	const [createError, setCreateError] = useState<string | null>(null);
+	const [importFromFlowOpen, setImportFromFlowOpen] = useState(false);
 	const [deleteModalOpen, setDeleteModalOpen] = useState(false);
 	const [deleteBusy, setDeleteBusy] = useState(false);
 	const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -84,6 +89,14 @@ function DashboardLayoutChrome({
 				setCreateError(null);
 				setCreateBusy(false);
 				setCreateModalOpen(true);
+				return;
+			}
+			if (descriptor.id === 'import-from-flow') {
+				requireAuth()
+					.then(() => setImportFromFlowOpen(true))
+					.catch(() => {
+						// user declined sign-in; nothing to do, editor stays usable as normal
+					});
 				return;
 			}
 			if (descriptor.id === 'export-project') {
@@ -123,7 +136,7 @@ function DashboardLayoutChrome({
 					});
 			}
 		},
-		[importBusy, importProject, onProjectExport, onToolbarItem, selectedProject?.id, selectedProjectId],
+		[importBusy, importProject, onProjectExport, onToolbarItem, requireAuth, selectedProject?.id, selectedProjectId],
 	);
 
 	const handleStorageRefresh = useCallback(() => {
@@ -200,6 +213,15 @@ function DashboardLayoutChrome({
 		[createProject],
 	);
 
+	const handleImportFromFlow = useCallback(
+		async (name: string, files: Record<string, string>) => {
+			await importRemoteFiles(name, files);
+			setImportFromFlowOpen(false);
+			navigate('/pcb-editor');
+		},
+		[importRemoteFiles, navigate],
+	);
+
 	const handleEditorLaunch = (
 		editor: DashboardEditorSummary,
 		project: DashboardProjectSummary,
@@ -243,11 +265,25 @@ function DashboardLayoutChrome({
 							</p>
 						) : null}
 					</div>
-					<StorageUsageSummary
-						estimate={storageEstimate}
-						refreshing={estimateRefreshing}
-						onRefresh={handleStorageRefresh}
-					/>
+					<div className="flex items-center gap-3">
+						<button
+							type="button"
+							onClick={() =>
+								requireAuth()
+									.then(() => setImportFromFlowOpen(true))
+									.catch(() => {})
+							}
+							className="rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-medium text-sky-700 shadow-sm transition-colors duration-150 hover:bg-sky-100"
+						>
+							Import from Flow
+						</button>
+						<StorageUsageSummary
+							estimate={storageEstimate}
+							refreshing={estimateRefreshing}
+							onRefresh={handleStorageRefresh}
+						/>
+						<AccountStatus />
+					</div>
 				</header>
 
 				<main className="flex-1 overflow-auto bg-slate-50 px-8 py-6">
@@ -285,6 +321,12 @@ function DashboardLayoutChrome({
 				onConfirm={handleDeleteModalConfirm}
 				isDeleting={deleteBusy}
 				errorMessage={deleteError ?? undefined}
+			/>
+
+			<ImportFromFlowModal
+				open={importFromFlowOpen}
+				onCancel={() => setImportFromFlowOpen(false)}
+				onImport={handleImportFromFlow}
 			/>
 		</div>
 	);

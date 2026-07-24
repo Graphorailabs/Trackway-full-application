@@ -250,6 +250,24 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     [_setProjects, _setCurrent, _setError, getStorageEstimate]
   );
 
+  const importRemoteFiles = useCallback(
+    async (name: string, files: ProjectFileMap) => {
+      _setError(null);
+      try {
+        const rec = await projectStorage.createWithFiles(name, files);
+        _setProjects((prev) => [rec, ...prev]);
+        _setCurrent(rec);
+        void getStorageEstimate();
+        return rec;
+      } catch (e: unknown) {
+        const message = e instanceof Error ? e.message : "Failed to import project";
+        _setError(message);
+        throw e;
+      }
+    },
+    [_setProjects, _setCurrent, _setError, getStorageEstimate]
+  );
+
   const closeCurrent = useCallback(() => _setCurrent(null), [_setCurrent]);
 
   const value: ProjectContextValue = useMemo(() => ({
@@ -270,6 +288,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     closeCurrent,
     getStorageEstimate,
     importProject,
+    importRemoteFiles,
   }), [
     projects,
     currentProject,
@@ -288,6 +307,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     closeCurrent,
     getStorageEstimate,
     importProject,
+    importRemoteFiles,
   ]);
 
   return (

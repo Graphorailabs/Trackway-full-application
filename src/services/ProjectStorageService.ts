@@ -80,6 +80,13 @@ export class ProjectStorageService {
     return s.createProject({ name, files });
   }
 
+  // Create a project directly from an already-materialized file map (e.g.
+  // fetched from a remote source), skipping the WASM starter-file generation.
+  async createWithFiles(name: string, files: ProjectFileMap): Promise<ProjectRecord> {
+    const s = await this.storage();
+    return s.createProject({ name, files });
+  }
+
   /* --------------------------------- CRUD ---------------------------------- */
 
   async list(): Promise<ProjectRecord[]> {

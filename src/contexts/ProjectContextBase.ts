@@ -34,6 +34,10 @@ export type ProjectContextActions = {
 
   // NEW: import a previously exported project (ZIP or JSON)
   importProject: (file: File, nameOverride?: string) => Promise<ProjectRecord>;
+
+  // Import a project from an already-materialized file map (e.g. fetched
+  // from an external source like Flow), bypassing File/Blob parsing.
+  importRemoteFiles: (name: string, files: ProjectFileMap) => Promise<ProjectRecord>;
 };
 
 export type ProjectContextValue = ProjectContextState & ProjectContextActions;
