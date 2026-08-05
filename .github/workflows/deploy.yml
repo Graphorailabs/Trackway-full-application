@@ -44,4 +44,5 @@ jobs:
           script: |
             cd /root/trackway-web
             docker compose pull client-prod
-            docker compose up -d --force-recreate client-prod
+            docker rm -f trackway-frontend-prod || true
+            docker compose up -d client-prod
