@@ -23,6 +23,7 @@ export default defineConfig({
   },
   // Improve chunking to avoid very large bundles
   build: {
+    target: 'es2022',
     chunkSizeWarningLimit: 700, // kB - raise/lower as needed
     rollupOptions: {
       output: {
