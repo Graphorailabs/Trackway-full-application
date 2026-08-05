@@ -17,7 +17,8 @@ export default defineConfig({
     port:4173,
     allowedHosts: [
       'ohmgpt.com',
-      'www.ohmgpt.com'
+      'www.ohmgpt.com',
+      'web.graphoraailabs.com'
     ]
   },
   // Improve chunking to avoid very large bundles
