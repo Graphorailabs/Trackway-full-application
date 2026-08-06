@@ -7,5 +7,5 @@ services:
     image: graphoraailabs/trackway-frontend:prod
     container_name: trackwayweb
     ports:
-      - "4175:4175"
+      - "4175:4173"
     restart: unless-stopped
