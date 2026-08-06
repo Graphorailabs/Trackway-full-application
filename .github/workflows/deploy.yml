@@ -43,6 +43,8 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             cd /root/trackway-web
-            docker compose pull client-prod
+            git pull origin main
             docker rm -f trackwayweb || true
+            docker rm -f trackway-frontend-prod || true
+            docker compose pull client-prod
             docker compose up -d client-prod
