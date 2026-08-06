@@ -18,6 +18,7 @@ COPY package.json package-lock.json ./
 RUN npm ci --frozen-lockfile --omit=dev
 
 COPY --from=builder /usr/src/app/dist ./dist
+COPY --from=builder /usr/src/app/vite.config.ts ./vite.config.ts
 
 EXPOSE 4175
 
