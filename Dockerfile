@@ -18,8 +18,8 @@ COPY package.json package-lock.json ./
 RUN npm ci --frozen-lockfile --omit=dev
 
 COPY --from=builder /usr/src/app/dist ./dist
-COPY --from=builder /usr/src/app/vite.config.ts ./vite.config.ts
+COPY --from=builder /usr/src/app/vite.preview.config.js ./vite.preview.config.js
 
 EXPOSE 4175
 
-CMD ["npm", "run", "preview"]
+CMD ["npx", "vite", "preview", "--config", "vite.preview.config.js"]
