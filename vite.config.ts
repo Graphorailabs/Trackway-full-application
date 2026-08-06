@@ -14,7 +14,7 @@ export default defineConfig({
   })],
   preview: {
     host: true,
-    port:4173,
+    port:4175,
     allowedHosts: [
       'web.graphoraailabs.com'
     ]
