@@ -42,8 +42,11 @@ jobs:
           username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            cd /root/trackway-web
-            git pull origin main
+            cd /root/Trackway-full-application
+            git fetch origin main
+            git reset --hard origin/main
+            docker ps -q --filter "publish=4173" | xargs -r docker rm -f || true
+            docker ps -q --filter "publish=4175" | xargs -r docker rm -f || true
             docker rm -f trackwayweb || true
             docker rm -f trackway-frontend-prod || true
             docker compose pull client-prod
