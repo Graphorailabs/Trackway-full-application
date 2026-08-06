@@ -44,5 +44,5 @@ jobs:
           script: |
             cd /root/trackway-web
             docker compose pull client-prod
-            docker rm -f trackway-frontend-prod || true
+            docker rm -f trackwayweb || true
             docker compose up -d client-prod

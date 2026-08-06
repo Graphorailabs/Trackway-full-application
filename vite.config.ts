@@ -14,7 +14,7 @@ export default defineConfig({
   })],
   preview: {
     host: true,
-    port:4173,
+    port:4175,
     allowedHosts: [
       'ohmgpt.com',
       'www.ohmgpt.com',
