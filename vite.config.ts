@@ -14,10 +14,8 @@ export default defineConfig({
   })],
   preview: {
     host: true,
-    port:4175,
+    port:4173,
     allowedHosts: [
-      'ohmgpt.com',
-      'www.ohmgpt.com',
       'web.graphoraailabs.com'
     ]
   },
