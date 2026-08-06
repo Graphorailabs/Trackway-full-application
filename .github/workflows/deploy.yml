@@ -30,7 +30,9 @@ jobs:
       - name: Build Docker image
         run: |
           docker buildx build \
-            --platform linux/amd64,linux/arm64 \
+            --platform linux/amd64 \
+            --cache-from type=registry,ref=graphoraailabs/trackway-frontend:cache \
+            --cache-to type=registry,ref=graphoraailabs/trackway-frontend:cache,mode=max \
             -t graphoraailabs/trackway-frontend:prod \
             --push .
 
@@ -41,6 +43,8 @@ jobs:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
+          timeout: 60s
+          command_timeout: 10m
           script: |
             cd /root/Trackway-full-application
             git fetch origin main

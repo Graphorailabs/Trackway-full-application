@@ -1,21 +1,24 @@
-FROM node:20
+# ---- Build stage ----
+FROM node:20-alpine AS builder
 
-# Set working directory
 WORKDIR /usr/src/app
 
-# Install dependencies
-COPY package.json ./
+COPY package.json package-lock.json ./
+RUN npm ci --frozen-lockfile
 
-RUN npm install
-
-# Copy the rest of the application code
 COPY . .
-
-# Build the application
 RUN npm run build
 
-# Expose the port the app runs on
-EXPOSE 4173
+# ---- Production stage ----
+FROM node:20-alpine AS runner
 
-# Start the application
+WORKDIR /usr/src/app
+
+COPY package.json package-lock.json ./
+RUN npm ci --frozen-lockfile --omit=dev
+
+COPY --from=builder /usr/src/app/dist ./dist
+
+EXPOSE 4175
+
 CMD ["npm", "run", "preview"]
